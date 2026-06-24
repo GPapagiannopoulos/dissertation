@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     """
 
-    model_config = {"env_file": Path(__file__).resolve().parent.parent / ".env"}
+    model_config = {"env_file": Path(__file__).resolve().parent.parent.parent / ".env"}
 
     mimic4_ehr_data_path: Path = Field(..., frozen=True)
 
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
             yaml.YAMLError: If the manifest is not valid YAML
 
         """
-        text = resources.files("Thesis").joinpath("mimic4_ehr.yaml").read_text()
+        text = resources.files("thesis").joinpath("mimic4_ehr.yaml").read_text()
 
         return yaml.safe_load(text)
 
