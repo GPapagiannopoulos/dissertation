@@ -68,11 +68,10 @@ class PolarsEDASource:
         prefix = f"{event_type}/"
         return sorted([c for c in self._events.columns if c.startswith(prefix)])
 
-    def describe_field(self, event_type: str, field_name: str) -> pl.DataFrame:
+    def describe_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
         Args:
-            event_type(str): the event_type whose attributes we filter for
             field_name(str): the name of the field to filter for
 
         Returns:
@@ -81,16 +80,8 @@ class PolarsEDASource:
             method.Otherwise, it returns the proportion of each value in the field.
 
         """
-        target_field = self._events.filter(
-            pl.col(f"{event_type}/{field_name}")
-        ).to_series()
-        if target_field.is_numeric():
+        target_field = self._events.select(f"{field_name}").to_series()
+        if self._events.schema[field_name].is_numeric():
             return target_field.describe()
         else:
             return target_field.value_counts(normalize=True)
-
-
-def from_pyhealth(dataset) -> PolarsEDASource:
-    """Construct a PolarsEDASource from a PyHealth-loaded dataset."""
-    frame = dataset.global_event_df.collect()
-    return PolarsEDASource(frame)
