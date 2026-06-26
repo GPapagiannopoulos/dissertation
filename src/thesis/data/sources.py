@@ -142,6 +142,6 @@ class PolarsEDASource:
         table_fields = self.fields(table_name)
         return (
             self._events.select(table_fields)
-            .filter(pl.all_horizontal(pl.all().is_not_null()))
+            .filter(pl.sum_horizontal(pl.all().is_not_null()) > 0.6 * len(table_fields))
             .head(n_rows)
         )
