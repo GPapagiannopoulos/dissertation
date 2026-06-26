@@ -122,6 +122,11 @@ class PolarsEDASource:
     def describe_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
+        Calculates descriptors for a field at the event type level. It first
+        filters by event type, before selecting the target field. The summary
+        statistics are calculated at event type level because records of different
+        type are null, leading to skewing of event proportion.
+
         Args:
             field_name(str): the name of the field to filter for
 
@@ -131,7 +136,11 @@ class PolarsEDASource:
             method.Otherwise, it returns the proportion of each value in the field.
 
         """
-        target_field = self._events.select(f"{field_name}").to_series()
+        target_field = (
+            self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
+            .select(field_name)
+            .to_series()
+        )
         if self._events.schema[field_name].is_numeric():
             return target_field.describe()
         else:
