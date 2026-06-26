@@ -8,4 +8,7 @@ DTYPE_TO_POLARS_DTYPE_MAP: Final[dict[str, type[pl.DataType]]] = {
     "String": pl.String,
     "UInt": pl.UInt16,
     "Date": pl.Date,
+    "DateTime": pl.Datetime,
+    "Boolean": pl.Boolean,
+    "Float": pl.Float32,
 }

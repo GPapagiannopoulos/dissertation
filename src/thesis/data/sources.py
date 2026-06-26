@@ -28,8 +28,18 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
         polars_dtype = DTYPE_TO_POLARS_DTYPE_MAP.get(dtype_str)
         if polars_dtype is None or polars_dtype is pl.String:
             continue
-        if polars_dtype is pl.Date:
+        elif polars_dtype is pl.Date:
             exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=False))
+        elif polars_dtype is pl.Datetime:
+            exprs.append(
+                pl.col(field).str.to_date(format="%Y-%m-%dT%H:%M:%S", strict=False)
+            )
+        elif polars_dtype is pl.Boolean:
+            exprs.append(
+                pl.col(field)
+                .cast(pl.Int8, strict=False)
+                .cast(polars_dtype, strict=False)
+            )
         else:
             exprs.append(pl.col(field).cast(polars_dtype, strict=False))
     if not exprs:

@@ -128,7 +128,15 @@ tables:
       - "dose_unit_rx"
       - "route"
       - "stoptime"
-
+    dtype_mapping:
+      prescriptions/dose_unit_rx: "String"
+      prescriptions/dose_val_rx: "Float"
+      prescriptions/drug: "String"
+      prescriptions/hadm_id: "String"
+      prescriptions/ndc: "String"
+      prescriptions/prod_strength: "String"
+      prescriptions/route: "String"
+      prescriptions/stoptime: "DateTime"
 
   labevents:
     file_path: "hosp/labevents.csv.gz"
