@@ -13,7 +13,7 @@ def load_global_event_frame():
     ds = MIMIC4Dataset(
         ehr_root=str(settings.mimic4_ehr_data_path),
         dev=True,
-        ehr_tables=["patients"],
+        ehr_tables=settings.mimic4_ehr_tables,
     )
     lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
     return lf.collect()
@@ -40,6 +40,9 @@ def run_dashboard():
     ftype = st.selectbox("Field", src.fields(etype))
     st.subheader("Field Summary")
     st.dataframe(src.describe_field(ftype))
+
+    st.subheader(f"{etype} Preview")
+    st.dataframe(src.preview_table(etype))
 
 
 # Guard necessary for Windows machines

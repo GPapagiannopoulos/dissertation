@@ -126,3 +126,12 @@ class PolarsEDASource:
             return target_field.describe()
         else:
             return target_field.value_counts(normalize=True).sort("proportion")
+
+    def preview_table(self, table_name: str, n_rows: int = 10) -> pl.DataFrame:
+        """Returns the head of the dataframe."""
+        table_fields = self.fields(table_name)
+        return (
+            self._events.select(table_fields)
+            .filter(pl.all_horizontal(pl.all().is_not_null()))
+            .head(n_rows)
+        )

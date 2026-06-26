@@ -45,3 +45,7 @@ class EDASource(Protocol):
     def describe_field(self, field_name: str):
         """Return a description of a specific field belonging to an attribute."""
         pass
+
+    def preview(self):
+        """Return a preview of the underlying data."""
+        pass
