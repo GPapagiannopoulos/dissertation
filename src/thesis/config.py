@@ -51,5 +51,18 @@ class Settings(BaseSettings):
         """
         return list(self.mimic4_ehr_manifest["tables"].keys())
 
+    @functools.cached_property
+    def mimic4_ehr_dtype_mapping(self) -> dict[str, str]:
+        """Returns a mapping of column to data types."""
+        mapping_by_table = [
+            self.mimic4_ehr_manifest["tables"][t].get("dtype_mapping", {})
+            for t in self.mimic4_ehr_tables
+        ]
+        return {
+            field: dtype
+            for mapping in mapping_by_table
+            for field, dtype in mapping.items()
+        }
+
 
 settings = Settings()

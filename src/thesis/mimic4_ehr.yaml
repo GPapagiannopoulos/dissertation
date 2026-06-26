@@ -1,4 +1,3 @@
-version: "2.2"
 tables:
   patients:
     file_path: "hosp/patients.csv.gz"
@@ -10,6 +9,13 @@ tables:
       - "anchor_year"
       - "anchor_year_group"
       - "dod"
+    dtype_mapping:
+      patients/subject_id: "String"
+      patients/gender: "String"
+      patients/anchor_age: "UInt"
+      patients/anchor_year: "UInt"
+      patients/anchor_year_group: "String"
+      patients/dod: "Date"
 
   admissions:
     file_path: "hosp/admissions.csv.gz"

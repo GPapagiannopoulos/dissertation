@@ -4,20 +4,19 @@ import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
-from thesis.data.sources import PolarsEDASource
+from thesis.data.sources import PolarsEDASource, cast_frame
 
 
 @st.cache_resource
 def load_global_event_frame():
     """Cache the MIMIC-IV dataset."""
     ds = MIMIC4Dataset(
-        ehr_root=settings.mimic4_ehr_data_path,
+        ehr_root=str(settings.mimic4_ehr_data_path),
         dev=True,
-        ehr_tables=["prescriptions"],
+        ehr_tables=["patients"],
     )
-    ds.load_data()
-
-    return ds.global_event_df.collect()
+    lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
+    return lf.collect()
 
 
 def get_source() -> PolarsEDASource:

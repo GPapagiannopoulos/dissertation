@@ -2,6 +2,40 @@
 
 import polars as pl
 
+from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
+
+
+def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
+    """Apply dtype casts declared in the manifest to a LazyFrame.
+
+    Columns absent from the frame are silently skipped. String→String
+    casts are no-ops and are omitted. Date columns use str.to_date()
+    because Polars 1.x does not support cast(pl.Date) from String.
+
+    Args:
+        lf: The LazyFrame to cast.
+        dtype_map: Mapping of column name to dtype string (e.g. "UInt", "Date").
+
+    Returns:
+        LazyFrame with the cast expressions applied.
+
+    """
+    available = set(lf.collect_schema().names())
+    exprs: list[pl.Expr] = []
+    for field, dtype_str in dtype_map.items():
+        if field not in available:
+            continue
+        polars_dtype = DTYPE_TO_POLARS_DTYPE_MAP.get(dtype_str)
+        if polars_dtype is None or polars_dtype is pl.String:
+            continue
+        if polars_dtype is pl.Date:
+            exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=False))
+        else:
+            exprs.append(pl.col(field).cast(polars_dtype, strict=False))
+    if not exprs:
+        return lf
+    return lf.with_columns(exprs)
+
 
 class PolarsEDASource:
     """EDA adapter over PyHealth's global event dataframe."""
