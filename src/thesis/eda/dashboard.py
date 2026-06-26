@@ -37,8 +37,16 @@ def run_dashboard():
     st.subheader("Field Attributes")
     st.dataframe(src.field_dtypes(etype))
 
-    ftype = st.selectbox("Field", src.fields(etype))
     st.subheader("Field Summary")
+    st.text("The summary below excludes datetime and id fields.")
+    ftype = st.selectbox(
+        "Field",
+        [
+            c
+            for c in src.fields(etype)
+            if not c.endswith("_id") and not c.endswith("time")
+        ],
+    )
     st.dataframe(src.describe_field(ftype))
 
     st.subheader(f"{etype} Preview")
