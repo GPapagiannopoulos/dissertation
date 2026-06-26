@@ -38,6 +38,10 @@ class EDASource(Protocol):
         """Return a list of field names for a specific event type."""
         pass
 
+    def field_dtypes(self, event_type: str):
+        """Return a data structure with field names and dtypes."""
+        pass
+
     def describe_field(self, field_name: str):
         """Return a description of a specific field belonging to an attribute."""
         pass

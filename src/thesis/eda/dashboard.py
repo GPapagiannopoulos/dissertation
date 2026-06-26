@@ -13,7 +13,7 @@ def load_global_event_frame():
     ds = MIMIC4Dataset(
         ehr_root=settings.mimic4_ehr_data_path,
         dev=True,
-        ehr_tables=settings.mimic4_ehr_tables,
+        ehr_tables=["prescriptions"],
     )
     ds.load_data()
 
@@ -36,7 +36,7 @@ def run_dashboard():
     c2.metric("Patients", f"{src.n_patients(etype):,}")
 
     st.subheader("Field Attributes")
-    st.dataframe(src.fields(etype))
+    st.dataframe(src.field_dtypes(etype))
 
     ftype = st.selectbox("Field", src.fields(etype))
     st.subheader("Field Summary")

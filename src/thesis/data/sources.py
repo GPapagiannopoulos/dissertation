@@ -68,6 +68,13 @@ class PolarsEDASource:
         prefix = f"{event_type}/"
         return sorted([c for c in self._events.columns if c.startswith(prefix)])
 
+    def field_dtypes(self, event_type: str) -> pl.DataFrame:
+        """Return a dataframe to display the field names and dtypes."""
+        valid_cols = self.fields(event_type)
+        col_dtypes = [str(self._events.schema[c]) for c in valid_cols]
+
+        return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
+
     def describe_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
@@ -84,4 +91,4 @@ class PolarsEDASource:
         if self._events.schema[field_name].is_numeric():
             return target_field.describe()
         else:
-            return target_field.value_counts(normalize=True)
+            return target_field.value_counts(normalize=True).sort("proportion")
