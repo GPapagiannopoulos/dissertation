@@ -135,7 +135,9 @@ class PolarsEDASource:
         if self._events.schema[field_name].is_numeric():
             return target_field.describe()
         else:
-            return target_field.value_counts(normalize=True).sort("proportion")
+            return target_field.value_counts(normalize=True).sort(
+                "proportion", descending=True
+            )
 
     def preview_table(self, table_name: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
