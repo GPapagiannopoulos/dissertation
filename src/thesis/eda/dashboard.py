@@ -5,6 +5,7 @@ from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
 from thesis.data.sources import PolarsEDASource, cast_frame
+from thesis.eda.filters import valid_fields
 
 
 @st.cache_resource
@@ -39,14 +40,7 @@ def run_dashboard():
 
     st.subheader("Field Summary")
     st.text("The summary below excludes datetime and id fields.")
-    ftype = st.selectbox(
-        "Field",
-        [
-            c
-            for c in src.fields(etype)
-            if not c.endswith("_id") and not c.endswith("time")
-        ],
-    )
+    ftype = st.selectbox("Field", valid_fields(src, etype))
     st.dataframe(src.describe_field(ftype))
 
     st.subheader(f"{etype} Preview")
