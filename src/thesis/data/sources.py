@@ -89,7 +89,7 @@ def replace_mimic4_icd_codes(
     combined_source = combined_source.drop(
         [f"{event_type}/icd_version", f"{event_type}/icd_code"]
     )
-    return combined_source.rename({"long_title": f"{event_type}/diagnoses"})
+    return combined_source.rename({"long_title": f"{event_type}/description"})
 
 
 class PolarsEDASource:
