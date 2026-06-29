@@ -114,7 +114,15 @@ def replace_mimic4_non_icd_codes(
 
 
 class PolarsEDASource:
-    """EDA adapter over PyHealth's global event dataframe."""
+    """EDA adapter over PyHealth's global event dataframe.
+
+    PyHealth loads MIMIC-IV data from the directory to create a
+    MIMIC4Dataset object powered by an underlying Polars
+    dataframe. This adapter accepts a Polars dataframe and exposes
+    methods that allow for exploratory data analysis. This way
+    any data source can be plugged into the dashboard as long as it
+    is a polars dataframe (e.g. non-EHR MIMIC-IV data loaded via PyHealth).
+    """
 
     _PATIENT = "patient_id"
     _TYPE = "event_type"
@@ -179,7 +187,12 @@ class PolarsEDASource:
         return sorted([c for c in self._events.columns if c.startswith(prefix)])
 
     def field_dtypes(self, event_type: str) -> pl.DataFrame:
-        """Return a dataframe to display the field names and dtypes."""
+        """Return a dataframe to display the field names and dtypes.
+
+        Returns:
+            pl.DataFrame: a Nx2 dataframe containing the attributes of
+            an event type and their corresponding dtype.
+        """
         valid_cols = self.fields(event_type)
         col_dtypes = [str(self._events.schema[c]) for c in valid_cols]
 

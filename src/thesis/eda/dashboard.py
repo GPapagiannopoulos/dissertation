@@ -17,7 +17,13 @@ from thesis.eda.filters import valid_fields
 
 @st.cache_resource
 def load_global_event_frame():
-    """Cache the MIMIC-IV dataset."""
+    """Load, transform, and cache the MIMIC-IV dataset.
+
+    This function is responsible for loading the MIMIC-IV dataset
+    using the PyHealth MIMIC4Dataset class. The underlying dataframe
+    is used for transformations and then cached for EDA via a Streamlit
+    dashboard.
+    """
     ds = MIMIC4Dataset(
         ehr_root=str(settings.mimic4_ehr_data_path),
         dev=True,
