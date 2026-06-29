@@ -49,8 +49,8 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     return lf.with_columns(exprs)
 
 
-def replace_mimic4_icd_diagnosis_codes(
-    data_source: pl.LazyFrame, path_to_map: Path
+def replace_mimic4_icd_codes(
+    data_source: pl.LazyFrame, path_to_map: Path, event_type: str
 ) -> pl.LazyFrame:
     """Replaces the ICD codes in the EHR data with human-readable descriptions.
 
@@ -58,8 +58,9 @@ def replace_mimic4_icd_diagnosis_codes(
     to human-readable descriptions. Subsequently, drops ICD codes and versions.
 
     Args:
-          data_source: The LazyFrame containing MIMIC-IV data
-          path_to_map: A Path object to the mapping held in .csv form
+        data_source: The LazyFrame containing MIMIC-IV data
+        path_to_map: A Path object to the mapping held in .csv form
+        event_type: The event type for which we are replacing ICD codes
 
     Returns:
         pl.LazyFrame: LazyFrame where ICD-codes are replaced with
@@ -80,15 +81,15 @@ def replace_mimic4_icd_diagnosis_codes(
     combined_source = data_source.join(
         mapping_df,
         how="left",
-        left_on=["diagnoses_icd/icd_version", "diagnoses_icd/icd_code"],
+        left_on=[f"{event_type}/icd_version", f"{event_type}/icd_code"],
         right_on=["icd_version", "icd_code"],
         coalesce=True,
     )
 
     combined_source = combined_source.drop(
-        ["diagnoses_icd/icd_version", "diagnoses_icd/icd_code"]
+        [f"{event_type}/icd_version", f"{event_type}/icd_code"]
     )
-    return combined_source.rename({"long_title": "diagnoses_icd/diagnoses"})
+    return combined_source.rename({"long_title": f"{event_type}/diagnoses"})
 
 
 class PolarsEDASource:

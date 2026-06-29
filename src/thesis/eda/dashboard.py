@@ -1,5 +1,7 @@
 """Dashboard for EDA."""
 
+from pathlib import Path
+
 import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
@@ -7,7 +9,7 @@ from thesis.config import settings
 from thesis.data.sources import (
     PolarsEDASource,
     cast_frame,
-    replace_mimic4_icd_diagnosis_codes,
+    replace_mimic4_icd_codes,
 )
 from thesis.eda.filters import valid_fields
 
@@ -22,10 +24,15 @@ def load_global_event_frame():
     )
 
     lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
-    joined_diagnoses = replace_mimic4_icd_diagnosis_codes(
-        lf, settings.mimic4_ehr_d_icd_diagnoses
-    )
-    return joined_diagnoses.collect()
+    event_type_icd_maps: list[tuple[str, Path]] = [
+        ("procedures_icd", settings.mimic4_ehr_d_icd_procedures),
+        ("diagnoses_icd", settings.mimic4_ehr_d_icd_diagnoses),
+    ]
+
+    for event_type, mapping in event_type_icd_maps:
+        lf = replace_mimic4_icd_codes(lf, mapping, event_type)
+
+    return lf.collect()
 
 
 def get_source() -> PolarsEDASource:
