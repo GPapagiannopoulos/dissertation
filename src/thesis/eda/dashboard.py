@@ -1,22 +1,45 @@
 """Dashboard for EDA."""
 
+from pathlib import Path
+
 import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
-from thesis.data.sources import PolarsEDASource, cast_frame
+from thesis.data.sources import (
+    PolarsEDASource,
+    cast_frame,
+    replace_mimic4_icd_codes,
+    replace_mimic4_non_icd_codes,
+)
 from thesis.eda.filters import valid_fields
 
 
 @st.cache_resource
 def load_global_event_frame():
-    """Cache the MIMIC-IV dataset."""
+    """Load, transform, and cache the MIMIC-IV dataset.
+
+    This function is responsible for loading the MIMIC-IV dataset
+    using the PyHealth MIMIC4Dataset class. The underlying dataframe
+    is used for transformations and then cached for EDA via a Streamlit
+    dashboard.
+    """
     ds = MIMIC4Dataset(
         ehr_root=str(settings.mimic4_ehr_data_path),
         dev=True,
         ehr_tables=settings.mimic4_ehr_tables,
     )
+
     lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
+    event_type_icd_maps: list[tuple[str, Path]] = [
+        ("procedures_icd", settings.mimic4_ehr_d_icd_procedures),
+        ("diagnoses_icd", settings.mimic4_ehr_d_icd_diagnoses),
+    ]
+
+    for event_type, mapping in event_type_icd_maps:
+        lf = replace_mimic4_icd_codes(lf, mapping, event_type)
+
+    lf = replace_mimic4_non_icd_codes(lf, settings.mimic4_ehr_d_labitems, "labevents")
     return lf.collect()
 
 
