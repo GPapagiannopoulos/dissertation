@@ -92,6 +92,27 @@ def replace_mimic4_icd_codes(
     return combined_source.rename({"long_title": f"{event_type}/description"})
 
 
+def replace_mimic4_non_icd_codes(
+    data_source: pl.LazyFrame, path_to_map: Path, event_type: str
+) -> pl.LazyFrame:
+    """Maps non-ICD ID columns to human-readable descriptions."""
+    mapping_df = pl.scan_csv(path_to_map, schema_overrides={"itemid": pl.String})
+    if "itemid" not in mapping_df.collect_schema():
+        raise KeyError("Mapping frame is missing itemid column. Please review.")
+
+    combined_source = data_source.join(
+        mapping_df,
+        how="left",
+        left_on=[f"{event_type}/itemid"],
+        right_on="itemid",
+        coalesce=True,
+    )
+
+    return combined_source.drop(f"{event_type}/itemid").rename(
+        {"label": f"{event_type}/description"}
+    )
+
+
 class PolarsEDASource:
     """EDA adapter over PyHealth's global event dataframe."""
 
