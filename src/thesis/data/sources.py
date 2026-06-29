@@ -1,5 +1,7 @@
 """Adapter for the MIMIC4Dataset class from PyHealth."""
 
+from pathlib import Path
+
 import polars as pl
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
@@ -45,6 +47,48 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     if not exprs:
         return lf
     return lf.with_columns(exprs)
+
+
+def replace_mimic4_icd_diagnosis_codes(
+    data_source: pl.LazyFrame, path_to_map: Path
+) -> pl.LazyFrame:
+    """Replaces the ICD codes in the EHR data with human-readable descriptions.
+
+    Joins the MIMIC-IV EHR dataset to a frame containing the mapping of ICD codes
+    to human-readable descriptions. Subsequently, drops ICD codes and versions.
+
+    Args:
+          data_source: The LazyFrame containing MIMIC-IV data
+          path_to_map: A Path object to the mapping held in .csv form
+
+    Returns:
+        pl.LazyFrame: LazyFrame where ICD-codes are replaced with
+        human-readable descriptions.
+
+    Raises:
+        KeyError: If the mapping csv does not contain columns named icd_version
+        and icd_code respectively.
+    """
+    mapping_df = pl.scan_csv(
+        path_to_map, schema_overrides={"icd_version": pl.String, "icd_code": pl.String}
+    )
+    if "icd_code" not in mapping_df.collect_schema():
+        raise KeyError('Mapping frame is missing "icd_code" field. Please review.')
+    if "icd_version" not in mapping_df.collect_schema():
+        raise KeyError('Mapping frame is missing "icd_version" field. Please review.')
+
+    combined_source = data_source.join(
+        mapping_df,
+        how="left",
+        left_on=["diagnoses_icd/icd_version", "diagnoses_icd/icd_code"],
+        right_on=["icd_version", "icd_code"],
+        coalesce=True,
+    )
+
+    combined_source = combined_source.drop(
+        ["diagnoses_icd/icd_version", "diagnoses_icd/icd_code"]
+    )
+    return combined_source.rename({"long_title": "diagnoses_icd/diagnoses"})
 
 
 class PolarsEDASource:

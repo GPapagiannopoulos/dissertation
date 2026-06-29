@@ -4,7 +4,11 @@ import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
-from thesis.data.sources import PolarsEDASource, cast_frame
+from thesis.data.sources import (
+    PolarsEDASource,
+    cast_frame,
+    replace_mimic4_icd_diagnosis_codes,
+)
 from thesis.eda.filters import valid_fields
 
 
@@ -16,8 +20,12 @@ def load_global_event_frame():
         dev=True,
         ehr_tables=settings.mimic4_ehr_tables,
     )
+
     lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
-    return lf.collect()
+    joined_diagnoses = replace_mimic4_icd_diagnosis_codes(
+        lf, settings.mimic4_ehr_d_icd_diagnoses
+    )
+    return joined_diagnoses.collect()
 
 
 def get_source() -> PolarsEDASource:
