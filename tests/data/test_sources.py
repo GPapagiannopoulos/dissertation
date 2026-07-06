@@ -101,3 +101,44 @@ def test_cast_frame_happy_path_conversions(
     """
     lf = cast_frame(pl.LazyFrame(data), schema_overrides).collect()
     assert_series_equal(lf["col"], expected)
+
+
+def test_cast_frame_without_fields_raises():
+    """Asserts that a lazyframe without any fields raises an error.
+
+    Attempting to cast a LazyFrame of shape 0 x N is valid. However,
+    attempting to cast a LazyFrame of shape 0 x 0 is not a logical
+    operation and needs to raise a ValueError.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: if the cast operation doesn't raise a ValueError
+    """
+    with pytest.raises(ValueError, match="LazyFrame contains no fields"):
+        lf = pl.LazyFrame()
+        lf = cast_frame(lf, {"col": "UInt"})
+
+
+def test_cast_frame_with_empty_overrides_raises():
+    """Asserts that cast_frame will raise an error if the map is empty.
+
+    Attempting to cast with an empty mapping is definitely an error.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: if the cast operation doesn't raise a ValueError
+    """
+    with pytest.raises(ValueError, match="Map contains no key:value pairs"):
+        lf = pl.LazyFrame({"col": pl.Series(["a"], dtype=pl.String)})
+        lf = cast_frame(lf, {})
+
+
+def test_cast_frame_empty_lf_raises_first():
+    """Asserts that an empty LazyFrame raises an error before an empty map."""
+    with pytest.raises(ValueError, match="LazyFrame contains no fields"):
+        lf = pl.LazyFrame()
+        lf = cast_frame(lf, {})
