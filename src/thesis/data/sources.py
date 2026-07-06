@@ -45,7 +45,7 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
                 f"{dtype_str} is not a valid key. Please select one of: "
                 f"{valid_polars_dtypes}"
             )
-        if polars_dtype is None or polars_dtype is pl.String:
+        if polars_dtype is pl.String:
             continue
         elif polars_dtype is pl.Date:
             exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=True))
