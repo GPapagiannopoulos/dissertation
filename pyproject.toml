@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "dotenv>=0.9.9",
     "polars>=1.35.2",
+    "pre-commit>=4.6.0",
     "pydantic>=2.11.10",
     "pydantic-settings>=2.14.2",
     "pyhealth>=2.0.1",
