@@ -24,6 +24,8 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     Raises:
         ValueError: If the LazyFrame has no fields
         ValueError: If the dtype map is empty
+        KeyError: If the dtype str name is not found
+        InvalidOperationError: If the values are unparseable as the new dtype
     """
     available = set(lf.collect_schema().names())
     if len(available) == 0:
@@ -33,24 +35,30 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     exprs: list[pl.Expr] = []
     for field, dtype_str in dtype_map.items():
         if field not in available:
-            continue
-        polars_dtype = DTYPE_TO_POLARS_DTYPE_MAP.get(dtype_str)
+            raise ValueError(
+                f"{field} is not an available field. Please review the schema."
+            )
+        polars_dtype = DTYPE_TO_POLARS_DTYPE_MAP.get(dtype_str, None)
+        if not polars_dtype:
+            valid_polars_dtypes = (", ").join(list(DTYPE_TO_POLARS_DTYPE_MAP.keys()))
+            raise KeyError(
+                f"{dtype_str} is not a valid key. Please select one of: "
+                f"{valid_polars_dtypes}"
+            )
         if polars_dtype is None or polars_dtype is pl.String:
             continue
         elif polars_dtype is pl.Date:
-            exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=False))
+            exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=True))
         elif polars_dtype is pl.Datetime:
             exprs.append(
-                pl.col(field).str.to_datetime(format="%Y-%m-%dT%H:%M:%S", strict=False)
+                pl.col(field).str.to_datetime(format="%Y-%m-%dT%H:%M:%S", strict=True)
             )
         elif polars_dtype is pl.Boolean:
             exprs.append(
-                pl.col(field)
-                .cast(pl.Int8, strict=False)
-                .cast(polars_dtype, strict=False)
+                pl.col(field).cast(pl.Int8, strict=True).cast(polars_dtype, strict=True)
             )
         else:
-            exprs.append(pl.col(field).cast(polars_dtype, strict=False))
+            exprs.append(pl.col(field).cast(polars_dtype, strict=True))
     if not exprs:
         return lf
     return lf.with_columns(exprs)
