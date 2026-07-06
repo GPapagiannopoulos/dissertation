@@ -75,11 +75,20 @@ from thesis.data.sources import cast_frame
             {"col": "UInt"},
             pl.Series("col", [None, None, None], dtype=pl.UInt16),
         ),
-        # 9.
+        # 9. Field cast correctly even without any records
         (
             {"col": pl.Series([], dtype=pl.String)},
             {"col": "UInt"},
             pl.Series("col", [], dtype=pl.UInt16),
+        ),
+        # 10. Columns only cast if in the map
+        (
+            {
+                "col": pl.Series(["1", "2", "3"], dtype=pl.String),
+                "col_b": pl.Series(["0.5", "0.2", "1.7"], dtype=pl.String),
+            },
+            {"col_b": "Float"},
+            pl.Series("col", ["1", "2", "3"], dtype=pl.String),
         ),
     ],
 )
@@ -93,74 +102,50 @@ def test_cast_frame_happy_path_conversions(
         schema_overrides (dict[str, str]): A col_name:dtype dictionary representing
         the casts.
         expected (pl.Series): A series representing the expected column after the cast
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if the cast fails
     """
     lf = cast_frame(pl.LazyFrame(data), schema_overrides).collect()
     assert_series_equal(lf["col"], expected)
 
 
-def test_cast_frame_without_fields_raises():
+def test_cast_frame_without_fields_raises() -> None:
     """Asserts that a lazyframe without any fields raises an error.
 
     Attempting to cast a LazyFrame of shape 0 x N is valid. However,
     attempting to cast a LazyFrame of shape 0 x 0 is not a logical
     operation and needs to raise a ValueError.
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if the cast operation doesn't raise a ValueError
     """
     with pytest.raises(ValueError, match="LazyFrame contains no fields"):
         lf = pl.LazyFrame()
-        lf = cast_frame(lf, {"col": "UInt"})
+        cast_frame(lf, {"col": "UInt"})
 
 
-def test_cast_frame_with_empty_overrides_raises():
+def test_cast_frame_with_empty_overrides_raises() -> None:
     """Asserts that cast_frame will raise an error if the map is empty.
 
     Attempting to cast with an empty mapping is definitely an error.
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if the cast operation doesn't raise a ValueError
     """
     with pytest.raises(ValueError, match="Map contains no key:value pairs"):
         lf = pl.LazyFrame({"col": pl.Series(["a"], dtype=pl.String)})
-        lf = cast_frame(lf, {})
+        cast_frame(lf, {})
 
 
-def test_cast_frame_empty_lf_raises_first():
+def test_cast_frame_empty_lf_raises_first() -> None:
     """Asserts that an empty LazyFrame raises an error before an empty map."""
     with pytest.raises(ValueError, match="LazyFrame contains no fields"):
         lf = pl.LazyFrame()
-        lf = cast_frame(lf, {})
+        cast_frame(lf, {})
 
 
-def test_cast_frame_raises_if_col_skipped():
+def test_cast_frame_raises_if_col_skipped() -> None:
     """Asserts that cast_frame will raise if it doesn't find a col in the lazyframe.
 
     The function iterates over the keys in the map to find the fields it needs to
     cast. If one of the keys doesn't exist, it is likely because of programmer error.
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if the cast operation doesn't raise a ValueError
     """
     with pytest.raises(ValueError, match="wrong_col is not an available field"):
         lf = pl.LazyFrame({"col": pl.Series([])})
-        map = {"wrong_col": "UInt"}
-        lf = cast_frame(lf, map)
+        mapping = {"wrong_col": "UInt"}
+        cast_frame(lf, mapping)
 
 
 @pytest.mark.parametrize(
@@ -178,7 +163,7 @@ def test_cast_frame_raises_if_col_skipped():
 )
 def test_cast_frame_raises_on_unconvertible_values(
     data: dict[str, pl.Series], dtype_map: dict[str, str]
-):
+) -> None:
     """Asserts that cast_frame raises an error if the conversion is invalid.
 
     MIMIC-IV is a high quality dataset that should not suffer from excessive
@@ -188,12 +173,6 @@ def test_cast_frame_raises_on_unconvertible_values(
     Args:
         data (dict[str, pl.Series]): mock data to be converted
         dtype_map (dict[str, str]): mapping of mock data cols to dtype strings
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if collection doesn't raise an InvalidOperationError
     """
     lf = pl.LazyFrame(data)
     lf = cast_frame(lf, dtype_map)
@@ -209,14 +188,24 @@ def test_cast_frame_raises_if_dtype_unrecognized():
     under constants and offer a single point of change if the underlying
     dtype needs to change. If the user passes an invalid string, it should
     raise.
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: if the cast doesn't raise a KeyError
     """
     with pytest.raises(KeyError, match="integer is not a valid key"):
         lf = pl.LazyFrame({"col": pl.Series(["1", "2", "3"], dtype=pl.String)})
-        map = {"col": "integer"}
-        lf = cast_frame(lf, map)
+        mapping = {"col": "integer"}
+        cast_frame(lf, mapping)
+
+
+def test_cast_frame_handles_multiple_cols() -> None:
+    """Asserts that cast_frame can cast multiple columns."""
+    data = {
+        "col_a": pl.Series(["1", "2", "3"], dtype=pl.String),
+        "col_b": pl.Series(["1.0", "2.0", "3.0"], dtype=pl.String),
+    }
+    mapping = {"col_a": "UInt", "col_b": "Float"}
+    expected_series = [
+        pl.Series("col_a", [1, 2, 3], dtype=pl.UInt16),
+        pl.Series("col_b", [1.0, 2.0, 3.0], dtype=pl.Float32),
+    ]
+    lf = cast_frame(pl.LazyFrame(data), mapping).collect()
+    for series in expected_series:
+        assert_series_equal(lf[series.name], series)
