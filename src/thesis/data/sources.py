@@ -21,8 +21,15 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     Returns:
         LazyFrame with the cast expressions applied.
 
+    Raises:
+        ValueError: If the LazyFrame has no fields
+        ValueError: If the dtype map is empty
     """
     available = set(lf.collect_schema().names())
+    if len(available) == 0:
+        raise ValueError("LazyFrame contains no fields. Please review.")
+    if len(dtype_map.items()) == 0:
+        raise ValueError("Map contains no key:value pairs. Please review.")
     exprs: list[pl.Expr] = []
     for field, dtype_str in dtype_map.items():
         if field not in available:
