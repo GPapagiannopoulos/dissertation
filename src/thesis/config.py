@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         """Extract MIMIC-IV EHR manifest from YAML file.
 
         Returns:
-            An indexable object containing MIMIC-IV EHR manifest data. Empty if
+            An indexable object containing MIMIC-IV EHR manifest mimic_data. Empty if
             file is empty
 
         Raises:
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     @functools.cached_property
     def mimic4_ehr_dtype_mapping(self) -> dict[str, str]:
-        """Returns a mapping of column to data types."""
+        """Returns a mapping of column to mimic_data types."""
         mapping_by_table = [
             self.mimic4_ehr_manifest["tables"][t].get("dtype_mapping", {})
             for t in self.mimic4_ehr_tables

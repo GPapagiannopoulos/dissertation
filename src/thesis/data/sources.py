@@ -34,7 +34,7 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
             exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=False))
         elif polars_dtype is pl.Datetime:
             exprs.append(
-                pl.col(field).str.to_date(format="%Y-%m-%dT%H:%M:%S", strict=False)
+                pl.col(field).str.to_datetime(format="%Y-%m-%dT%H:%M:%S", strict=False)
             )
         elif polars_dtype is pl.Boolean:
             exprs.append(
@@ -52,13 +52,13 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
 def replace_mimic4_icd_codes(
     data_source: pl.LazyFrame, path_to_map: Path, event_type: str
 ) -> pl.LazyFrame:
-    """Replaces the ICD codes in the EHR data with human-readable descriptions.
+    """Replaces the ICD codes in the EHR mimic_data with human-readable descriptions.
 
     Joins the MIMIC-IV EHR dataset to a frame containing the mapping of ICD codes
     to human-readable descriptions. Subsequently, drops ICD codes and versions.
 
     Args:
-        data_source: The LazyFrame containing MIMIC-IV data
+        data_source: The LazyFrame containing MIMIC-IV mimic_data
         path_to_map: A Path object to the mapping held in .csv form
         event_type: The event type for which we are replacing ICD codes
 
@@ -116,12 +116,12 @@ def replace_mimic4_non_icd_codes(
 class PolarsEDASource:
     """EDA adapter over PyHealth's global event dataframe.
 
-    PyHealth loads MIMIC-IV data from the directory to create a
+    PyHealth loads MIMIC-IV mimic_data from the directory to create a
     MIMIC4Dataset object powered by an underlying Polars
     dataframe. This adapter accepts a Polars dataframe and exposes
-    methods that allow for exploratory data analysis. This way
-    any data source can be plugged into the dashboard as long as it
-    is a polars dataframe (e.g. non-EHR MIMIC-IV data loaded via PyHealth).
+    methods that allow for exploratory mimic_data analysis. This way
+    any mimic_data source can be plugged into the dashboard as long as it
+    is a polars dataframe (e.g. non-EHR MIMIC-IV mimic_data loaded via PyHealth).
     """
 
     _PATIENT = "patient_id"
