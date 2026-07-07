@@ -1,4 +1,4 @@
-"""Test suite for the EDASource class methods and helper functions."""
+"""Test suite for the cast_frame helper function."""
 
 import datetime as dt
 
