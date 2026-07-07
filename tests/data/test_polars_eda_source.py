@@ -13,7 +13,19 @@ from thesis.data.sources import PolarsEDASource
         (
             {"event_type": pl.Series(["a", "b", "c"], dtype=pl.String)},
             ["a", "b", "c"],
-        )
+        ),
+        # 1. Correctly sorts the list in ascending order
+        (
+            {"event_type": pl.Series(["c", "b", "a"], dtype=pl.String)},
+            ["a", "b", "c"],
+        ),
+        # 2. Removes duplicates
+        (
+            {"event_type": pl.Series(["a", "a", "b", "b", "c"], dtype=pl.String)},
+            ["a", "b", "c"],
+        ),
+        # 3. No records returns an empty list
+        ({"event_type": pl.Series([], dtype=pl.String)}, []),
     ],
 )
 def test_polars_eda_event_types_method_happy_path(
