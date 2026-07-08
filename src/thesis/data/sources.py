@@ -128,27 +128,41 @@ def replace_mimic4_non_icd_codes(
     )
 
 
-def cleanse_float_values(data_source: pl.DataFrame, col_name: str) -> pl.DataFrame:
+def cleanse_float_values(
+    data_source: pl.DataFrame, target_cols: list[str]
+) -> pl.DataFrame:
     """Helper function for removing ranges and commas from floats.
+
+    Ensures that columns loaded as strings via PyHealth are safe to cast
+    into Floats. Because it replaces ranges with means, it is necessary to represent
+    the final string as a float (e.g. '1' -> '1.0').
+
+    Notes:
+        An intermediate step casts to Float64. If working
+        with bigger values than that (unlikely in the context of MIMIC-IV)
+        the value might overflow.
 
     Args:
         data_source (pl.DataFrame): dataframe object with the
         data to cleanse
-        col_name (str): name of the column to cleanse
+        target_cols (list[str]): name of the columns to cleanse
 
     Returns:
         pl.DataFrame: cleansed dataframe
     """
-    expr = (
-        pl.col(col_name)
-        .str.replace_all(",", "", literal=True)
-        .str.split("-")
-        .cast(pl.List(pl.Int32))
-        .list.mean()
-        .cast(pl.String)
-    )
+    expressions: list[pl.Expr] = []
+    for col in target_cols:
+        expr = (
+            pl.col(col)
+            .str.replace_all(",", "", literal=True)
+            .str.split("-")
+            .cast(pl.List(pl.Float64))
+            .list.mean()
+            .cast(pl.String)
+        )
+        expressions.append(expr)
 
-    return data_source.with_columns(expr)
+    return data_source.with_columns(expressions)
 
 
 class PolarsEDASource:
