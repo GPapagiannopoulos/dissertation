@@ -1,7 +1,5 @@
 """Shared fixtures for the data-source test suite."""
 
-from collections.abc import Callable
-
 import polars as pl
 import pytest
 
@@ -30,7 +28,7 @@ def events_df():
 
 
 @pytest.fixture
-def make_source(events_df: Callable[..., pl.DataFrame]):
+def make_source(events_df):
     """Factory for returning a constructed PolarsEDASource over a valid frame."""
 
     def _make(**kwargs) -> PolarsEDASource:
