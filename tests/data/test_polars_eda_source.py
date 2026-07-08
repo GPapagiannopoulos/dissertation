@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 from thesis.data.sources import PolarsEDASource
 
@@ -163,6 +164,15 @@ def test_polars_eda_event_n_events_method_happy_path(
         ),
         # 4. If no fields belonging to that event_type, returns an empty list
         ({}, "diagnosis", []),
+        # 5. List is sorted in ascending order
+        (
+            {
+                "patients/col_b": pl.Series(["a", "b", None], dtype=pl.String),
+                "patients/col_a": pl.Series(["1", "2", None], dtype=pl.String),
+            },
+            "patients",
+            ["patients/col_a", "patients/col_b"],
+        ),
     ],
 )
 def test_polars_eda_fields_method_happy_path(
@@ -174,3 +184,29 @@ def test_polars_eda_fields_method_happy_path(
     """Asserts that fields method retrieves the correct fields."""
     source = make_source(**overrides)
     assert source.fields(event_type) == expected_list
+
+
+@pytest.mark.parametrize(
+    "overrides, event_type, expected_df",
+    [
+        # 0. Retrieves the correct field names
+        (
+            {"patients/col": pl.Series([1, 2, None], dtype=pl.UInt16)},
+            "patients",
+            {"field": "patients/col", "dtype": "UInt16"},
+        )
+    ],
+)
+def test_polars_eda_fields_dtypes_method_happy_path(
+    make_source: Callable,
+    overrides: dict[str, pl.Series],
+    event_type: str,
+    expected_df: dict[str, pl.Series],
+) -> None:
+    """Asserts that the method returns the correct dtypes.
+
+    Selection of the correct fields has been tested separately.
+    """
+    source = make_source(**overrides)
+    expectation = pl.DataFrame(expected_df)
+    assert_frame_equal(source.field_dtypes(event_type), expectation)
