@@ -120,7 +120,57 @@ def test_constructor_raises_if_invalid_df(
         ("missing_type", 0),
     ],
 )
-def test_n_events_correct(make_source: Callable, event_type: str, number: int) -> None:
+def test_polars_eda_event_n_events_method_happy_path(
+    make_source: Callable, event_type: str, number: int
+) -> None:
     """Asserts that n_events returns the correct number of events."""
     source = make_source()
     assert source.n_events(event_type) == number
+
+
+@pytest.mark.parametrize(
+    "overrides, event_type, expected_list",
+    [
+        # 0. Correctly extracts single field
+        (
+            {"patients/col": pl.Series(["a", "b", None], dtype=pl.String)},
+            "patients",
+            ["patients/col"],
+        ),
+        # 1. Correct extracts multiple fields
+        (
+            {
+                "patients/col_a": pl.Series(["a", "b", None], dtype=pl.String),
+                "patients/col_b": pl.Series(["1", "2", None], dtype=pl.String),
+            },
+            "patients",
+            ["patients/col_a", "patients/col_b"],
+        ),
+        # 2. Ignores other fields
+        (
+            {
+                "patients/col": pl.Series(["a", "b", None], dtype=pl.String),
+                "admissions/col": pl.Series(["1", "2", None], dtype=pl.String),
+            },
+            "admissions",
+            ["admissions/col"],
+        ),
+        # 3. If field name is empty, returns prefix followed by empty string
+        (
+            {"patients/": pl.Series(["a", "b", None], dtype=pl.String)},
+            "patients",
+            ["patients/"],
+        ),
+        # 4. If no fields belonging to that event_type, returns an empty list
+        ({}, "diagnosis", []),
+    ],
+)
+def test_polars_eda_fields_method_happy_path(
+    make_source: Callable,
+    overrides: dict[str, pl.Series],
+    event_type: str,
+    expected_list: list[str],
+) -> None:
+    """Asserts that fields method retrieves the correct fields."""
+    source = make_source(**overrides)
+    assert source.fields(event_type) == expected_list
