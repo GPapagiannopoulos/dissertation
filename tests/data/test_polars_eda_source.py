@@ -54,32 +54,34 @@ def test_polars_eda_event_types_method_happy_path(
 
 
 @pytest.mark.parametrize(
-    "df",
+    "drop, overrides, error_message",
     [
         # 0. Singular Null value
-        pl.DataFrame(
+        (
+            [],
             {
                 "event_type": pl.Series(["a", "b", None], dtype=pl.String),
-                "patient_id": pl.Series(["a", "b", "c"], dtype=pl.String),
-            }
+            },
+            "'None' value in event_type detected.",
         ),
         # 1. Only Null values
-        pl.DataFrame(
+        (
+            [],
             {
                 "event_type": pl.Series([None, None, None], dtype=pl.String),
-                "patient_id": pl.Series(["a", "b", "c"], dtype=pl.String),
-            }
+            },
+            "'None' value in event_type detected.",
         ),
         # 2. event_type field missing
-        pl.DataFrame(
-            {
-                "col": pl.Series(["a", "b", "c"], dtype=pl.String),
-                "patient_id": pl.Series(["a", "b", "c"], dtype=pl.String),
-            }
-        ),
+        (["event_type"], {}, "Missing 'event_type' column"),
     ],
 )
-def test_constructor_raises_if_invalid_df(df: pl.DataFrame) -> None:
+def test_constructor_raises_if_invalid_df(
+    events_df: Callable,
+    drop: list[str],
+    overrides: dict[str, pl.Series],
+    error_message: str,
+) -> None:
     """Asserts that retrieving event_types with None entries raises.
 
     patient_id and event_type form the core of
@@ -87,5 +89,5 @@ def test_constructor_raises_if_invalid_df(df: pl.DataFrame) -> None:
     and should not contain None values. If they do there is
     programmer error or a malformed DataFrame.
     """
-    with pytest.raises(ValueError):
-        PolarsEDASource(df)
+    with pytest.raises(ValueError, match=error_message):
+        PolarsEDASource(events_df(drop=drop, **overrides))
