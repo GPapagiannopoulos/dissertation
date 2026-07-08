@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 .env
-mimic_data/
+mimic_data/CLAUDE.md
