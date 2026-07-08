@@ -160,7 +160,7 @@ class PolarsEDASource:
                     f"Missing '{col}' column. The DataFrame is invalid. Please review."
                 )
         if None in events.select(self._TYPE).to_series():
-            raise ValueError("None value in event_type detected.")
+            raise ValueError("'None' value in event_type detected.")
         self._events = events
 
     def event_types(self) -> list[str]:
