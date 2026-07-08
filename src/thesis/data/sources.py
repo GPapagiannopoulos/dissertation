@@ -259,9 +259,9 @@ class PolarsEDASource:
                 "proportion", descending=True
             )
 
-    def preview_table(self, table_name: str, n_rows: int = 10) -> pl.DataFrame:
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
-        table_fields = self.fields(table_name)
+        table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
             .filter(pl.sum_horizontal(pl.all().is_not_null()) > 0.6 * len(table_fields))
