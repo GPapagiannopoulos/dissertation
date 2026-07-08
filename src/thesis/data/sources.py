@@ -143,7 +143,24 @@ class PolarsEDASource:
     _TYPE = "event_type"
 
     def __init__(self, events: pl.DataFrame):
-        """Initialize the adapter with a polars dataframe."""
+        """Constructor for the PolarsEDASource class.
+
+        Args:
+            events (pl.DataFrame): dataframe around which
+            to initialize the wrapper
+
+        Raises:
+            ValueError: If missing patient_id or event_type column
+            ValueError: If patient_id or event_type column contains None values
+
+        """
+        for col in ["patient_id", "event_type"]:
+            if col not in events.columns:
+                raise ValueError(
+                    f"Missing '{col}' column. The DataFrame is invalid. Please review."
+                )
+        if None in events.select(self._TYPE).to_series():
+            raise ValueError("None value in event_type detected.")
         self._events = events
 
     def event_types(self) -> list[str]:
