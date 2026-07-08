@@ -187,7 +187,7 @@ def test_polars_eda_fields_method_happy_path(
 
 
 @pytest.mark.parametrize(
-    "overrides, event_type, expected_df",
+    "overrides, event_type, expected_df_data",
     [
         # 0. Retrieves the correct field names
         # Implicitly excludes non-patients fields from the default df
@@ -242,12 +242,83 @@ def test_polars_eda_fields_dtypes_method_happy_path(
     make_source: Callable,
     overrides: dict[str, pl.Series],
     event_type: str,
-    expected_df: dict[str, pl.Series],
+    expected_df_data: dict[str, pl.Series],
 ) -> None:
     """Asserts that the method returns the correct dtypes.
 
     Selection of the correct fields has been tested separately.
     """
     source = make_source(**overrides)
-    expectation = pl.DataFrame(expected_df)
+    expectation = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.field_dtypes(event_type), expectation)
+
+
+@pytest.mark.parametrize(
+    "overrides, event_type, expected_df_data",
+    [
+        # 0. Outputs head of target event type
+        (
+            {"patients/col": pl.Series([1, 2, 3], dtype=pl.UInt16)},
+            "patients",
+            {"patients/col": pl.Series([1, 2, 3], dtype=pl.UInt16)},
+        ),
+        # 1. Head contains all appropriate fields
+        (
+            {
+                "patients/col_a": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "patients/col_b": pl.Series([1, 2, 3], dtype=pl.UInt16),
+            },
+            "patients",
+            {
+                "patients/col_a": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "patients/col_b": pl.Series([1, 2, 3], dtype=pl.UInt16),
+            },
+        ),
+        # 2. Only records not meeting the cutoff excluded
+        (
+            {
+                "patients/col_a": pl.Series(["a", "b", None], dtype=pl.String),
+                "patients/col_b": pl.Series([1, 2, 3], dtype=pl.UInt16),
+            },
+            "patients",
+            {
+                "patients/col_a": pl.Series(["a", "b"], dtype=pl.String),
+                "patients/col_b": pl.Series([1, 2], dtype=pl.UInt16),
+            },
+        ),
+        # 3. Records exactly at the cutoff excluded
+        (
+            {
+                "patients/col_a": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "patients/col_b": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "patients/col_c": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "patients/col_d": pl.Series(["a", "b", None], dtype=pl.String),
+                "patients/col_e": pl.Series(["a", "b", None], dtype=pl.String),
+            },
+            "patients",
+            {
+                "patients/col_a": pl.Series(["a", "b"], dtype=pl.String),
+                "patients/col_b": pl.Series(["a", "b"], dtype=pl.String),
+                "patients/col_c": pl.Series(["a", "b"], dtype=pl.String),
+                "patients/col_d": pl.Series(["a", "b"], dtype=pl.String),
+                "patients/col_e": pl.Series(["a", "b"], dtype=pl.String),
+            },
+        ),
+        # 4. Preview is empty if no records fulfill criteria
+        (
+            {"patients/col_a": pl.Series([None, None, None], dtype=pl.String)},
+            "patients",
+            {"patients/col_a": pl.Series([], dtype=pl.String)},
+        ),
+    ],
+)
+def test_polars_eda_preview_method_happy_path(
+    make_source: Callable,
+    overrides: dict[str, pl.Series],
+    event_type: str,
+    expected_df_data: dict[str, pl.Series],
+) -> None:
+    """Asserts that the preview method returns only valid records."""
+    source = make_source(**overrides)
+    expected_df = pl.DataFrame(expected_df_data)
+    assert_frame_equal(source.preview_table(event_type), expected_df)
