@@ -128,6 +128,21 @@ def replace_mimic4_non_icd_codes(
     )
 
 
+def cleanse_float_values(data_source: pl.DataFrame, col_name: str) -> pl.DataFrame:
+    """Helper function for removing ranges and commas from floats.
+
+    Args:
+        data_source (pl.DataFrame): dataframe object with the
+        data to cleanse
+        col_name (str): name of the column to cleanse
+
+    Returns:
+        pl.DataFrame: cleansed dataframe
+    """
+    expr = pl.col(col_name).str.replace_all(",", "", literal=True)
+    return data_source.with_columns(expr)
+
+
 class PolarsEDASource:
     """EDA adapter over PyHealth's global event dataframe.
 
