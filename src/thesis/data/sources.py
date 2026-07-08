@@ -143,7 +143,24 @@ class PolarsEDASource:
     _TYPE = "event_type"
 
     def __init__(self, events: pl.DataFrame):
-        """Initialize the adapter with a polars dataframe."""
+        """Constructor for the PolarsEDASource class.
+
+        Args:
+            events (pl.DataFrame): dataframe around which
+            to initialize the wrapper
+
+        Raises:
+            ValueError: If missing patient_id or event_type column
+            ValueError: If patient_id or event_type column contains None values
+
+        """
+        for col in [self._PATIENT, self._TYPE]:
+            if col not in events.columns:
+                raise ValueError(
+                    f"Missing '{col}' column. The DataFrame is invalid. Please review."
+                )
+            if None in events.select(col).to_series():
+                raise ValueError(f"'None' value in '{col}' detected.")
         self._events = events
 
     def event_types(self) -> list[str]:
@@ -242,9 +259,9 @@ class PolarsEDASource:
                 "proportion", descending=True
             )
 
-    def preview_table(self, table_name: str, n_rows: int = 10) -> pl.DataFrame:
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
-        table_fields = self.fields(table_name)
+        table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
             .filter(pl.sum_horizontal(pl.all().is_not_null()) > 0.6 * len(table_fields))
