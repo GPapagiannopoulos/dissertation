@@ -10,7 +10,6 @@ tables:
       - "anchor_year_group"
       - "dod"
     dtype_mapping:
-      patients/subject_id: "String"
       patients/gender: "String"
       patients/anchor_age: "UInt"
       patients/anchor_year: "UInt"
@@ -33,21 +32,14 @@ tables:
       - "dischtime"
       - "hospital_expire_flag"
     dtype_mapping:
-      admissions/subject_id: "String"
-      admissions/hadm_id: "String"
-      admissions/admittime: "DateTime"
       admissions/dischtime: "DateTime"
-      admissions/deathtime: "DateTime"
       admissions/admission_type: "String"
-      admissions/admit_provider_id: "String"
       admissions/admission_location: "String"
       admissions/discharge_location: "String"
       admissions/insurance: "String"
       admissions/language: "String"
       admissions/marital_status: "String"
       admissions/race: "String"
-      admissions/edregtime: "DateTime"
-      admissions/edouttime: "DateTime"
       admissions/hospital_expire_flag: "Boolean"
 
   icustays:
@@ -61,14 +53,11 @@ tables:
       - "last_careunit"
       - "outtime"
     dtype_mapping:
-      icustays/subject_id: "String"
       icustays/hadm_id: "String"
       icustays/stay_id: "String"
       icustays/first_careunit: "String"
       icustays/last_careunit: "String"
-      icustays/intime: "DateTime"
       icustays/outtime: "DateTime"
-      icustays/los: "Float"
 
   diagnoses_icd:
     file_path: "hosp/diagnoses_icd.csv.gz"
@@ -86,7 +75,6 @@ tables:
       - "icd_version"
       - "seq_num"
     dtype_mapping:
-      diagnoses_icd/subject_id: "String"
       diagnoses_icd/hadm_id: "String"
       diagnoses_icd/seq_num: "UInt"
       diagnoses_icd/icd_code: "String"
@@ -108,10 +96,8 @@ tables:
       - "icd_version"
       - "seq_num"
     dtype_mapping:
-      procedures_icd/subject_id: "String"
       procedures_icd/hadm_id: "String"
       procedures_icd/seq_num: "UInt"
-      procedures_icd/chartdate: "Date"
       procedures_icd/icd_code: "String"
       procedures_icd/icd_version: "String"
 
@@ -162,22 +148,12 @@ tables:
       - "flag"
       - "storetime"
     dtype_mapping:
-      labevents/labevent_id: "String"
-      labevents/subject_id: "String"
       labevents/hadm_id: "String"
-      labevents/specimen_id: "String"
-      labevents/item_id: "String"
-      labevents/order_provider_id: "String"
-      labevents/charttime: "DateTime"
       labevents/storetime: "DateTime"
       labevents/value: "String" # Numerical and qualitative
       labevents/valuenum: "Float" # Numerical only
       labevents/valueuom: "String"
-      labevents/ref_range_lower: "Float"
-      labevents/ref_range_upper: "Float"
       labevents/flag: "String"
-      labevents/priority: "String"
-      labevents/comments: "String"
 
   hcpcsevents:
     file_path: "hosp/hcpcsevents.csv.gz"
@@ -189,9 +165,7 @@ tables:
       - "seq_num"
       - "short_description"
     dtype_mapping:
-      hcpcsevents/subject_id: "String"
       hcpcsevents/hadm_id: "String"
-      hcpcsevents/chartdate: "DateTime"
       hcpcsevents/hcpcs_cd: "String"
       hcpcsevents/seq_num: "UInt"
       hcpcsevents/short_description: "String"
