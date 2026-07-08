@@ -154,13 +154,13 @@ class PolarsEDASource:
             ValueError: If patient_id or event_type column contains None values
 
         """
-        for col in ["patient_id", "event_type"]:
+        for col in [self._PATIENT, self._TYPE]:
             if col not in events.columns:
                 raise ValueError(
                     f"Missing '{col}' column. The DataFrame is invalid. Please review."
                 )
-        if None in events.select(self._TYPE).to_series():
-            raise ValueError("'None' value in event_type detected.")
+            if None in events.select(col).to_series():
+                raise ValueError(f"'None' value in '{col}' detected.")
         self._events = events
 
     def event_types(self) -> list[str]:
