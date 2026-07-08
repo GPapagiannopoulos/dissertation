@@ -52,3 +52,19 @@ def test_function_affects_multiple_cols() -> None:
         }
     )
     assert_frame_equal(df, expected)
+
+
+def test_function_only_affects_target_cols() -> None:
+    """Asserts that non-specified fields are not modified."""
+    data = {
+        "col_a": pl.Series(["1-3"], dtype=pl.String),
+        "col_b": pl.Series(["2-6"], dtype=pl.String),
+    }
+    df = cleanse_float_values(pl.DataFrame(data), ["col_a"])
+    expected = pl.DataFrame(
+        {
+            "col_a": pl.Series(["2.0"], dtype=pl.String),
+            "col_b": pl.Series(["2-6"], dtype=pl.String),
+        }
+    )
+    assert_frame_equal(df, expected)
