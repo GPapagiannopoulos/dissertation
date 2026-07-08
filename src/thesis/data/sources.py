@@ -139,7 +139,15 @@ def cleanse_float_values(data_source: pl.DataFrame, col_name: str) -> pl.DataFra
     Returns:
         pl.DataFrame: cleansed dataframe
     """
-    expr = pl.col(col_name).str.replace_all(",", "", literal=True)
+    expr = (
+        pl.col(col_name)
+        .str.replace_all(",", "", literal=True)
+        .str.split("-")
+        .cast(pl.List(pl.Int32))
+        .list.mean()
+        .cast(pl.String)
+    )
+
     return data_source.with_columns(expr)
 
 
