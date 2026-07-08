@@ -109,3 +109,18 @@ def test_constructor_raises_if_invalid_df(
     """
     with pytest.raises(ValueError, match=error_message):
         PolarsEDASource(events_df(drop=drop, **overrides))
+
+
+@pytest.mark.parametrize(
+    "event_type, number",
+    [
+        # 0. Happy path
+        ("patients", 2),
+        # 1. Event_type not found
+        ("missing_type", 0),
+    ],
+)
+def test_n_events_correct(make_source: Callable, event_type: str, number: int) -> None:
+    """Asserts that n_events returns the correct number of events."""
+    source = make_source()
+    assert source.n_events(event_type) == number
