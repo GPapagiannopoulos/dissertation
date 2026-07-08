@@ -62,7 +62,7 @@ def test_polars_eda_event_types_method_happy_path(
             {
                 "event_type": pl.Series(["a", "b", None], dtype=pl.String),
             },
-            "'None' value in event_type detected.",
+            "'None' value in 'event_type' detected.",
         ),
         # 1. Only Null values
         (
@@ -70,10 +70,18 @@ def test_polars_eda_event_types_method_happy_path(
             {
                 "event_type": pl.Series([None, None, None], dtype=pl.String),
             },
-            "'None' value in event_type detected.",
+            "'None' value in 'event_type' detected.",
         ),
         # 2. event_type field missing
         (["event_type"], {}, "Missing 'event_type' column"),
+        # 3. None in patient_id
+        (
+            [],
+            {
+                "patient_id": pl.Series(["a", None, "c"], dtype=pl.String),
+            },
+            "'None' value in 'patient_id' detected.",
+        ),
     ],
 )
 def test_constructor_raises_if_invalid_df(
