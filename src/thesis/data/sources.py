@@ -51,7 +51,7 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
             exprs.append(pl.col(field).str.to_date(format="%Y-%m-%d", strict=True))
         elif polars_dtype is pl.Datetime:
             exprs.append(
-                pl.col(field).str.to_datetime(format="%Y-%m-%dT%H:%M:%S", strict=True)
+                pl.col(field).str.to_datetime(format="%Y-%m-%d %H:%M:%S", strict=True)
             )
         elif polars_dtype is pl.Boolean:
             exprs.append(

@@ -48,7 +48,7 @@ from thesis.data.sources import cast_frame
             {
                 "col": pl.Series(
                     [
-                        "2025-01-01T12:15:00",
+                        "2025-01-01 12:15:00",
                     ],
                     dtype=pl.String,
                 )
