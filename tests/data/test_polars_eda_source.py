@@ -190,11 +190,52 @@ def test_polars_eda_fields_method_happy_path(
     "overrides, event_type, expected_df",
     [
         # 0. Retrieves the correct field names
+        # Implicitly excludes non-patients fields from the default df
         (
             {"patients/col": pl.Series([1, 2, None], dtype=pl.UInt16)},
             "patients",
             {"field": "patients/col", "dtype": "UInt16"},
-        )
+        ),
+        # 1. Resulting df is sorted in ascending order
+        (
+            {
+                "patients/col_b": pl.Series(["1", "2", None], dtype=pl.String),
+                "patients/col_a": pl.Series(["a", None, "b"], dtype=pl.String),
+            },
+            "patients",
+            {
+                "field": ["patients/col_a", "patients/col_b"],
+                "dtype": ["String", "String"],
+            },
+        ),
+        # 2. Empty df if no relevant cols
+        (
+            {"patients/col_a": pl.Series(["a", "b", None], dtype=pl.String)},
+            "admissions",
+            {
+                "field": [],
+                "dtype": [],
+            },
+        ),
+        # 3. dtype matches the column for which it was extracted
+        (
+            {
+                "patients/col_c": pl.Series(["a", "b", None], dtype=pl.String),
+                "patients/col_a": pl.Series([1, 2, None], dtype=pl.UInt16),
+                "patients/col_d": pl.Series([True, False, None], dtype=pl.Boolean),
+                "patients/col_b": pl.Series([1.0, 2.0, None], dtype=pl.Float32),
+            },
+            "patients",
+            {
+                "field": [
+                    "patients/col_a",
+                    "patients/col_b",
+                    "patients/col_c",
+                    "patients/col_d",
+                ],
+                "dtype": ["UInt16", "Float32", "String", "Boolean"],
+            },
+        ),
     ],
 )
 def test_polars_eda_fields_dtypes_method_happy_path(
