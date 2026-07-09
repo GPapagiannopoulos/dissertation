@@ -42,8 +42,12 @@ class EDASource(Protocol):
         """Return a mimic_data structure with field names and dtypes."""
         pass
 
-    def describe_field(self, field_name: str):
-        """Return a description of a specific field belonging to an attribute."""
+    def describe_categorical_field(self, field_name: str):
+        """Return a description of a categorical field belonging to an attribute."""
+        pass
+
+    def describe_numerical_field(self):
+        """Return a description of a numerical field belonging to an attribute."""
         pass
 
     def preview(self):
