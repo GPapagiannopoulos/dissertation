@@ -31,7 +31,9 @@ def load_global_event_frame():
         ehr_tables=settings.mimic4_ehr_tables,
     )
     float_fields = [
-        col for col, dtype in settings.mimic4_ehr_dtype_mapping if dtype == "Float"
+        col
+        for col, dtype in settings.mimic4_ehr_dtype_mapping.items()
+        if dtype == "Float"
     ]
     cleansed_df = cleanse_float_values(ds.global_event_df, float_fields)
     lf = cast_frame(cleansed_df, settings.mimic4_ehr_dtype_mapping)
