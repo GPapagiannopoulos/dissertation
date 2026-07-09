@@ -1,6 +1,8 @@
 """Testing suite for the cleanse_float_values helper function."""
 
 import polars as pl
+import pytest
+from polars.exceptions import InvalidOperationError
 from polars.testing import assert_frame_equal
 
 from thesis.data.sources import cleanse_float_values
@@ -67,4 +69,38 @@ def test_function_only_affects_target_cols() -> None:
             "col_b": pl.Series(["2-6"], dtype=pl.String),
         }
     )
+    assert_frame_equal(df, expected)
+
+
+def test_function_raises_if_col_not_str() -> None:
+    """Asserts that an error is raised if the dtype isn't string."""
+    data = {"col": pl.Series([1, 2, 3], dtype=pl.Int16)}
+    with pytest.raises(InvalidOperationError, match="expected String type"):
+        cleanse_float_values(pl.DataFrame(data), ["col"])
+
+
+def test_function_raises_if_any_of_target_fields_not_strings() -> None:
+    """Asserts that an error is raised if any of the fields are not strings."""
+    data = {
+        "col_a": pl.Series([1, 2, 3], dtype=pl.Int16),
+        "col_b": pl.Series(["1", "2", "3"], dtype=pl.String),
+    }
+    with pytest.raises(InvalidOperationError, match="expected String type"):
+        cleanse_float_values(pl.DataFrame(data), ["col_a", "col_b"])
+
+
+def test_function_no_raise_if_non_string_field_not_passed() -> None:
+    """Asserts that an error is only raised if the non-string fields are targeted."""
+    data = {
+        "col_a": pl.Series([1, 2, 3], dtype=pl.Int16),
+        "col_b": pl.Series(["1", "2", "3"], dtype=pl.String),
+    }
+    df = cleanse_float_values(pl.DataFrame(data), ["col_b"])
+    expected = pl.DataFrame(
+        {
+            "col_a": pl.Series([1, 2, 3], dtype=pl.Int16),
+            "col_b": pl.Series(["1.0", "2.0", "3.0"], dtype=pl.String),
+        }
+    )
+
     assert_frame_equal(df, expected)
