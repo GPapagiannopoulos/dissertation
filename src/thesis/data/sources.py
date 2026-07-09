@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import polars as pl
+from polars.exceptions import InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
 
@@ -126,6 +127,58 @@ def replace_mimic4_non_icd_codes(
     return combined_source.drop(f"{event_type}/itemid").rename(
         {"label": f"{event_type}/description"}
     )
+
+
+def cleanse_float_values(
+    data_source: pl.LazyFrame, target_cols: list[str]
+) -> pl.LazyFrame:
+    """Helper function for removing ranges and commas from floats.
+
+    Ensures that columns loaded as strings via PyHealth are safe to cast
+    into Floats. Because it replaces ranges with means, it is necessary to represent
+    the final string as a float (e.g. '1' -> '1.0').
+
+    Notes:
+        An intermediate step casts to Float64. If working
+        with bigger values than that the value might overflow.
+
+    Args:
+        data_source (pl.DataFrame): dataframe object with the
+        data to cleanse
+        target_cols (list[str]): name of the columns to cleanse
+
+    Returns:
+        pl.DataFrame: cleansed dataframe
+
+    Raises:
+        InvalidOperationError: if any of the target fields dtypes
+        are not strings
+    """
+    expressions: list[pl.Expr] = []
+    for col in target_cols:
+        # Polars normally raises InvalidOperationError at collection
+        # Guard is against downstream failure propagation
+        if str(data_source.collect_schema()[col]) != "String":
+            raise InvalidOperationError(
+                f"InvalidOperationError: expected String type, got: "
+                f"{data_source.collect_schema()[col]}"
+            )
+        expr = (
+            pl.col(col)
+            .str.replace_all(",", "", literal=True)
+            # replace whitespace and non-digit containing strings
+            .str.replace_all(r"(\s|^\D+$)", "", literal=False)
+            .replace("", None)
+            # replacing only non-leading hyphens
+            .str.replace_all(r"(\d)-", "${1}|", literal=False)
+            .str.split("|")
+            .cast(pl.List(pl.Float64))
+            .list.mean()
+            .cast(pl.String)
+        )
+        expressions.append(expr)
+
+    return data_source.with_columns(expressions)
 
 
 class PolarsEDASource:
