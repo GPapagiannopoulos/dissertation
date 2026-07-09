@@ -283,21 +283,16 @@ class PolarsEDASource:
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
-    def describe_field(self, field_name: str) -> pl.DataFrame:
+    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
-        Calculates descriptors for a field at the event type level. It first
-        filters by event type, before selecting the target field. The summary
-        statistics are calculated at event type level because records of different
-        type are null, leading to skewing of event proportion.
+        Returns the normalized value counts for each value in a given categorical field.
 
         Args:
             field_name(str): the name of the field to filter for
 
         Returns:
-            pd.DataFrame: a dataframe offering summary measures. If the field is
-            numeric, it returns summary statistics as per the pl.Series.describe()
-            method.Otherwise, it returns the proportion of each value in the field.
+            pd.DataFrame: a dataframe containing the proportion of each value.
 
         """
         target_field = (
@@ -305,12 +300,13 @@ class PolarsEDASource:
             .select(field_name)
             .to_series()
         )
-        if self._events.schema[field_name].is_numeric():
-            return target_field.describe()
-        else:
-            return target_field.value_counts(normalize=True).sort(
-                "proportion", descending=True
-            )
+        return target_field.value_counts(normalize=True).sort(
+            "proportion", descending=True
+        )
+
+    def describe_numerical_field(self):
+        """Return a description of a numerical field belonging to an attribute."""
+        pass
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
