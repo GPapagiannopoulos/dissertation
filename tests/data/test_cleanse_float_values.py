@@ -114,17 +114,45 @@ def test_function_discerns_sign_vs_range() -> None:
     assert_frame_equal(df, expected_df)
 
 
-def test_function_propagates_none_values() -> None:
-    """Asserts that 'None' values are not affected."""
-    data = {"col": pl.Series([None, None, None], dtype=pl.String)}
-    df = cleanse_float_values(pl.LazyFrame(data), ["col"])
-    expected_df = pl.LazyFrame({"col": pl.Series([None, None, None], dtype=pl.String)})
-    assert_frame_equal(df, expected_df)
-
-
-def test_empty_string_converted_to_none() -> None:
-    """Asserts that none values are converted to 'None'."""
-    data = {"col": pl.Series(["", "", ""], dtype=pl.String)}
-    df = cleanse_float_values(pl.LazyFrame(data), ["col"])
-    expected_df = pl.LazyFrame({"col": pl.Series([None, None, None], dtype=pl.String)})
-    assert_frame_equal(df, expected_df)
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        # 0. Single whitespace replaced with 'None'
+        (
+            {"col": pl.Series([" "], dtype=pl.String)},
+            {"col": pl.Series([None], dtype=pl.String)},
+        ),
+        # 1. None values are unaffected
+        (
+            {"col": pl.Series([None], dtype=pl.String)},
+            {"col": pl.Series([None], dtype=pl.String)},
+        ),
+        # 2. Empty strings get converted to 'None'
+        (
+            {"col": pl.Series([""], dtype=pl.String)},
+            {"col": pl.Series([None], dtype=pl.String)},
+        ),
+        # 3. Single dash gets converted to 'None'
+        (
+            {"col": pl.Series(["-"], dtype=pl.String)},
+            {"col": pl.Series([None], dtype=pl.String)},
+        ),
+        # 4. Other single punctuation gets converted to 'None'
+        (
+            {"col": pl.Series([","], dtype=pl.String)},
+            {"col": pl.Series([None], dtype=pl.String)},
+        ),
+        # 5. Removes whitespace between hyphen
+        (
+            {"col": pl.Series(["1 - 3"], dtype=pl.String)},
+            {"col": pl.Series(["2.0"], dtype=pl.String)},
+        ),
+    ],
+)
+def test_function_handles_absence_indicators(
+    data: dict[str, pl.Series], expected: dict[str, pl.Series]
+) -> None:
+    """Asserts that whitespace is correctly removed."""
+    lf = cleanse_float_values(pl.LazyFrame(data), ["col"])
+    expected_lf = pl.LazyFrame(expected)
+    assert_frame_equal(lf, expected_lf)
