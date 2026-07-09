@@ -46,7 +46,7 @@ class EDASource(Protocol):
         """Return a description of a categorical field belonging to an attribute."""
         pass
 
-    def describe_numerical_field(self):
+    def describe_numeric_field(self):
         """Return a description of a numerical field belonging to an attribute."""
         pass
 
