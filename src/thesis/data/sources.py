@@ -139,8 +139,7 @@ def cleanse_float_values(
 
     Notes:
         An intermediate step casts to Float64. If working
-        with bigger values than that (unlikely in the context of MIMIC-IV)
-        the value might overflow.
+        with bigger values than that the value might overflow.
 
     Args:
         data_source (pl.DataFrame): dataframe object with the
@@ -149,6 +148,10 @@ def cleanse_float_values(
 
     Returns:
         pl.DataFrame: cleansed dataframe
+
+    Raises:
+        InvalidOperationError: if any of the target fields dtypes
+        are not strings
     """
     expressions: list[pl.Expr] = []
     for col in target_cols:
