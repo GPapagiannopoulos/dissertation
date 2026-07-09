@@ -292,7 +292,9 @@ class PolarsEDASource:
             field_name(str): the name of the field to filter for
 
         Returns:
-            pd.DataFrame: a dataframe containing the proportion of each value.
+            pd.DataFrame: a dataframe containing the proportion of each value
+            as a pl.Float64 value, sorted in descending order by proportion
+            and ascending order by target_field name
 
         """
         target_field = (
@@ -301,7 +303,7 @@ class PolarsEDASource:
             .to_series()
         )
         return target_field.value_counts(normalize=True).sort(
-            "proportion", descending=True
+            ["proportion", field_name], descending=[True, False]
         )
 
     def describe_numerical_field(self):
