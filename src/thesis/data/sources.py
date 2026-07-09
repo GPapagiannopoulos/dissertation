@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import polars as pl
-from polars.exceptions import InvalidOperationError
+from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
 
@@ -296,7 +296,14 @@ class PolarsEDASource:
             as a pl.Float64 value, sorted in descending order by proportion
             and ascending order by target_field name
 
+        Raises:
+            ColumnNotFoundError: if the target field does not exist in the schema
+            ValueError: if the target field is a numeric column
         """
+        if field_name not in self._events.columns:
+            raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
+        if self._events.schema[field_name].is_numeric():
+            raise ValueError(f"'{field_name}' is not a categorical field.")
         target_field = (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
             .select(field_name)
@@ -306,7 +313,7 @@ class PolarsEDASource:
             ["proportion", field_name], descending=[True, False]
         )
 
-    def describe_numerical_field(self):
+    def describe_numeric_field(self):
         """Return a description of a numerical field belonging to an attribute."""
         pass
 

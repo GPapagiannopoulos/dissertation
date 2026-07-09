@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
+from polars.exceptions import ColumnNotFoundError
 from polars.testing import assert_frame_equal
 
 from thesis.data.sources import PolarsEDASource
@@ -384,3 +385,27 @@ def test_polars_eda_describe_categorical_field_happy_path(
     source = make_source(**overrides)
     expectation = pl.DataFrame(expected_df)
     assert_frame_equal(source.describe_categorical_field(target_field), expectation)
+
+
+def test_polars_eda_describe_categorical_field_raise_if_missing_field(
+    make_source: Callable,
+) -> None:
+    """Asserts that the function raises if target field is missing.
+
+    Normal method use is reserved for the dashboard, where the parameter
+    is derived from available columns. This guard exists for use outside
+    the dashboard.
+    """
+    source = make_source()
+    with pytest.raises(ColumnNotFoundError, match="Unable to find column"):
+        source.describe_categorical_field("wrong_col/col")
+
+
+def test_polars_eda_describe_categorical_field_raise_if_numeric_field(
+    make_source: Callable,
+) -> None:
+    """Asserts that the function raises if target field is numeric."""
+    overrides = {"patients/col_a": pl.Series([1, 2, 3], dtype=pl.Int16)}
+    source = make_source(**overrides)
+    with pytest.raises(ValueError, match="'patients/col_a' is not a categorical field"):
+        source.describe_categorical_field("patients/col_a")
