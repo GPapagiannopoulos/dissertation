@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import polars as pl
+from polars.exceptions import InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
 
@@ -129,8 +130,8 @@ def replace_mimic4_non_icd_codes(
 
 
 def cleanse_float_values(
-    data_source: pl.DataFrame, target_cols: list[str]
-) -> pl.DataFrame:
+    data_source: pl.LazyFrame, target_cols: list[str]
+) -> pl.LazyFrame:
     """Helper function for removing ranges and commas from floats.
 
     Ensures that columns loaded as strings via PyHealth are safe to cast
@@ -155,6 +156,13 @@ def cleanse_float_values(
     """
     expressions: list[pl.Expr] = []
     for col in target_cols:
+        # Polars normally raises InvalidOperationError at collection
+        # Guard is against downstream failure propagation
+        if str(data_source.collect_schema()[col]) != "String":
+            raise InvalidOperationError(
+                f"InvalidOperationError: expected String type, got: "
+                f"{data_source.collect_schema()[col]}"
+            )
         expr = (
             pl.col(col)
             .str.replace_all(",", "", literal=True)
