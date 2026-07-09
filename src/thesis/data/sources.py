@@ -313,8 +313,30 @@ class PolarsEDASource:
             ["proportion", field_name], descending=[True, False]
         )
 
-    def describe_numeric_field(self):
-        """Return a description of a numerical field belonging to an attribute."""
+    def describe_numeric_field(
+        self,
+        field_name: str,
+        aggregations: list[str],
+        unit_field: str,
+        additional_aggs: list[str] | None = None,
+    ) -> pl.DataFrame:
+        """Return a description of a numerical field belonging to an attribute.
+
+        PyHealth loads data as an Entity-Attribute-Value (EAV) model. This means that
+        biomarker measurements and drug dosages are all mixed and need to be
+        grouped by their corresponding entity and attribute to produce meaningful
+        summaries.
+
+        Args:
+            field_name(str): name of the string to filter for
+            aggregations(list[str]): list of mandatory aggregations to apply.
+            unit_field (str): name of field holding the value unit
+            additional_aggs (list[str]): list of additional groupings to apply
+
+        Returns:
+            pl.DataFrame: a dataframe containing summary statistics
+            aggregated at the Entity-Attribute level
+        """
         pass
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:

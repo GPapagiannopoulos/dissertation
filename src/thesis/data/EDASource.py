@@ -46,7 +46,13 @@ class EDASource(Protocol):
         """Return a description of a categorical field belonging to an attribute."""
         pass
 
-    def describe_numeric_field(self):
+    def describe_numeric_field(
+        self,
+        field_name: str,
+        aggregations: list[str],
+        unit_field: str,
+        additional_aggs: list[str] | None = None,
+    ):
         """Return a description of a numerical field belonging to an attribute."""
         pass
 
