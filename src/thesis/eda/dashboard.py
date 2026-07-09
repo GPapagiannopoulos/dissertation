@@ -9,6 +9,7 @@ from thesis.config import settings
 from thesis.data.sources import (
     PolarsEDASource,
     cast_frame,
+    cleanse_float_values,
     replace_mimic4_icd_codes,
     replace_mimic4_non_icd_codes,
 )
@@ -29,8 +30,11 @@ def load_global_event_frame():
         dev=True,
         ehr_tables=settings.mimic4_ehr_tables,
     )
-
-    lf = cast_frame(ds.global_event_df, settings.mimic4_ehr_dtype_mapping)
+    float_fields = [
+        col for col, dtype in settings.mimic4_ehr_dtype_mapping if dtype == "Float"
+    ]
+    cleansed_df = cleanse_float_values(ds.global_event_df, float_fields)
+    lf = cast_frame(cleansed_df, settings.mimic4_ehr_dtype_mapping)
     event_type_icd_maps: list[tuple[str, Path]] = [
         ("procedures_icd", settings.mimic4_ehr_d_icd_procedures),
         ("diagnoses_icd", settings.mimic4_ehr_d_icd_diagnoses),

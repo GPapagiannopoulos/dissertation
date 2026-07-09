@@ -104,3 +104,11 @@ def test_function_no_raise_if_non_string_field_not_passed() -> None:
     )
 
     assert_frame_equal(df, expected)
+
+
+def test_function_discerns_sign_vs_range() -> None:
+    """Asserts that the function only removes hyphens in the body of the string."""
+    data = {"col": pl.Series(["-2", "1-3"], dtype=pl.String)}
+    expected_df = pl.LazyFrame({"col": pl.Series(["-2.0", "2.0"], dtype=pl.String)})
+    df = cleanse_float_values(pl.LazyFrame(data), ["col"])
+    assert_frame_equal(df, expected_df)
