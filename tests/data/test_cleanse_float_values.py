@@ -112,3 +112,19 @@ def test_function_discerns_sign_vs_range() -> None:
     expected_df = pl.LazyFrame({"col": pl.Series(["-2.0", "2.0"], dtype=pl.String)})
     df = cleanse_float_values(pl.LazyFrame(data), ["col"])
     assert_frame_equal(df, expected_df)
+
+
+def test_function_propagates_none_values() -> None:
+    """Asserts that 'None' values are not affected."""
+    data = {"col": pl.Series([None, None, None], dtype=pl.String)}
+    df = cleanse_float_values(pl.LazyFrame(data), ["col"])
+    expected_df = pl.LazyFrame({"col": pl.Series([None, None, None], dtype=pl.String)})
+    assert_frame_equal(df, expected_df)
+
+
+def test_empty_string_converted_to_none() -> None:
+    """Asserts that none values are converted to 'None'."""
+    data = {"col": pl.Series(["", "", ""], dtype=pl.String)}
+    df = cleanse_float_values(pl.LazyFrame(data), ["col"])
+    expected_df = pl.LazyFrame({"col": pl.Series([None, None, None], dtype=pl.String)})
+    assert_frame_equal(df, expected_df)
