@@ -165,6 +165,7 @@ def cleanse_float_values(
             )
         expr = (
             pl.col(col)
+            .replace("", None)
             .str.replace_all(",", "", literal=True)
             .str.replace_all(r"\s", "", literal=False)
             # replacing only non-leading hyphens
