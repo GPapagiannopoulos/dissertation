@@ -322,3 +322,65 @@ def test_polars_eda_preview_method_happy_path(
     source = make_source(**overrides)
     expected_df = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.preview_table(event_type), expected_df)
+
+
+@pytest.mark.parametrize(
+    "overrides, expected_df, target_field",
+    [
+        # 0. Correctly calculates a single value
+        (
+            {"patients/col_a": pl.Series(["a", "a", "a"], dtype=pl.String)},
+            {
+                "patients/col_a": pl.Series(["a"], dtype=pl.String),
+                "proportion": pl.Series([1.0], dtype=pl.Float64),
+            },
+            "patients/col_a",
+        ),
+        # 1. Correctly calculates the proportion of multiple event types
+        (
+            {
+                "event_type": pl.Series(["event"] * 3, dtype=pl.String),
+                "event/col": pl.Series(["a", "b", "c"], dtype=pl.String),
+            },
+            {
+                "event/col": pl.Series(["a", "b", "c"], dtype=pl.String),
+                "proportion": pl.Series([1 / 3, 1 / 3, 1 / 3], dtype=pl.Float64),
+            },
+            "event/col",
+        ),
+        # 2. Counts proportion of null values
+        (
+            {
+                "event_type": pl.Series(["event"] * 3, dtype=pl.String),
+                "event/col": pl.Series([None] * 3, dtype=pl.String),
+            },
+            {
+                "event/col": pl.Series([None], dtype=pl.String),
+                "proportion": pl.Series([1.0], dtype=pl.Float64),
+            },
+            "event/col",
+        ),
+        # 3. Does not count target_field nulls belonging to a different event_type
+        (
+            {
+                "event_type": pl.Series(["event", "event", "other"], dtype=pl.String),
+                "event/col": pl.Series(["a", "a", None], dtype=pl.String),
+            },
+            {
+                "event/col": pl.Series(["a"], dtype=pl.String),
+                "proportion": pl.Series([1.0], dtype=pl.Float64),
+            },
+            "event/col",
+        ),
+    ],
+)
+def test_polars_eda_describe_categorical_field_happy_path(
+    make_source: Callable,
+    overrides: dict[str, pl.Series],
+    expected_df: dict[str, pl.Series],
+    target_field: str,
+):
+    """Asserts standard behaviour for describe_categorical_field method."""
+    source = make_source(**overrides)
+    expectation = pl.DataFrame(expected_df)
+    assert_frame_equal(source.describe_categorical_field(target_field), expectation)
