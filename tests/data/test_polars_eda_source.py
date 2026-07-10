@@ -123,12 +123,37 @@ def test_constructor_raises_if_invalid_df(
         ("missing_type", 0),
     ],
 )
-def test_polars_eda_event_n_events_method_happy_path(
+def test_polars_eda_n_events_method_happy_path(
     make_source: Callable, event_type: str, number: int
 ) -> None:
     """Asserts that n_events returns the correct number of events."""
     source = make_source()
     assert source.n_events(event_type) == number
+
+
+@pytest.mark.parametrize(
+    "overrides, event_type, expected_number",
+    [
+        # 0. Simple retrieval by event_type
+        ({}, "admissions", 1),
+        # 1. Does not count duplicate patient ids
+        ({"patient_id": pl.Series(["1", "1", "1"], dtype=pl.String)}, "patients", 1),
+        # 2. Doesn't count 'None' values
+        # Not using patient_id because constructor raises
+        ({"col": pl.Series([None, None, None], dtype=pl.String)}, "col", 0),
+        # 3. Returns 0 if event_type not found
+        ({}, "wrong_event_type", 0),
+    ],
+)
+def test_polars_eda_n_patients_method_happy_path(
+    make_source: Callable,
+    overrides: dict[str, pl.Series],
+    event_type: str,
+    expected_number: int,
+) -> None:
+    """Asserts that n_patients returns the correct number o patients."""
+    source = make_source(**overrides)
+    assert source.n_patients(event_type) == expected_number
 
 
 @pytest.mark.parametrize(
