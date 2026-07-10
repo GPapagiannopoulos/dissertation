@@ -66,7 +66,7 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     return lf.with_columns(exprs)
 
 
-def replace_mimic4_icd_codes(
+def mimic4_add_descriptions_to_icd_codes(
     data_source: pl.LazyFrame, path_to_map: Path, event_type: str
 ) -> pl.LazyFrame:
     """Replaces the ICD codes in the EHR mimic_data with human-readable descriptions.
@@ -103,9 +103,6 @@ def replace_mimic4_icd_codes(
         coalesce=True,
     )
 
-    combined_source = combined_source.drop(
-        [f"{event_type}/icd_version", f"{event_type}/icd_code"]
-    )
     return combined_source.rename({"long_title": f"{event_type}/description"})
 
 
