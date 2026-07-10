@@ -49,9 +49,7 @@ class EDASource(Protocol):
     def describe_numeric_field(
         self,
         field_name: str,
-        aggregations: list[str],
-        unit_field: str,
-        additional_aggs: list[str] | None = None,
+        filters: dict[str, str],
     ):
         """Return a description of a numerical field belonging to an attribute."""
         pass

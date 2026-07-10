@@ -35,3 +35,19 @@ def make_source(events_df):
         return PolarsEDASource(events_df(**kwargs))
 
     return _make
+
+
+@pytest.fixture
+def make_eav_source(make_source):
+    """Source shaped for numeric/EAV describe tests."""
+
+    def _make(
+        event_type: str = "prescriptions", **columns: pl.Series
+    ) -> PolarsEDASource:
+        n = len(next(iter(columns.values())))
+        frame = {f"{event_type}/{name}": vals for name, vals in columns.items()}
+        frame["event_type"] = pl.Series([event_type] * n, dtype=pl.String)
+        frame["patient_id"] = pl.Series([str(i) for i in range(n)], dtype=pl.String)
+        return make_source(**frame)
+
+    return _make

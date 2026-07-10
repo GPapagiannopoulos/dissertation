@@ -409,3 +409,41 @@ def test_polars_eda_describe_categorical_field_raise_if_numeric_field(
     source = make_source(**overrides)
     with pytest.raises(ValueError, match="'patients/col_a' is not a categorical field"):
         source.describe_categorical_field("patients/col_a")
+
+
+@pytest.mark.parametrize(
+    "target_field, uom_field, overrides, filters, expected_df",
+    [
+        # 0. Method correctly retrieves by filter
+        (
+            "labevents/value",
+            "labevents/uom",
+            {
+                "value": pl.Series([10.0, 20.0, 100.0, 200.0], dtype=pl.Float64),
+                "label": pl.Series(
+                    ["test_a", "test_a", "test_b", "test_b"], dtype=pl.String
+                ),
+                "uom": pl.Series(["mg", "mg", "cm", "cm"], dtype=pl.String),
+            },
+            {"labevents/label": "test_a"},
+            {
+                "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
+                "labevents/uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+        ),
+    ],
+)
+def test_polars_eda_describe_numerical_field_happy_path(
+    make_eav_source: Callable,
+    target_field: str,
+    uom_field: str | None,
+    overrides: dict[str, pl.Series],
+    filters: dict[str, str],
+    expected_df: dict[str, pl.Series],
+) -> None:
+    """Asserts standard behaviour for describe_numerical_field method."""
+    source = make_eav_source(target_field.split("/")[0], **overrides)
+    data_slice = source._numeric_subset(target_field, filters, uom_field)
+    expected = pl.DataFrame(expected_df)
+    assert_frame_equal(data_slice, expected)
