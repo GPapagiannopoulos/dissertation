@@ -283,6 +283,34 @@ class PolarsEDASource:
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
+    def _numeric_subset(
+        self, target_field: str, filters: dict[str, str], uom_field: str | None
+    ) -> pl.DataFrame:
+        """Internal helper for retrieving a filter aggregation of the dataframe.
+
+        In describing the numeric fields it is necessary to aggregate and filter
+        data to make it readable to digestible for the dashboard. This is a separate
+        concern from the actual summary - the separation of concerns allows for cleaner
+        changes and testing of functionality.
+
+        Args:
+            target_field(str): the name of the field of interest
+            filters (dict[str, str]): subsequent filters to be applied
+            in the format {field_name: value_to_filter_for}
+            uom_field (str): field containing the unit of measurement
+        Returns:
+            pl.DataFrame: a df filtered according to specification
+        """
+        filtered_by_event_type = self._events.filter(
+            pl.col(self._TYPE) == target_field.split("/")[0]
+        )
+        expr: list[pl.Expr] = []
+        for field, value in filters.items():
+            expr.append(pl.col(field) == value)
+
+        additional_filters = filtered_by_event_type.filter(expr)
+        return additional_filters.select(target_field, *list(filters.keys()), uom_field)
+
     def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
@@ -315,10 +343,8 @@ class PolarsEDASource:
 
     def describe_numeric_field(
         self,
-        field_name: str,
-        aggregations: list[str],
-        unit_field: str,
-        additional_aggs: list[str] | None = None,
+        target_field: str,
+        filters: dict[str, str],
     ) -> pl.DataFrame:
         """Return a description of a numerical field belonging to an attribute.
 
@@ -328,16 +354,15 @@ class PolarsEDASource:
         summaries.
 
         Args:
-            field_name(str): name of the string to filter for
-            aggregations(list[str]): list of mandatory aggregations to apply.
-            unit_field (str): name of field holding the value unit
-            additional_aggs (list[str]): list of additional groupings to apply
+            target_field (str): name of the string to filter for
+            filters (dict[str, str]): dictionary of target field:value pairs
 
         Returns:
             pl.DataFrame: a dataframe containing summary statistics
             aggregated at the Entity-Attribute level
         """
-        pass
+        df_slice = self._numeric_subset()
+        return df_slice.describe()
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
