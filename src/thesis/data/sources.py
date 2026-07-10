@@ -309,7 +309,10 @@ class PolarsEDASource:
             expr.append(pl.col(field) == value)
 
         additional_filters = filtered_by_event_type.filter(expr)
-        return additional_filters.select(target_field, *list(filters.keys()), uom_field)
+        projection = [target_field, *filters.keys()]
+        if uom_field is not None:
+            projection.append(uom_field)
+        return additional_filters.select(projection)
 
     def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.

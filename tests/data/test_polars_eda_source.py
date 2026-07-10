@@ -432,6 +432,44 @@ def test_polars_eda_describe_categorical_field_raise_if_numeric_field(
                 "labevents/uom": pl.Series(["mg", "mg"], dtype=pl.String),
             },
         ),
+        # 1. Filters on multiple dimensions with AND semantics
+        (
+            "prescriptions/dose_val",
+            "prescriptions/dose_unit",
+            {
+                "dose_val": pl.Series([10.0, 20.0, 30.0, 40.0], dtype=pl.Float64),
+                "drug": pl.Series(
+                    ["aspirin", "aspirin", "aspirin", "warfarin"], dtype=pl.String
+                ),
+                "route": pl.Series(["PO", "IV", "PO", "PO"], dtype=pl.String),
+                "dose_unit": pl.Series(["mg", "mg", "mg", "mg"], dtype=pl.String),
+            },
+            {"prescriptions/drug": "aspirin", "prescriptions/route": "PO"},
+            {
+                "prescriptions/dose_val": pl.Series([10.0, 30.0], dtype=pl.Float64),
+                "prescriptions/drug": pl.Series(
+                    ["aspirin", "aspirin"], dtype=pl.String
+                ),
+                "prescriptions/route": pl.Series(["PO", "PO"], dtype=pl.String),
+                "prescriptions/dose_unit": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+        ),
+        # 2. Filter matching no rows returns an empty slice with schema intact
+        (
+            "labevents/value",
+            "labevents/uom",
+            {
+                "value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "label": pl.Series(["test_a", "test_a"], dtype=pl.String),
+                "uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+            {"labevents/label": "does_not_exist"},
+            {
+                "labevents/value": pl.Series([], dtype=pl.Float64),
+                "labevents/label": pl.Series([], dtype=pl.String),
+                "labevents/uom": pl.Series([], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_polars_eda_describe_numerical_field_happy_path(
@@ -447,3 +485,67 @@ def test_polars_eda_describe_numerical_field_happy_path(
     data_slice = source._numeric_subset(target_field, filters, uom_field)
     expected = pl.DataFrame(expected_df)
     assert_frame_equal(data_slice, expected)
+
+
+def test_polars_eda_numeric_subset_excludes_other_event_types(
+    make_source: Callable,
+) -> None:
+    """Asserts the slice drops rows belonging to a different event_type.
+
+    Foreign rows are null by design in real data, but here the foreign row
+    is given a matching label and a non-null value so that only the
+    event_type filter can be responsible for excluding it.
+    """
+    source = make_source(
+        event_type=pl.Series(["labevents", "labevents", "other"], dtype=pl.String),
+        patient_id=pl.Series(["1", "2", "3"], dtype=pl.String),
+        **{
+            "labevents/value": pl.Series([10.0, 20.0, 999.0], dtype=pl.Float64),
+            "labevents/label": pl.Series(
+                ["test_a", "test_a", "test_a"], dtype=pl.String
+            ),
+            "labevents/uom": pl.Series(["mg", "mg", "mg"], dtype=pl.String),
+        },
+    )
+    result = source._numeric_subset(
+        "labevents/value", {"labevents/label": "test_a"}, "labevents/uom"
+    )
+    expected = pl.DataFrame(
+        {
+            "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+            "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
+            "labevents/uom": pl.Series(["mg", "mg"], dtype=pl.String),
+        }
+    )
+    assert_frame_equal(result, expected)
+
+
+@pytest.mark.xfail(
+    reason="_numeric_subset passes uom_field=None straight into select(), which "
+    "Polars turns into a stray 'literal' null column instead of omitting the "
+    "unit. Fix: only project uom_field when it is not None.",
+    strict=False,
+)
+def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts that a None uom_field yields no unit column in the slice.
+
+    Some numeric fields have no unit of measurement, so the dashboard passes
+    None. The slice should then contain only the target and filter fields.
+    """
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([10.0, 20.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+    )
+    result = source._numeric_subset(
+        "labevents/value", {"labevents/label": "test_a"}, None
+    )
+    expected = pl.DataFrame(
+        {
+            "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+            "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
+        }
+    )
+    assert_frame_equal(result, expected)
