@@ -1,5 +1,8 @@
 """Shared fixtures for the data-source test suite."""
 
+from collections.abc import Callable
+from pathlib import Path
+
 import polars as pl
 import pytest
 
@@ -51,3 +54,27 @@ def make_eav_source(make_source):
         return make_source(**frame)
 
     return _make
+
+
+@pytest.fixture
+def mapping_csv(tmp_path) -> Callable:
+    """Write a mapping DataFrame to a temp CSV and return its path."""
+
+    def _write(data: dict, name: str = "mapping.csv") -> Path:
+        path = tmp_path / name
+        pl.DataFrame(data).write_csv(path)
+        return path
+
+    return _write
+
+
+@pytest.fixture
+def source_lazyframe() -> Callable:
+    """Factory for a LazyFrame with overrides."""
+
+    def _build(event_type: str, **columns: pl.Series) -> pl.LazyFrame:
+        frame = {f"{event_type}/{name}": vals for name, vals in columns.items()}
+
+        return pl.LazyFrame(frame)
+
+    return _build
