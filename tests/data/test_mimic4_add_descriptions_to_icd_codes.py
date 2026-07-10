@@ -29,7 +29,73 @@ from thesis.data.sources import mimic4_add_descriptions_to_icd_codes
                 "event_type/icd_code": pl.Series(["123"], dtype=pl.String),
                 "event_type/description": pl.Series(["description"], dtype=pl.String),
             },
-        )
+        ),
+        # 1. Correct composite matching
+        (
+            {
+                "icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "icd_code": pl.Series(["123", "123"], dtype=pl.String),
+                "long_title": pl.Series(
+                    ["description_one", "description_two"], dtype=pl.String
+                ),
+            },
+            {
+                "icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "icd_code": pl.Series(["123", "123"], dtype=pl.String),
+            },
+            "event_type",
+            {
+                "event_type/icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "event_type/icd_code": pl.Series(["123", "123"], dtype=pl.String),
+                "event_type/description": pl.Series(
+                    ["description_one", "description_two"], dtype=pl.String
+                ),
+            },
+        ),
+        # 2. Missing event_code returns a null description
+        (
+            {
+                "icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "icd_code": pl.Series(["123", "124"], dtype=pl.String),
+                "long_title": pl.Series(
+                    ["description_one", "description_two"], dtype=pl.String
+                ),
+            },
+            {
+                "icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "icd_code": pl.Series(["123", "123"], dtype=pl.String),
+            },
+            "event_type",
+            {
+                "event_type/icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "event_type/icd_code": pl.Series(["123", "123"], dtype=pl.String),
+                "event_type/description": pl.Series(
+                    ["description_one", None], dtype=pl.String
+                ),
+            },
+        ),
+        # 3. Function casts mapping cols to String
+        (
+            {
+                "icd_version": pl.Series([10, 9], dtype=pl.Int32),
+                "icd_code": pl.Series(["123", "123"], dtype=pl.String),
+                "long_title": pl.Series(
+                    ["description_one", "description_two"], dtype=pl.String
+                ),
+            },
+            {
+                "icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "icd_code": pl.Series(["123", "123"], dtype=pl.String),
+            },
+            "event_type",
+            {
+                "event_type/icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "event_type/icd_code": pl.Series(["123", "123"], dtype=pl.String),
+                "event_type/description": pl.Series(
+                    ["description_one", "description_two"], dtype=pl.String
+                ),
+            },
+        ),
     ],
 )
 def test_add_descriptions_to_icd_codes_happy_path(
