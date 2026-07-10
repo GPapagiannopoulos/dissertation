@@ -69,7 +69,7 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
 def mimic4_add_descriptions_to_icd_codes(
     data_source: pl.LazyFrame, path_to_map: Path, event_type: str
 ) -> pl.LazyFrame:
-    """Replaces the ICD codes in the EHR mimic_data with human-readable descriptions.
+    """Matches the ICD codes in the EHR mimic_data with their human-readable names.
 
     Joins the MIMIC-IV EHR dataset to a frame containing the mapping of ICD codes
     to human-readable descriptions. Subsequently, drops ICD codes and versions.
