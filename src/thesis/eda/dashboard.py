@@ -10,7 +10,7 @@ from thesis.data.sources import (
     PolarsEDASource,
     cast_frame,
     cleanse_float_values,
-    replace_mimic4_icd_codes,
+    mimic4_add_descriptions_to_icd_codes,
     replace_mimic4_non_icd_codes,
 )
 from thesis.eda.filters import valid_fields
@@ -43,7 +43,7 @@ def load_global_event_frame():
     ]
 
     for event_type, mapping in event_type_icd_maps:
-        lf = replace_mimic4_icd_codes(lf, mapping, event_type)
+        lf = mimic4_add_descriptions_to_icd_codes(lf, mapping, event_type)
 
     lf = replace_mimic4_non_icd_codes(lf, settings.mimic4_ehr_d_labitems, "labevents")
     return lf.collect()
