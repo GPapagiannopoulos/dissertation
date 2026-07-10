@@ -3,11 +3,18 @@
 import functools
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
+
+class EAVFieldInformation(NamedTuple):
+    """Mandatory filter and uom fields corresponding to an EAV field."""
+
+    filters: list[str]
+    uom: str | None
 
 
 class Settings(BaseSettings):
@@ -67,6 +74,23 @@ class Settings(BaseSettings):
             for mapping in mapping_by_table
             for field, dtype in mapping.items()
         }
+
+    @functools.cached_property
+    def mimic4_ehr_eav_fields(self) -> dict[str, EAVFieldInformation]:
+        """Returns the necessary filters and uom for eav fields."""
+        eav_fields_by_table = [
+            self.mimic4_ehr_manifest["tables"][t].get("eav_fields", {})
+            for t in self.mimic4_ehr_tables
+        ]
+
+        output: dict[str, EAVFieldInformation] = {}
+        for eav_field in eav_fields_by_table:
+            for field, reqs in eav_field.items():
+                output[field] = EAVFieldInformation(
+                    reqs.get("filters"), reqs.get("uom")
+                )
+
+        return output
 
 
 settings = Settings()
