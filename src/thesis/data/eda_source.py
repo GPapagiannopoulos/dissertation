@@ -1,6 +1,31 @@
 """Class acting as port for Streamlit dashboard."""
 
-from typing import Protocol
+from typing import NamedTuple, Protocol
+
+import polars as pl
+
+
+class MixedUnitsError(Exception):
+    """Raised when a numeric slice spans more than one unit of measurement.
+
+    Aggregating values recorded in different units yields a meaningless
+    summary. Meant to prompt the dashboard user to narrow the selection.
+    """
+
+    def __init__(self, units: list[str]):
+        """Store the offending units and build the error message."""
+        self.units = units
+        super().__init__(
+            f"Multiple units found in slice: {units}. "
+            "Additional filtering may be necessary."
+        )
+
+
+class NumericSummary(NamedTuple):
+    """Summary of a numeric field: describe() stats plus the unit scalar."""
+
+    stats: pl.DataFrame
+    unit: str | None
 
 
 class EDASource(Protocol):
@@ -50,8 +75,23 @@ class EDASource(Protocol):
         self,
         field_name: str,
         filters: dict[str, str],
-    ):
-        """Return a description of a numerical field belonging to an attribute."""
+        uom_field: str | None = None,
+    ) -> NumericSummary:
+        """Return summary statistics for a numeric field scoped to one cohort.
+
+        Args:
+            field_name (str): the numeric field to summarize.
+            filters (dict[str, str]): field:value equality filters pinning the
+                cohort (e.g. {"labevents/label": "Red Blood Cells"}).
+            uom_field (str | None): the field holding the unit of measurement,
+                or None for fields with no unit.
+
+        Returns:
+            NumericSummary: the describe() statistics and the cohort's unit.
+
+        Raises:
+            MixedUnitsError: if the filtered slice spans multiple units.
+        """
         pass
 
     def preview(self):
