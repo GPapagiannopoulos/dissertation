@@ -7,6 +7,7 @@ import pytest
 from polars.exceptions import ColumnNotFoundError
 from polars.testing import assert_frame_equal
 
+from thesis.data.eda_source import MixedUnitsError
 from thesis.data.sources import PolarsEDASource
 
 
@@ -520,12 +521,6 @@ def test_polars_eda_numeric_subset_excludes_other_event_types(
     assert_frame_equal(result, expected)
 
 
-@pytest.mark.xfail(
-    reason="_numeric_subset passes uom_field=None straight into select(), which "
-    "Polars turns into a stray 'literal' null column instead of omitting the "
-    "unit. Fix: only project uom_field when it is not None.",
-    strict=False,
-)
 def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
     make_eav_source: Callable,
 ) -> None:
@@ -549,3 +544,80 @@ def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
         }
     )
     assert_frame_equal(result, expected)
+
+
+def _stat(summary_stats: pl.DataFrame, name: str, column: str) -> float:
+    """Pull a single statistic value out of a describe() frame."""
+    return summary_stats.filter(pl.col("statistic") == name).get_column(column).item()
+
+
+def test_polars_eda_describe_numeric_field_single_unit(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts stats describe the right column and the unit is returned."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([10.0, 20.0, 30.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a", "test_a"], dtype=pl.String),
+        uom=pl.Series(["mg", "mg", "mg"], dtype=pl.String),
+    )
+    result = source.describe_numeric_field(
+        "labevents/value", {"labevents/label": "test_a"}, "labevents/uom"
+    )
+    assert result.unit == "mg"
+    assert _stat(result.stats, "count", "labevents/value") == 3.0
+    assert _stat(result.stats, "mean", "labevents/value") == 20.0
+
+
+def test_polars_eda_describe_numeric_field_mixed_units_raises(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts a cohort spanning multiple units raises MixedUnitsError."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([10.0, 20.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+        uom=pl.Series(["mg", "cm"], dtype=pl.String),
+    )
+    with pytest.raises(MixedUnitsError, match="mg") as excinfo:
+        source.describe_numeric_field(
+            "labevents/value", {"labevents/label": "test_a"}, "labevents/uom"
+        )
+    assert set(excinfo.value.units) == {"mg", "cm"}
+
+
+def test_polars_eda_describe_numeric_field_no_unit(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts a None uom_field yields a None unit and still summarizes."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([10.0, 20.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+    )
+    result = source.describe_numeric_field(
+        "labevents/value", {"labevents/label": "test_a"}, None
+    )
+    assert result.unit is None
+    assert _stat(result.stats, "count", "labevents/value") == 2.0
+
+
+def test_polars_eda_describe_numeric_field_empty_cohort(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts an empty cohort yields a None unit without crashing.
+
+    Extracting a scalar unit from a zero-row slice must not raise; the
+    dashboard can hand a filter value that matches no rows.
+    """
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([10.0, 20.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+        uom=pl.Series(["mg", "mg"], dtype=pl.String),
+    )
+    result = source.describe_numeric_field(
+        "labevents/value", {"labevents/label": "does_not_exist"}, "labevents/uom"
+    )
+    assert result.unit is None
+    assert _stat(result.stats, "count", "labevents/value") == 0.0

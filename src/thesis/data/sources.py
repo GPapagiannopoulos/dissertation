@@ -6,6 +6,7 @@ import polars as pl
 from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
+from thesis.data.eda_source import MixedUnitsError, NumericSummary
 
 
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
@@ -144,7 +145,7 @@ def cleanse_float_values(
 
     Args:
         data_source (pl.DataFrame): dataframe object with the
-        data to cleanse
+            data to cleanse
         target_cols (list[str]): name of the columns to cleanse
 
     Returns:
@@ -296,7 +297,7 @@ class PolarsEDASource:
         Args:
             target_field(str): the name of the field of interest
             filters (dict[str, str]): subsequent filters to be applied
-            in the format {field_name: value_to_filter_for}
+                in the format {field_name: value_to_filter_for}
             uom_field (str): field containing the unit of measurement
         Returns:
             pl.DataFrame: a df filtered according to specification
@@ -348,24 +349,39 @@ class PolarsEDASource:
         self,
         target_field: str,
         filters: dict[str, str],
-    ) -> pl.DataFrame:
-        """Return a description of a numerical field belonging to an attribute.
+        uom_field: str | None = None,
+    ) -> NumericSummary:
+        """Return summary statistics for a numeric field scoped to one cohort.
 
-        PyHealth loads data as an Entity-Attribute-Value (EAV) model. This means that
-        biomarker measurements and drug dosages are all mixed and need to be
-        grouped by their corresponding entity and attribute to produce meaningful
-        summaries.
+        PyHealth loads data as an Entity-Attribute-Value (EAV) model, so a
+        numeric column such as ``labevents/valuenum`` mixes many measurements.
+        The ``filters`` pin the cohort (e.g. a single lab label) so that the
+        summary is meaningful, and the unit is validated to be homogeneous.
 
         Args:
-            target_field (str): name of the string to filter for
-            filters (dict[str, str]): dictionary of target field:value pairs
+            target_field (str): the numeric field to summarize.
+            filters (dict[str, str]): field:value equality filters pinning the
+                cohort (e.g. {"labevents/label": "Red Blood Cells"}).
+            uom_field (str | None): the field holding the unit of measurement,
+                or None for fields with no unit.
 
         Returns:
-            pl.DataFrame: a dataframe containing summary statistics
-            aggregated at the Entity-Attribute level
+            NumericSummary: the describe() statistics of the target field and
+            the cohort's unit (None when uom_field is None or the cohort is
+            empty).
+
+        Raises:
+            MixedUnitsError: if the filtered slice spans multiple units.
         """
-        df_slice = self._numeric_subset()
-        return df_slice.describe()
+        df_slice = self._numeric_subset(target_field, filters, uom_field)
+        unit: str | None = None
+        if uom_field is not None:
+            units = df_slice.get_column(uom_field).unique().drop_nulls().to_list()
+            if len(units) > 1:
+                raise MixedUnitsError(units)
+            unit = units[0] if units else None
+        stats = df_slice.select(target_field).describe()
+        return NumericSummary(stats, unit)
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
