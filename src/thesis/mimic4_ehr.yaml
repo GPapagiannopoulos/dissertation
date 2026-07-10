@@ -123,6 +123,12 @@ tables:
       prescriptions/prod_strength: "String"
       prescriptions/route: "String"
       prescriptions/stoptime: "DateTime"
+    eav_fields:
+      prescriptions/dose_val_rx:
+        filters:
+          - "prescriptions/drug"
+          - "prescriptions/prod_strength"
+        uom: "prescriptions/dose_unit_rx"
 
   labevents:
     file_path: "hosp/labevents.csv.gz"
@@ -154,6 +160,11 @@ tables:
       labevents/valuenum: "Float" # Numerical only
       labevents/valueuom: "String"
       labevents/flag: "String"
+    eav_fields:
+      labevents/valuenum:
+        filters:
+          - "labevents/label"
+        uom: "labevents/valueuom"
 
   hcpcsevents:
     file_path: "hosp/hcpcsevents.csv.gz"

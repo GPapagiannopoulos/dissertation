@@ -3,9 +3,10 @@
 from pathlib import Path
 
 import polars as pl
-from polars.exceptions import InvalidOperationError
+from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
+from thesis.data.eda_source import MixedUnitsError, NumericSummary
 
 
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
@@ -65,10 +66,10 @@ def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     return lf.with_columns(exprs)
 
 
-def replace_mimic4_icd_codes(
+def mimic4_add_descriptions_to_icd_codes(
     data_source: pl.LazyFrame, path_to_map: Path, event_type: str
 ) -> pl.LazyFrame:
-    """Replaces the ICD codes in the EHR mimic_data with human-readable descriptions.
+    """Matches the ICD codes in the EHR mimic_data with their human-readable names.
 
     Joins the MIMIC-IV EHR dataset to a frame containing the mapping of ICD codes
     to human-readable descriptions. Subsequently, drops ICD codes and versions.
@@ -102,9 +103,6 @@ def replace_mimic4_icd_codes(
         coalesce=True,
     )
 
-    combined_source = combined_source.drop(
-        [f"{event_type}/icd_version", f"{event_type}/icd_code"]
-    )
     return combined_source.rename({"long_title": f"{event_type}/description"})
 
 
@@ -144,7 +142,7 @@ def cleanse_float_values(
 
     Args:
         data_source (pl.DataFrame): dataframe object with the
-        data to cleanse
+            data to cleanse
         target_cols (list[str]): name of the columns to cleanse
 
     Returns:
@@ -283,34 +281,104 @@ class PolarsEDASource:
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
-    def describe_field(self, field_name: str) -> pl.DataFrame:
+    def _numeric_subset(
+        self, target_field: str, filters: dict[str, str], uom_field: str | None
+    ) -> pl.DataFrame:
+        """Internal helper for retrieving a filter aggregation of the dataframe.
+
+        In describing the numeric fields it is necessary to aggregate and filter
+        data to make it readable to digestible for the dashboard. This is a separate
+        concern from the actual summary - the separation of concerns allows for cleaner
+        changes and testing of functionality.
+
+        Args:
+            target_field(str): the name of the field of interest
+            filters (dict[str, str]): subsequent filters to be applied
+                in the format {field_name: value_to_filter_for}
+            uom_field (str): field containing the unit of measurement
+        Returns:
+            pl.DataFrame: a df filtered according to specification
+        """
+        filtered_by_event_type = self._events.filter(
+            pl.col(self._TYPE) == target_field.split("/")[0]
+        )
+        expr: list[pl.Expr] = []
+        for field, value in filters.items():
+            expr.append(pl.col(field) == value)
+
+        additional_filters = filtered_by_event_type.filter(expr)
+        projection = [target_field, *filters.keys()]
+        if uom_field is not None:
+            projection.append(uom_field)
+        return additional_filters.select(projection)
+
+    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
-        Calculates descriptors for a field at the event type level. It first
-        filters by event type, before selecting the target field. The summary
-        statistics are calculated at event type level because records of different
-        type are null, leading to skewing of event proportion.
+        Returns the normalized value counts for each value in a given categorical field.
 
         Args:
             field_name(str): the name of the field to filter for
 
         Returns:
-            pd.DataFrame: a dataframe offering summary measures. If the field is
-            numeric, it returns summary statistics as per the pl.Series.describe()
-            method.Otherwise, it returns the proportion of each value in the field.
+            pd.DataFrame: a dataframe containing the proportion of each value
+            as a pl.Float64 value, sorted in descending order by proportion
+            and ascending order by target_field name
 
+        Raises:
+            ColumnNotFoundError: if the target field does not exist in the schema
+            ValueError: if the target field is a numeric column
         """
+        if field_name not in self._events.columns:
+            raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
+        if self._events.schema[field_name].is_numeric():
+            raise ValueError(f"'{field_name}' is not a categorical field.")
         target_field = (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
             .select(field_name)
             .to_series()
         )
-        if self._events.schema[field_name].is_numeric():
-            return target_field.describe()
-        else:
-            return target_field.value_counts(normalize=True).sort(
-                "proportion", descending=True
-            )
+        return target_field.value_counts(normalize=True).sort(
+            ["proportion", field_name], descending=[True, False]
+        )
+
+    def describe_numeric_field(
+        self,
+        target_field: str,
+        filters: dict[str, str],
+        uom_field: str | None = None,
+    ) -> NumericSummary:
+        """Return summary statistics for a numeric field scoped to one cohort.
+
+        PyHealth loads data as an Entity-Attribute-Value (EAV) model, so a
+        numeric column such as ``labevents/valuenum`` mixes many measurements.
+        The ``filters`` pin the cohort (e.g. a single lab label) so that the
+        summary is meaningful, and the unit is validated to be homogeneous.
+
+        Args:
+            target_field (str): the numeric field to summarize.
+            filters (dict[str, str]): field:value equality filters pinning the
+                cohort (e.g. {"labevents/label": "Red Blood Cells"}).
+            uom_field (str | None): the field holding the unit of measurement,
+                or None for fields with no unit.
+
+        Returns:
+            NumericSummary: the describe() statistics of the target field and
+            the cohort's unit (None when uom_field is None or the cohort is
+            empty).
+
+        Raises:
+            MixedUnitsError: if the filtered slice spans multiple units.
+        """
+        df_slice = self._numeric_subset(target_field, filters, uom_field)
+        unit: str | None = None
+        if uom_field is not None:
+            units = df_slice.get_column(uom_field).unique().drop_nulls().to_list()
+            if len(units) > 1:
+                raise MixedUnitsError(units)
+            unit = units[0] if units else None
+        stats = df_slice.select(target_field).describe()
+        return NumericSummary(stats, unit)
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
