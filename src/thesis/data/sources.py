@@ -90,10 +90,13 @@ def mimic4_add_descriptions_to_icd_codes(
     mapping_df = pl.scan_csv(
         path_to_map, schema_overrides={"icd_version": pl.String, "icd_code": pl.String}
     )
-    if "icd_code" not in mapping_df.collect_schema():
-        raise KeyError('Mapping frame is missing "icd_code" field. Please review.')
-    if "icd_version" not in mapping_df.collect_schema():
-        raise KeyError('Mapping frame is missing "icd_version" field. Please review.')
+    for field in ["icd_code", "icd_version"]:
+        if field not in mapping_df.collect_schema():
+            raise KeyError(f'Mapping frame is missing "{field}" field. Please review.')
+        if f"{event_type}/{field}" not in data_source.collect_schema():
+            raise KeyError(
+                f'Target LazyFrame is missing "{field}" field. Please review.'
+            )
 
     combined_source = data_source.join(
         mapping_df,
