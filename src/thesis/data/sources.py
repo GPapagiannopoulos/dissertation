@@ -261,6 +261,22 @@ class PolarsEDASource:
             .height
         )
 
+    def get_unique_field_values(
+        self, target_field: str, filters: dict[str, str] | None = None
+    ) -> pl.Series:
+        """Returns the unique values of a target field."""
+        return (
+            self._events.filter(
+                pl.col(self._TYPE) == target_field.split("/")[0],
+                *[pl.col(col) == val for col, val in filters.items() if filters],
+            )
+            .select(target_field)
+            .unique()
+            .drop_nulls()
+            .to_series()
+            .sort()
+        )
+
     def is_numeric(self, target_field: str) -> bool:
         """Checks whether the target field is numeric."""
         if target_field not in self._events.columns:
