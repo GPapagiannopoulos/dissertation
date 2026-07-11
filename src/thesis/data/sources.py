@@ -114,9 +114,14 @@ def replace_mimic4_non_icd_codes(
 ) -> pl.LazyFrame:
     """Maps non-ICD ID columns to human-readable descriptions."""
     mapping_df = pl.scan_csv(path_to_map, schema_overrides={"itemid": pl.String})
-    if "itemid" not in mapping_df.collect_schema():
-        raise KeyError("Mapping frame is missing itemid column. Please review.")
+    for field in ["itemid", "label"]:
+        if field not in mapping_df.collect_schema():
+            raise KeyError(f"Mapping frame is missing '{field}' column. Please review.")
 
+    if f"{event_type}/itemid" not in data_source.collect_schema():
+        raise KeyError(
+            f"Mapping frame is missing '{event_type}/itemid' column. Please review."
+        )
     combined_source = data_source.join(
         mapping_df,
         how="left",
