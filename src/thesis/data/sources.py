@@ -268,7 +268,9 @@ class PolarsEDASource:
         return (
             self._events.filter(
                 pl.col(self._TYPE) == target_field.split("/")[0],
-                *[pl.col(col) == val for col, val in filters.items() if filters],
+                *[pl.col(col) == val for col, val in filters.items()]
+                if filters
+                else [pl.lit(True)],
             )
             .select(target_field)
             .unique()
@@ -332,9 +334,11 @@ class PolarsEDASource:
         filtered_by_event_type = self._events.filter(
             pl.col(self._TYPE) == target_field.split("/")[0]
         )
-        expr: list[pl.Expr] = []
-        for field, value in filters.items():
-            expr.append(pl.col(field) == value)
+        expr: list[pl.Expr] = (
+            [pl.col(field) == value for field, value in filters.items()]
+            if filters
+            else [pl.lit(True)]
+        )
 
         additional_filters = filtered_by_event_type.filter(expr)
         projection = [target_field, *filters.keys()]
