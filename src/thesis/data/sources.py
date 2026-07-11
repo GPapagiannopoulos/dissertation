@@ -261,6 +261,12 @@ class PolarsEDASource:
             .height
         )
 
+    def is_numeric(self, target_field: str) -> bool:
+        """Checks whether the target field is numeric."""
+        if target_field not in self._events.columns:
+            raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
+        return self._events.schema[target_field].is_numeric()
+
     def fields(self, event_type: str) -> list[str]:
         """Return an alphabetically sorted list of dataframe field names.
 
@@ -339,7 +345,7 @@ class PolarsEDASource:
         """
         if field_name not in self._events.columns:
             raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
-        if self._events.schema[field_name].is_numeric():
+        if self.is_numeric(field_name):
             raise ValueError(f"'{field_name}' is not a categorical field.")
         target_field = (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
