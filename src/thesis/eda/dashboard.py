@@ -6,6 +6,7 @@ import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
+from thesis.data.eda_source import MixedUnitsError
 from thesis.data.sources import (
     PolarsEDASource,
     cast_frame,
@@ -70,7 +71,28 @@ def run_dashboard():
     st.subheader("Field Summary")
     st.text("The summary below excludes datetime and id fields.")
     ftype = st.selectbox("Field", valid_fields(src, etype))
-    st.dataframe(src.describe_field(ftype))
+
+    if src.is_numeric(ftype):
+        field_info = settings.mimic4_ehr_eav_fields.get(ftype)
+        filter_values: dict[str, str] = {}
+        uom = None
+        if field_info is not None:
+            for filter_col in field_info.filters:
+                filter_values[filter_col] = st.selectbox(
+                    filter_col,
+                    src.get_unique_field_values(filter_col, filter_values),
+                )
+            uom = field_info.uom
+        try:
+            summary = src.describe_numeric_field(ftype, filter_values, uom)
+        except MixedUnitsError as e:
+            st.error(e)
+            st.stop()
+        if summary.unit:
+            st.caption(f"Unit: {summary.unit}")
+        st.dataframe(summary.stats)
+    else:
+        st.dataframe(src.describe_categorical_field(ftype))
 
     st.subheader(f"{etype} Preview")
     st.dataframe(src.preview_table(etype))
