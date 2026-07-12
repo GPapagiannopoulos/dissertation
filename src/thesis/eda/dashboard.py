@@ -29,7 +29,7 @@ def load_global_event_frame():
     """
     ds = MIMIC4Dataset(
         ehr_root=str(settings.mimic4_ehr_data_path),
-        dev=True,
+        dev=settings.mimic4_ehr_dev_mode,
         ehr_tables=settings.mimic4_ehr_tables,
     )
     float_fields = [
