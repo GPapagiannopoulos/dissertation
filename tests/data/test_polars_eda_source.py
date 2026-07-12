@@ -496,6 +496,22 @@ def test_polars_eda_describe_categorical_field_raise_if_numeric_field(
                 "labevents/uom": pl.Series([], dtype=pl.String),
             },
         ),
+        # 3. No Filters returns the entire frame
+        # Excludes the label field because it isn't the target, filter, or uom
+        (
+            "labevents/value",
+            "labevents/uom",
+            {
+                "value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "label": pl.Series(["test_a", "test_b"], dtype=pl.String),
+                "uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+            {},
+            {
+                "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "labevents/uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_polars_eda_describe_numerical_field_happy_path(
