@@ -93,7 +93,8 @@ def run_dashboard():
             st.caption(f"Unit: {summary.unit}")
         st.dataframe(summary.stats)
         try:
-            hist = src.numeric_histogram(ftype, filter_values)
+            n_bin = st.slider("Number of bins", min_value=5, max_value=50)
+            hist = src.numeric_histogram(ftype, filter_values, n_bin)
         except EmptyHistError as e:
             st.info(str(e))
         else:
