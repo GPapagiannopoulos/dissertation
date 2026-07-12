@@ -7,7 +7,7 @@ import pytest
 from polars.exceptions import ColumnNotFoundError
 from polars.testing import assert_frame_equal
 
-from thesis.data.eda_source import MixedUnitsError
+from thesis.data.eda_source import EmptyHistError, MixedUnitsError
 from thesis.data.sources import PolarsEDASource
 
 
@@ -496,6 +496,22 @@ def test_polars_eda_describe_categorical_field_raise_if_numeric_field(
                 "labevents/uom": pl.Series([], dtype=pl.String),
             },
         ),
+        # 3. No Filters returns the entire frame
+        # Excludes the label field because it isn't the target, filter, or uom
+        (
+            "labevents/value",
+            "labevents/uom",
+            {
+                "value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "label": pl.Series(["test_a", "test_b"], dtype=pl.String),
+                "uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+            {},
+            {
+                "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
+                "labevents/uom": pl.Series(["mg", "mg"], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_polars_eda_describe_numerical_field_happy_path(
@@ -646,3 +662,118 @@ def test_polars_eda_describe_numeric_field_empty_cohort(
     )
     assert result.unit is None
     assert _stat(result.stats, "count", "labevents/value") == 0.0
+
+
+def test_polars_eda_numeric_histogram_happy_path(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts the histogram bins the cohort's values into bin_count bins.
+
+    Four evenly spaced values over two bins split [1, 4] at 2.5, putting two
+    values in each bin. Only breakpoint and count are asserted; the `category`
+    column is a Categorical whose interval labels are an incidental rendering
+    detail, not part of the contract.
+    """
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([1.0, 2.0, 3.0, 4.0], dtype=pl.Float64),
+        label=pl.Series(["test_a"] * 4, dtype=pl.String),
+    )
+    result = source.numeric_histogram(
+        "labevents/value", {"labevents/label": "test_a"}, bin_count=2
+    )
+    expected = pl.DataFrame(
+        {
+            "breakpoint": pl.Series([2.5, 4.0], dtype=pl.Float64),
+            "count": pl.Series([2, 2], dtype=pl.UInt32),
+        }
+    )
+    assert_frame_equal(result.select("breakpoint", "count"), expected)
+
+
+@pytest.mark.parametrize("bin_count", [1, 2, 5])
+def test_polars_eda_numeric_histogram_bin_count_controls_bins(
+    make_eav_source: Callable,
+    bin_count: int,
+) -> None:
+    """Asserts bin_count determines the number of bins (rows) returned."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([1.0, 2.0, 3.0, 4.0, 5.0], dtype=pl.Float64),
+    )
+    result = source.numeric_histogram("labevents/value", {}, bin_count=bin_count)
+    assert result.height == bin_count
+
+
+def test_polars_eda_numeric_histogram_counts_sum_to_cohort_size(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts every cohort value lands in exactly one bin (no loss/overcount)."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([1.0, 2.0, 3.0, 4.0, 5.0], dtype=pl.Float64),
+    )
+    result = source.numeric_histogram("labevents/value", {}, bin_count=3)
+    assert result.get_column("count").sum() == 5
+
+
+def test_polars_eda_numeric_histogram_filters_scope_the_cohort(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts only rows matching the filter contribute to the histogram.
+
+    The test_b rows sit far from the test_a range; if they leaked in, both
+    the breakpoints and the counts would change. Filtering to test_a must
+    yield a histogram over [0, 1] alone.
+    """
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([0.0, 1.0, 100.0, 101.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a", "test_b", "test_b"], dtype=pl.String),
+    )
+    result = source.numeric_histogram(
+        "labevents/value", {"labevents/label": "test_a"}, bin_count=2
+    )
+    expected = pl.DataFrame(
+        {
+            "breakpoint": pl.Series([0.5, 1.0], dtype=pl.Float64),
+            "count": pl.Series([1, 1], dtype=pl.UInt32),
+        }
+    )
+    assert_frame_equal(result.select("breakpoint", "count"), expected)
+
+
+def test_polars_eda_numeric_histogram_raises_when_no_rows_match(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts a filter matching no rows raises EmptyHistError with context."""
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([1.0, 2.0], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+    )
+    filters = {"labevents/label": "does_not_exist"}
+    with pytest.raises(EmptyHistError) as excinfo:
+        source.numeric_histogram("labevents/value", filters, bin_count=2)
+    assert excinfo.value.field == "labevents/value"
+    assert excinfo.value.filters == filters
+
+
+def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
+    make_eav_source: Callable,
+) -> None:
+    """Asserts a cohort whose target is entirely null raises EmptyHistError.
+
+    Rows match the filter but carry no measurement, so there is nothing to
+    bin. This is the case a height-based guard misses: polars still returns
+    bin_count rows, each with a zero count.
+    """
+    source = make_eav_source(
+        "labevents",
+        value=pl.Series([None, None], dtype=pl.Float64),
+        label=pl.Series(["test_a", "test_a"], dtype=pl.String),
+    )
+    with pytest.raises(EmptyHistError):
+        source.numeric_histogram(
+            "labevents/value", {"labevents/label": "test_a"}, bin_count=2
+        )
