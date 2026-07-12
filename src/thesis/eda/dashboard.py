@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
+import plotly.express as px
 import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
 from thesis.config import settings
-from thesis.data.eda_source import MixedUnitsError
+from thesis.data.eda_source import EmptyHistError, MixedUnitsError
 from thesis.data.sources import (
     PolarsEDASource,
     cast_frame,
@@ -91,8 +92,21 @@ def run_dashboard():
         if summary.unit:
             st.caption(f"Unit: {summary.unit}")
         st.dataframe(summary.stats)
+        try:
+            hist = src.numeric_histogram(ftype, filter_values)
+        except EmptyHistError as e:
+            st.info(str(e))
+        else:
+            st.plotly_chart(
+                px.bar(hist, x="breakpoint", y="count"), use_container_width=True
+            )
     else:
-        st.dataframe(src.describe_categorical_field(ftype))
+        counts = src.describe_categorical_field(ftype)
+        st.dataframe(counts)
+        st.plotly_chart(
+            px.bar(counts.head(20), x=ftype, y="proportion"),
+            use_container_width=True,
+        )
 
     st.subheader(f"{etype} Preview")
     st.dataframe(src.preview_table(etype))
