@@ -6,7 +6,7 @@ import polars as pl
 from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
-from thesis.data.eda_source import MixedUnitsError, NumericSummary
+from thesis.data.eda_source import EmptyHistError, MixedUnitsError, NumericSummary
 
 
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
@@ -261,6 +261,43 @@ class PolarsEDASource:
             .height
         )
 
+    def get_unique_field_values(
+        self, target_field: str, filters: dict[str, str] | None = None
+    ) -> pl.Series:
+        """Returns unique values of a target field sorted alphabetically.
+
+        Args:
+            target_field(str): the name of the field to return
+            filters(dict[str, str] | None): an optional dict of predicates
+            to filter on in the format {'column' = 'value'}
+
+        Returns:
+            pl.Series: the unique values of the target field
+        """
+        return (
+            self._events.filter(
+                pl.col(self._TYPE) == target_field.split("/")[0],
+                *[pl.col(col) == val for col, val in filters.items()]
+                if filters
+                else [pl.lit(True)],
+            )
+            .select(target_field)
+            .unique()
+            .drop_nulls()
+            .to_series()
+            .sort()
+        )
+
+    def is_numeric(self, target_field: str) -> bool:
+        """Checks whether the target field is numeric.
+
+        Raises:
+            ColumnNotFoundError: if the target field is not in the schema
+        """
+        if target_field not in self._events.columns:
+            raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
+        return self._events.schema[target_field].is_numeric()
+
     def fields(self, event_type: str) -> list[str]:
         """Return an alphabetically sorted list of dataframe field names.
 
@@ -310,9 +347,11 @@ class PolarsEDASource:
         filtered_by_event_type = self._events.filter(
             pl.col(self._TYPE) == target_field.split("/")[0]
         )
-        expr: list[pl.Expr] = []
-        for field, value in filters.items():
-            expr.append(pl.col(field) == value)
+        expr: list[pl.Expr] = (
+            [pl.col(field) == value for field, value in filters.items()]
+            if filters
+            else [pl.lit(True)]
+        )
 
         additional_filters = filtered_by_event_type.filter(expr)
         projection = [target_field, *filters.keys()]
@@ -339,7 +378,7 @@ class PolarsEDASource:
         """
         if field_name not in self._events.columns:
             raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
-        if self._events.schema[field_name].is_numeric():
+        if self.is_numeric(field_name):
             raise ValueError(f"'{field_name}' is not a categorical field.")
         target_field = (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
@@ -387,6 +426,21 @@ class PolarsEDASource:
             unit = units[0] if units else None
         stats = df_slice.select(target_field).describe()
         return NumericSummary(stats, unit)
+
+    def numeric_histogram(
+        self, target_field: str, filters: dict[str, str], bin_count: int = 30
+    ) -> pl.DataFrame:
+        """Return a count per bins for a filtered numeric field.
+
+        Raises:
+            EmptyHistError: if after filtering the field contains no data.
+        """
+        df_slice = self._numeric_subset(target_field, filters, None)
+        hist = df_slice.select(target_field).to_series().hist(bin_count=bin_count)
+        if hist["count"].sum() == 0:
+            raise EmptyHistError(target_field, filters)
+
+        return hist
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
