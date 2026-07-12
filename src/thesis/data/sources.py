@@ -6,7 +6,7 @@ import polars as pl
 from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 
 from thesis.constants import DTYPE_TO_POLARS_DTYPE_MAP
-from thesis.data.eda_source import MixedUnitsError, NumericSummary
+from thesis.data.eda_source import EmptyHistError, MixedUnitsError, NumericSummary
 
 
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
@@ -264,7 +264,16 @@ class PolarsEDASource:
     def get_unique_field_values(
         self, target_field: str, filters: dict[str, str] | None = None
     ) -> pl.Series:
-        """Returns the unique values of a target field."""
+        """Returns unique values of a target field sorted alphabetically.
+
+        Args:
+            target_field(str): the name of the field to return
+            filters(dict[str, str] | None): an optional dict of predicates
+            to filter on in the format {'column' = 'value'}
+
+        Returns:
+            pl.Series: the unique values of the target field
+        """
         return (
             self._events.filter(
                 pl.col(self._TYPE) == target_field.split("/")[0],
@@ -280,7 +289,11 @@ class PolarsEDASource:
         )
 
     def is_numeric(self, target_field: str) -> bool:
-        """Checks whether the target field is numeric."""
+        """Checks whether the target field is numeric.
+
+        Raises:
+            ColumnNotFoundError: if the target field is not in the schema
+        """
         if target_field not in self._events.columns:
             raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
         return self._events.schema[target_field].is_numeric()
@@ -413,6 +426,21 @@ class PolarsEDASource:
             unit = units[0] if units else None
         stats = df_slice.select(target_field).describe()
         return NumericSummary(stats, unit)
+
+    def numeric_histogram(
+        self, target_field: str, filters: dict[str, str], bin_count: int = 30
+    ) -> pl.DataFrame:
+        """Return a count per bins for a filtered numeric field.
+
+        Raises:
+            EmptyHistError: if after filtering the field contains no data.
+        """
+        df_slice = self._numeric_subset(target_field, filters, None)
+        hist = df_slice.select(target_field).to_series().hist(bin_count=bin_count)
+        if hist["count"].sum() == 0:
+            raise EmptyHistError(target_field, filters)
+
+        return hist
 
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the dataframe."""
