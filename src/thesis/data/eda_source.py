@@ -21,6 +21,20 @@ class MixedUnitsError(Exception):
         )
 
 
+class EmptyHistError(Exception):
+    """Raised when a histogram dataframe contains no data."""
+
+    def __init__(self, field: str, filters: dict[str, str]):
+        """Stores conditions and builds message."""
+        self.field = field
+        self.filters = filters
+        super().__init__(
+            f"Field '{field}' filtered for "
+            f"{[f'{col} == {val}' for col, val in self.filters.items()]} "
+            "contains no data."
+        )
+
+
 class NumericSummary(NamedTuple):
     """Summary of a numeric field: describe() stats plus the unit scalar."""
 
@@ -59,6 +73,16 @@ class EDASource(Protocol):
         """
         pass
 
+    def get_unique_field_values(
+        self, target_field: str, filters: dict[str, str]
+    ) -> pl.Series:
+        """Return the unique values of a target field based on predicates."""
+        pass
+
+    def is_numeric(self, target_field: str) -> bool:
+        """Confirms whether a specific field holds numeric data."""
+        pass
+
     def fields(self, event_type: str) -> list[str]:
         """Return a list of field names for a specific event type."""
         pass
@@ -92,6 +116,12 @@ class EDASource(Protocol):
         Raises:
             MixedUnitsError: if the filtered slice spans multiple units.
         """
+        pass
+
+    def numeric_histogram(
+        self, target_field: str, filters: dict[str, str], bin_count: int = 30
+    ) -> pl.DataFrame:
+        """Returns a dataframe for use in histogram rendering."""
         pass
 
     def preview(self):
