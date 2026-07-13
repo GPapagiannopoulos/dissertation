@@ -192,20 +192,20 @@ class PolarsEDASource:
 
     PyHealth loads MIMIC-IV mimic_data from the directory to create a
     MIMIC4Dataset object powered by an underlying Polars
-    dataframe. This adapter accepts a Polars dataframe and exposes
+    LazyFrame. This adapter accepts a Polars LazyFrame and exposes
     methods that allow for exploratory mimic_data analysis. This way
     any mimic_data source can be plugged into the dashboard as long as it
-    is a polars dataframe (e.g. non-EHR MIMIC-IV mimic_data loaded via PyHealth).
+    is a polars LazyFrame (e.g. non-EHR MIMIC-IV mimic_data loaded via PyHealth).
     """
 
     _PATIENT = "patient_id"
     _TYPE = "event_type"
 
-    def __init__(self, events: pl.DataFrame):
+    def __init__(self, events: pl.LazyFrame):
         """Constructor for the PolarsEDASource class.
 
         Args:
-            events (pl.DataFrame): dataframe around which
+            events (pl.LazyFrame): LazyFrame around which
             to initialize the wrapper
 
         Raises:
@@ -214,11 +214,11 @@ class PolarsEDASource:
 
         """
         for col in [self._PATIENT, self._TYPE]:
-            if col not in events.columns:
+            if col not in events.collect_schema():
                 raise ValueError(
                     f"Missing '{col}' column. The DataFrame is invalid. Please review."
                 )
-            if None in events.select(col).to_series():
+            if events.null_count().select(col).collect(engine="streaming").item():
                 raise ValueError(f"'None' value in '{col}' detected.")
         self._events = events
 
