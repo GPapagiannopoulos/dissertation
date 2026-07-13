@@ -97,8 +97,8 @@ def test_polars_eda_event_types_method_happy_path(
         (["patient_id"], {}, "Missing 'patient_id' column"),
     ],
 )
-def test_constructor_raises_if_invalid_df(
-    events_df: Callable,
+def test_constructor_raises_if_invalid_lf(
+    events_lf: Callable,
     drop: list[str],
     overrides: dict[str, pl.Series],
     error_message: str,
@@ -108,10 +108,10 @@ def test_constructor_raises_if_invalid_df(
     patient_id and event_type form the core of
     PyHealth's MIMIC-IV loader. Both fields are mandatory
     and should not contain None values. If they do there is
-    programmer error or a malformed DataFrame.
+    programmer error or a malformed LazyFrame.
     """
     with pytest.raises(ValueError, match=error_message):
-        PolarsEDASource(events_df(drop=drop, **overrides))
+        PolarsEDASource(events_lf(drop=drop, **overrides))
 
 
 @pytest.mark.parametrize(
