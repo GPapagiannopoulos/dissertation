@@ -464,7 +464,12 @@ class PolarsEDASource:
             EmptyHistError: if after filtering the field contains no data.
         """
         df_slice = self._numeric_subset(target_field, filters, None)
-        hist = df_slice.select(target_field).to_series().hist(bin_count=bin_count)
+        hist = (
+            df_slice.select(target_field)
+            .collect(engine="streaming")
+            .to_series()
+            .hist(bin_count=bin_count)
+        )
         if hist["count"].sum() == 0:
             raise EmptyHistError(target_field, filters)
 
