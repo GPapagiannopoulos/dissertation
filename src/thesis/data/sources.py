@@ -345,8 +345,8 @@ class PolarsEDASource:
 
     def _numeric_subset(
         self, target_field: str, filters: dict[str, str], uom_field: str | None
-    ) -> pl.DataFrame:
-        """Internal helper for retrieving a filter aggregation of the dataframe.
+    ) -> pl.LazyFrame:
+        """Internal helper for retrieving a filter aggregation of the lazyframe.
 
         In describing the numeric fields it is necessary to aggregate and filter
         data to make it readable to digestible for the dashboard. This is a separate
@@ -359,7 +359,7 @@ class PolarsEDASource:
                 in the format {field_name: value_to_filter_for}
             uom_field (str): field containing the unit of measurement
         Returns:
-            pl.DataFrame: a df filtered according to specification
+            pl.LazyFrame: a df filtered according to specification
         """
         filtered_by_event_type = self._events.filter(
             pl.col(self._TYPE) == target_field.split("/")[0]
@@ -441,7 +441,14 @@ class PolarsEDASource:
         df_slice = self._numeric_subset(target_field, filters, uom_field)
         unit: str | None = None
         if uom_field is not None:
-            units = df_slice.get_column(uom_field).unique().drop_nulls().to_list()
+            units = (
+                df_slice.select(uom_field)
+                .unique()
+                .drop_nulls()
+                .collect(engine="streaming")
+                .to_series()
+                .to_list()
+            )
             if len(units) > 1:
                 raise MixedUnitsError(units)
             unit = units[0] if units else None
