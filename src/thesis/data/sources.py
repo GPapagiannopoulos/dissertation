@@ -327,7 +327,9 @@ class PolarsEDASource:
 
         """
         prefix = f"{event_type}/"
-        return sorted([c for c in self._events.columns if c.startswith(prefix)])
+        return sorted(
+            [c for c in self._events.collect_schema().names() if c.startswith(prefix)]
+        )
 
     def field_dtypes(self, event_type: str) -> pl.DataFrame:
         """Return a dataframe to display the field names and dtypes.
@@ -457,8 +459,8 @@ class PolarsEDASource:
 
         return hist
 
-    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
-        """Returns the head of the dataframe."""
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.LazyFrame:
+        """Returns the head of the lazyframe."""
         table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
