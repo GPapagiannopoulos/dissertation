@@ -230,7 +230,14 @@ class PolarsEDASource:
             in the event_type column.
 
         """
-        return self._events.select(self._TYPE).unique().to_series().sort().to_list()
+        return (
+            self._events.select(self._TYPE)
+            .unique()
+            .sort(self._TYPE)
+            .collect(engine="streaming")
+            .to_series()
+            .to_list()
+        )
 
     def n_events(self, event_type: str) -> int:
         """Return the number of rows where the event_type field matches event_type.
