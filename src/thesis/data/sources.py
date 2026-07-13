@@ -271,7 +271,9 @@ class PolarsEDASource:
             self._events.filter(pl.col(self._TYPE) == event_type)
             .select(self._PATIENT)
             .unique()
-            .height
+            .count()
+            .collect(engine="streaming")
+            .item()
         )
 
     def get_unique_field_values(
