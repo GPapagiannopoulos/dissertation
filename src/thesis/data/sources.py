@@ -376,7 +376,7 @@ class PolarsEDASource:
             projection.append(uom_field)
         return additional_filters.select(projection)
 
-    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
+    def describe_categorical_field(self, field_name: str) -> pl.LazyFrame:
         """Return a dataframe with summary measures for a given field.
 
         Returns the normalized value counts for each value in a given categorical field.
@@ -393,17 +393,21 @@ class PolarsEDASource:
             ColumnNotFoundError: if the target field does not exist in the schema
             ValueError: if the target field is a numeric column
         """
-        if field_name not in self._events.columns:
+        if field_name not in self._events.collect_schema().names():
             raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
         if self.is_numeric(field_name):
             raise ValueError(f"'{field_name}' is not a categorical field.")
         target_field = (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
-            .select(field_name)
-            .to_series()
+            .group_by(field_name)
+            .len("counts")
         )
-        return target_field.value_counts(normalize=True).sort(
-            ["proportion", field_name], descending=[True, False]
+        total = target_field.select("counts").sum().collect(engine="streaming").item()
+
+        return (
+            target_field.with_columns((pl.col("counts") / total).alias("proportion"))
+            .drop("counts")
+            .sort(["proportion", field_name], descending=[True, False])
         )
 
     def describe_numeric_field(

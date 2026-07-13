@@ -409,7 +409,7 @@ def test_polars_eda_describe_categorical_field_happy_path(
 ):
     """Asserts standard behaviour for describe_categorical_field method."""
     source = make_source(**overrides)
-    expectation = pl.DataFrame(expected_df)
+    expectation = pl.LazyFrame(expected_df)
     assert_frame_equal(source.describe_categorical_field(target_field), expectation)
 
 
