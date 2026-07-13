@@ -347,7 +347,7 @@ def test_polars_eda_preview_method_happy_path(
 ) -> None:
     """Asserts that the preview method returns only valid records."""
     source = make_source(**overrides)
-    expected_df = pl.DataFrame(expected_df_data)
+    expected_df = pl.LazyFrame(expected_df_data)
     assert_frame_equal(source.preview_table(event_type), expected_df)
 
 
