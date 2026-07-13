@@ -62,7 +62,7 @@ def mapping_csv(tmp_path) -> Callable:
 
     def _write(data: dict, name: str = "mapping.csv") -> Path:
         path = tmp_path / name
-        pl.DataFrame(data).write_csv(path)
+        pl.LazyFrame(data).sink_csv(path)
         return path
 
     return _write

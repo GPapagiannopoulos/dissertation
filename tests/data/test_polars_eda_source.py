@@ -525,7 +525,7 @@ def test_polars_eda_describe_numerical_field_happy_path(
     """Asserts standard behaviour for describe_numerical_field method."""
     source = make_eav_source(target_field.split("/")[0], **overrides)
     data_slice = source._numeric_subset(target_field, filters, uom_field)
-    expected = pl.DataFrame(expected_df)
+    expected = pl.LazyFrame(expected_df)
     assert_frame_equal(data_slice, expected)
 
 
@@ -552,7 +552,7 @@ def test_polars_eda_numeric_subset_excludes_other_event_types(
     result = source._numeric_subset(
         "labevents/value", {"labevents/label": "test_a"}, "labevents/uom"
     )
-    expected = pl.DataFrame(
+    expected = pl.LazyFrame(
         {
             "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
             "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
@@ -578,7 +578,7 @@ def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
     result = source._numeric_subset(
         "labevents/value", {"labevents/label": "test_a"}, None
     )
-    expected = pl.DataFrame(
+    expected = pl.LazyFrame(
         {
             "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
             "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
@@ -589,7 +589,7 @@ def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
 
 def _stat(summary_stats: pl.DataFrame, name: str, column: str) -> float:
     """Pull a single statistic value out of a describe() frame."""
-    return summary_stats.filter(pl.col("statistic") == name).get_column(column).item()
+    return summary_stats.filter(pl.col("statistic") == name).select(column).item()
 
 
 def test_polars_eda_describe_numeric_field_single_unit(
