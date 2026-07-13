@@ -12,9 +12,9 @@ from thesis.data.eda_source import EmptyHistError, MixedUnitsError, NumericSumma
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     """Apply dtype casts declared in the manifest to a LazyFrame.
 
-    Columns absent from the frame are silently skipped. String→String
-    casts are no-ops and are omitted. Date columns use str.to_date()
-    because Polars 1.x does not support cast(pl.Date) from String.
+    String→String casts are no-ops and are omitted.
+    Date columns use str.to_date() because Polars 1.x does not support
+    cast(pl.Date) from String.
 
     Args:
         lf: The LazyFrame to cast.
@@ -161,10 +161,11 @@ def cleanse_float_values(
         are not strings
     """
     expressions: list[pl.Expr] = []
+    dtypes = data_source.collect_schema()
     for col in target_cols:
         # Polars normally raises InvalidOperationError at collection
         # Guard is against downstream failure propagation
-        if str(data_source.collect_schema()[col]) != "String":
+        if str(dtypes[col]) != "String":
             raise InvalidOperationError(
                 f"InvalidOperationError: expected String type, got: "
                 f"{data_source.collect_schema()[col]}"
@@ -218,9 +219,15 @@ class PolarsEDASource:
                 raise ValueError(
                     f"Missing '{col}' column. The DataFrame is invalid. Please review."
                 )
-            if events.null_count().select(col).collect(engine="streaming").item():
+        null_counts = events.select(
+            pl.col(c).null_count() for c in [self._PATIENT, self._TYPE]
+        ).collect(engine="streaming")
+        for col in [self._PATIENT, self._TYPE]:
+            if null_counts.get_column(col).item():
                 raise ValueError(f"'None' value in '{col}' detected.")
+
         self._events = events
+        self._schema = events.collect_schema()
 
     def event_types(self) -> list[str]:
         """Return an alphabetically sorted list of event types.
@@ -251,8 +258,7 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(pl.col(self._TYPE) == event_type)
-            .select(self._TYPE)
-            .count()
+            .select(pl.len())
             .collect(engine="streaming")
             .item()
         )
@@ -269,9 +275,7 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(pl.col(self._TYPE) == event_type)
-            .select(self._PATIENT)
-            .unique()
-            .count()
+            .select(pl.col(self._PATIENT).n_unique())
             .collect(engine="streaming")
             .item()
         )
@@ -299,8 +303,9 @@ class PolarsEDASource:
             .select(target_field)
             .unique()
             .drop_nulls()
+            .sort(target_field)
+            .collect(engine="streaming")
             .to_series()
-            .sort()
         )
 
     def is_numeric(self, target_field: str) -> bool:
@@ -309,9 +314,9 @@ class PolarsEDASource:
         Raises:
             ColumnNotFoundError: if the target field is not in the schema
         """
-        if target_field not in self._events.collect_schema().names():
+        if target_field not in self._schema.names():
             raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
-        return self._events.collect_schema()[target_field].is_numeric()
+        return self._schema[target_field].is_numeric()
 
     def fields(self, event_type: str) -> list[str]:
         """Return an alphabetically sorted list of dataframe field names.
@@ -327,9 +332,7 @@ class PolarsEDASource:
 
         """
         prefix = f"{event_type}/"
-        return sorted(
-            [c for c in self._events.collect_schema().names() if c.startswith(prefix)]
-        )
+        return sorted([c for c in self._schema.names() if c.startswith(prefix)])
 
     def field_dtypes(self, event_type: str) -> pl.DataFrame:
         """Return a dataframe to display the field names and dtypes.
@@ -339,7 +342,7 @@ class PolarsEDASource:
             an event type and their corresponding dtype.
         """
         valid_cols = self.fields(event_type)
-        col_dtypes = [str(self._events.collect_schema()[c]) for c in valid_cols]
+        col_dtypes = [str(self._schema[c]) for c in valid_cols]
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
@@ -393,19 +396,18 @@ class PolarsEDASource:
             ColumnNotFoundError: if the target field does not exist in the schema
             ValueError: if the target field is a numeric column
         """
-        if field_name not in self._events.collect_schema().names():
+        if field_name not in self._schema.names():
             raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
         if self.is_numeric(field_name):
             raise ValueError(f"'{field_name}' is not a categorical field.")
-        target_field = (
+
+        return (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
             .group_by(field_name)
             .len("counts")
-        )
-        total = target_field.select("counts").sum().collect(engine="streaming").item()
-
-        return (
-            target_field.with_columns((pl.col("counts") / total).alias("proportion"))
+            .with_columns(
+                (pl.col("counts") / pl.col("counts").sum()).alias("proportion")
+            )
             .drop("counts")
             .sort(["proportion", field_name], descending=[True, False])
         )
@@ -438,17 +440,12 @@ class PolarsEDASource:
         Raises:
             MixedUnitsError: if the filtered slice spans multiple units.
         """
-        df_slice = self._numeric_subset(target_field, filters, uom_field)
+        df_slice = self._numeric_subset(target_field, filters, uom_field).collect(
+            engine="streaming"
+        )
         unit: str | None = None
         if uom_field is not None:
-            units = (
-                df_slice.select(uom_field)
-                .unique()
-                .drop_nulls()
-                .collect(engine="streaming")
-                .to_series()
-                .to_list()
-            )
+            units = df_slice.get_column(uom_field).unique().drop_nulls().to_list()
             if len(units) > 1:
                 raise MixedUnitsError(units)
             unit = units[0] if units else None
