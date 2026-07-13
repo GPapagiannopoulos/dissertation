@@ -249,7 +249,13 @@ class PolarsEDASource:
             int: the number of rows after filtering for that event_type
 
         """
-        return self._events.filter(pl.col(self._TYPE) == event_type).height
+        return (
+            self._events.filter(pl.col(self._TYPE) == event_type)
+            .select(self._TYPE)
+            .count()
+            .collect(engine="streaming")
+            .item()
+        )
 
     def n_patients(self, event_type: str) -> int:
         """Return the number of distinct patients with a specific event type.
