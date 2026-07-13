@@ -309,9 +309,9 @@ class PolarsEDASource:
         Raises:
             ColumnNotFoundError: if the target field is not in the schema
         """
-        if target_field not in self._events.columns:
+        if target_field not in self._events.collect_schema().names():
             raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
-        return self._events.schema[target_field].is_numeric()
+        return self._events.collect_schema()[target_field].is_numeric()
 
     def fields(self, event_type: str) -> list[str]:
         """Return an alphabetically sorted list of dataframe field names.
@@ -339,7 +339,7 @@ class PolarsEDASource:
             an event type and their corresponding dtype.
         """
         valid_cols = self.fields(event_type)
-        col_dtypes = [str(self._events.schema[c]) for c in valid_cols]
+        col_dtypes = [str(self._events.collect_schema()[c]) for c in valid_cols]
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
