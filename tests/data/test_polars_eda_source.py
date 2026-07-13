@@ -97,8 +97,8 @@ def test_polars_eda_event_types_method_happy_path(
         (["patient_id"], {}, "Missing 'patient_id' column"),
     ],
 )
-def test_constructor_raises_if_invalid_df(
-    events_df: Callable,
+def test_constructor_raises_if_invalid_lf(
+    events_lf: Callable,
     drop: list[str],
     overrides: dict[str, pl.Series],
     error_message: str,
@@ -108,10 +108,10 @@ def test_constructor_raises_if_invalid_df(
     patient_id and event_type form the core of
     PyHealth's MIMIC-IV loader. Both fields are mandatory
     and should not contain None values. If they do there is
-    programmer error or a malformed DataFrame.
+    programmer error or a malformed LazyFrame.
     """
     with pytest.raises(ValueError, match=error_message):
-        PolarsEDASource(events_df(drop=drop, **overrides))
+        PolarsEDASource(events_lf(drop=drop, **overrides))
 
 
 @pytest.mark.parametrize(
@@ -347,7 +347,7 @@ def test_polars_eda_preview_method_happy_path(
 ) -> None:
     """Asserts that the preview method returns only valid records."""
     source = make_source(**overrides)
-    expected_df = pl.DataFrame(expected_df_data)
+    expected_df = pl.LazyFrame(expected_df_data)
     assert_frame_equal(source.preview_table(event_type), expected_df)
 
 
@@ -409,7 +409,7 @@ def test_polars_eda_describe_categorical_field_happy_path(
 ):
     """Asserts standard behaviour for describe_categorical_field method."""
     source = make_source(**overrides)
-    expectation = pl.DataFrame(expected_df)
+    expectation = pl.LazyFrame(expected_df)
     assert_frame_equal(source.describe_categorical_field(target_field), expectation)
 
 
@@ -525,7 +525,7 @@ def test_polars_eda_describe_numerical_field_happy_path(
     """Asserts standard behaviour for describe_numerical_field method."""
     source = make_eav_source(target_field.split("/")[0], **overrides)
     data_slice = source._numeric_subset(target_field, filters, uom_field)
-    expected = pl.DataFrame(expected_df)
+    expected = pl.LazyFrame(expected_df)
     assert_frame_equal(data_slice, expected)
 
 
@@ -552,7 +552,7 @@ def test_polars_eda_numeric_subset_excludes_other_event_types(
     result = source._numeric_subset(
         "labevents/value", {"labevents/label": "test_a"}, "labevents/uom"
     )
-    expected = pl.DataFrame(
+    expected = pl.LazyFrame(
         {
             "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
             "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
@@ -578,7 +578,7 @@ def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
     result = source._numeric_subset(
         "labevents/value", {"labevents/label": "test_a"}, None
     )
-    expected = pl.DataFrame(
+    expected = pl.LazyFrame(
         {
             "labevents/value": pl.Series([10.0, 20.0], dtype=pl.Float64),
             "labevents/label": pl.Series(["test_a", "test_a"], dtype=pl.String),
@@ -589,7 +589,7 @@ def test_polars_eda_numeric_subset_uom_field_none_omits_unit(
 
 def _stat(summary_stats: pl.DataFrame, name: str, column: str) -> float:
     """Pull a single statistic value out of a describe() frame."""
-    return summary_stats.filter(pl.col("statistic") == name).get_column(column).item()
+    return summary_stats.filter(pl.col("statistic") == name).select(column).item()
 
 
 def test_polars_eda_describe_numeric_field_single_unit(

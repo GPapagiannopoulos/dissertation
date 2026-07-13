@@ -12,9 +12,9 @@ from thesis.data.eda_source import EmptyHistError, MixedUnitsError, NumericSumma
 def cast_frame(lf: pl.LazyFrame, dtype_map: dict[str, str]) -> pl.LazyFrame:
     """Apply dtype casts declared in the manifest to a LazyFrame.
 
-    Columns absent from the frame are silently skipped. String→String
-    casts are no-ops and are omitted. Date columns use str.to_date()
-    because Polars 1.x does not support cast(pl.Date) from String.
+    String→String casts are no-ops and are omitted.
+    Date columns use str.to_date() because Polars 1.x does not support
+    cast(pl.Date) from String.
 
     Args:
         lf: The LazyFrame to cast.
@@ -161,10 +161,11 @@ def cleanse_float_values(
         are not strings
     """
     expressions: list[pl.Expr] = []
+    dtypes = data_source.collect_schema()
     for col in target_cols:
         # Polars normally raises InvalidOperationError at collection
         # Guard is against downstream failure propagation
-        if str(data_source.collect_schema()[col]) != "String":
+        if str(dtypes[col]) != "String":
             raise InvalidOperationError(
                 f"InvalidOperationError: expected String type, got: "
                 f"{data_source.collect_schema()[col]}"
@@ -192,20 +193,20 @@ class PolarsEDASource:
 
     PyHealth loads MIMIC-IV mimic_data from the directory to create a
     MIMIC4Dataset object powered by an underlying Polars
-    dataframe. This adapter accepts a Polars dataframe and exposes
+    LazyFrame. This adapter accepts a Polars LazyFrame and exposes
     methods that allow for exploratory mimic_data analysis. This way
     any mimic_data source can be plugged into the dashboard as long as it
-    is a polars dataframe (e.g. non-EHR MIMIC-IV mimic_data loaded via PyHealth).
+    is a polars LazyFrame (e.g. non-EHR MIMIC-IV mimic_data loaded via PyHealth).
     """
 
     _PATIENT = "patient_id"
     _TYPE = "event_type"
 
-    def __init__(self, events: pl.DataFrame):
+    def __init__(self, events: pl.LazyFrame):
         """Constructor for the PolarsEDASource class.
 
         Args:
-            events (pl.DataFrame): dataframe around which
+            events (pl.LazyFrame): LazyFrame around which
             to initialize the wrapper
 
         Raises:
@@ -214,13 +215,19 @@ class PolarsEDASource:
 
         """
         for col in [self._PATIENT, self._TYPE]:
-            if col not in events.columns:
+            if col not in events.collect_schema():
                 raise ValueError(
                     f"Missing '{col}' column. The DataFrame is invalid. Please review."
                 )
-            if None in events.select(col).to_series():
+        null_counts = events.select(
+            pl.col(c).null_count() for c in [self._PATIENT, self._TYPE]
+        ).collect(engine="streaming")
+        for col in [self._PATIENT, self._TYPE]:
+            if null_counts.get_column(col).item():
                 raise ValueError(f"'None' value in '{col}' detected.")
+
         self._events = events
+        self._schema = events.collect_schema()
 
     def event_types(self) -> list[str]:
         """Return an alphabetically sorted list of event types.
@@ -230,7 +237,14 @@ class PolarsEDASource:
             in the event_type column.
 
         """
-        return self._events.select(self._TYPE).unique().to_series().sort().to_list()
+        return (
+            self._events.select(self._TYPE)
+            .unique()
+            .sort(self._TYPE)
+            .collect(engine="streaming")
+            .to_series()
+            .to_list()
+        )
 
     def n_events(self, event_type: str) -> int:
         """Return the number of rows where the event_type field matches event_type.
@@ -242,7 +256,12 @@ class PolarsEDASource:
             int: the number of rows after filtering for that event_type
 
         """
-        return self._events.filter(pl.col(self._TYPE) == event_type).height
+        return (
+            self._events.filter(pl.col(self._TYPE) == event_type)
+            .select(pl.len())
+            .collect(engine="streaming")
+            .item()
+        )
 
     def n_patients(self, event_type: str) -> int:
         """Return the number of distinct patients with a specific event type.
@@ -256,9 +275,9 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(pl.col(self._TYPE) == event_type)
-            .select(self._PATIENT)
-            .unique()
-            .height
+            .select(pl.col(self._PATIENT).n_unique())
+            .collect(engine="streaming")
+            .item()
         )
 
     def get_unique_field_values(
@@ -284,8 +303,9 @@ class PolarsEDASource:
             .select(target_field)
             .unique()
             .drop_nulls()
+            .sort(target_field)
+            .collect(engine="streaming")
             .to_series()
-            .sort()
         )
 
     def is_numeric(self, target_field: str) -> bool:
@@ -294,9 +314,9 @@ class PolarsEDASource:
         Raises:
             ColumnNotFoundError: if the target field is not in the schema
         """
-        if target_field not in self._events.columns:
+        if target_field not in self._schema.names():
             raise ColumnNotFoundError(f"Unable to find column '{target_field}'")
-        return self._events.schema[target_field].is_numeric()
+        return self._schema[target_field].is_numeric()
 
     def fields(self, event_type: str) -> list[str]:
         """Return an alphabetically sorted list of dataframe field names.
@@ -312,7 +332,7 @@ class PolarsEDASource:
 
         """
         prefix = f"{event_type}/"
-        return sorted([c for c in self._events.columns if c.startswith(prefix)])
+        return sorted([c for c in self._schema.names() if c.startswith(prefix)])
 
     def field_dtypes(self, event_type: str) -> pl.DataFrame:
         """Return a dataframe to display the field names and dtypes.
@@ -322,14 +342,14 @@ class PolarsEDASource:
             an event type and their corresponding dtype.
         """
         valid_cols = self.fields(event_type)
-        col_dtypes = [str(self._events.schema[c]) for c in valid_cols]
+        col_dtypes = [str(self._schema[c]) for c in valid_cols]
 
         return pl.DataFrame({"field": valid_cols, "dtype": col_dtypes})
 
     def _numeric_subset(
         self, target_field: str, filters: dict[str, str], uom_field: str | None
-    ) -> pl.DataFrame:
-        """Internal helper for retrieving a filter aggregation of the dataframe.
+    ) -> pl.LazyFrame:
+        """Internal helper for retrieving a filter aggregation of the lazyframe.
 
         In describing the numeric fields it is necessary to aggregate and filter
         data to make it readable to digestible for the dashboard. This is a separate
@@ -342,7 +362,7 @@ class PolarsEDASource:
                 in the format {field_name: value_to_filter_for}
             uom_field (str): field containing the unit of measurement
         Returns:
-            pl.DataFrame: a df filtered according to specification
+            pl.LazyFrame: a df filtered according to specification
         """
         filtered_by_event_type = self._events.filter(
             pl.col(self._TYPE) == target_field.split("/")[0]
@@ -359,7 +379,7 @@ class PolarsEDASource:
             projection.append(uom_field)
         return additional_filters.select(projection)
 
-    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
+    def describe_categorical_field(self, field_name: str) -> pl.LazyFrame:
         """Return a dataframe with summary measures for a given field.
 
         Returns the normalized value counts for each value in a given categorical field.
@@ -376,17 +396,20 @@ class PolarsEDASource:
             ColumnNotFoundError: if the target field does not exist in the schema
             ValueError: if the target field is a numeric column
         """
-        if field_name not in self._events.columns:
+        if field_name not in self._schema.names():
             raise ColumnNotFoundError(f"Unable to find column '{field_name}'")
         if self.is_numeric(field_name):
             raise ValueError(f"'{field_name}' is not a categorical field.")
-        target_field = (
+
+        return (
             self._events.filter(pl.col(self._TYPE) == field_name.split("/")[0])
-            .select(field_name)
-            .to_series()
-        )
-        return target_field.value_counts(normalize=True).sort(
-            ["proportion", field_name], descending=[True, False]
+            .group_by(field_name)
+            .len("counts")
+            .with_columns(
+                (pl.col("counts") / pl.col("counts").sum()).alias("proportion")
+            )
+            .drop("counts")
+            .sort(["proportion", field_name], descending=[True, False])
         )
 
     def describe_numeric_field(
@@ -417,7 +440,9 @@ class PolarsEDASource:
         Raises:
             MixedUnitsError: if the filtered slice spans multiple units.
         """
-        df_slice = self._numeric_subset(target_field, filters, uom_field)
+        df_slice = self._numeric_subset(target_field, filters, uom_field).collect(
+            engine="streaming"
+        )
         unit: str | None = None
         if uom_field is not None:
             units = df_slice.get_column(uom_field).unique().drop_nulls().to_list()
@@ -436,14 +461,19 @@ class PolarsEDASource:
             EmptyHistError: if after filtering the field contains no data.
         """
         df_slice = self._numeric_subset(target_field, filters, None)
-        hist = df_slice.select(target_field).to_series().hist(bin_count=bin_count)
+        hist = (
+            df_slice.select(target_field)
+            .collect(engine="streaming")
+            .to_series()
+            .hist(bin_count=bin_count)
+        )
         if hist["count"].sum() == 0:
             raise EmptyHistError(target_field, filters)
 
         return hist
 
-    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
-        """Returns the head of the dataframe."""
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.LazyFrame:
+        """Returns the head of the lazyframe."""
         table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
