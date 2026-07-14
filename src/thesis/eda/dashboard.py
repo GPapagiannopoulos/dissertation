@@ -23,7 +23,7 @@ def _render_overview(src: PolarsEDASource, etype: str) -> None:
     c2.metric("Patients", f"{src.n_patients(etype):,}")
     st.subheader("Field Attributes")
     st.caption("Datetime and id fields are excluded from the field summary.")
-    st.dataframe(src.field_dtypes(etype), use_container_width=True)
+    st.dataframe(src.field_dtypes(etype), width="stretch")
 
 
 def _render_numeric_summary(
@@ -41,24 +41,22 @@ def _render_numeric_summary(
         return
     if summary.unit:
         st.caption(f"Unit: {summary.unit}")
-    st.dataframe(summary.stats, use_container_width=True)
+    st.dataframe(summary.stats, width="stretch")
     try:
         hist = src.numeric_histogram(field, filters, n_bin)
     except EmptyHistError as e:
         st.info(str(e))
     else:
-        st.plotly_chart(
-            px.bar(hist, x="breakpoint", y="count"), use_container_width=True
-        )
+        st.plotly_chart(px.bar(hist, x="breakpoint", y="count"), width="stretch")
 
 
 def _render_categorical_summary(src: PolarsEDASource, field: str) -> None:
     """Value-count proportions + a top-20 bar chart for a categorical field."""
     counts = src.describe_categorical_field(field).collect(engine="streaming")
-    st.dataframe(counts, use_container_width=True)
+    st.dataframe(counts, width="stretch")
     st.plotly_chart(
         px.bar(counts.head(20), x=field, y="proportion"),
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -98,7 +96,7 @@ def run_dashboard():
         else:
             _render_categorical_summary(src, field)
     with preview_tab:
-        st.dataframe(src.preview_table(etype), use_container_width=True)
+        st.dataframe(src.preview_table(etype), width="stretch")
 
 
 # Guard necessary for Windows machines
