@@ -1,5 +1,6 @@
 """Dashboard for EDA."""
 
+import json
 from pathlib import Path
 
 import plotly.express as px
@@ -17,6 +18,8 @@ from thesis.data.sources import (
     replace_mimic4_non_icd_codes,
 )
 from thesis.eda.filters import valid_fields
+
+from .cache import _fingerprint
 
 
 def build_event_pipeline(ds: MIMIC4Dataset) -> pl.LazyFrame:
@@ -61,6 +64,28 @@ def sink_global_event_frame(lf: pl.LazyFrame, out: Path) -> None:
     tmp = out.with_name(out.name + ".tmp")
     lf.sink_parquet(tmp)
     tmp.rename(out)
+
+
+def ensure_event_cache() -> Path:
+    """Confirms whether a cached ds already exists."""
+    ds = MIMIC4Dataset(
+        ehr_root=settings.mimic4_ehr_data_path,
+        dev=settings.mimic4_ehr_dev_mode,
+        ehr_tables=settings.mimic4_ehr_tables,
+    )
+    cache_root = ds.cache_dir / "thesis_eda"
+    parquet = cache_root / "events.parquet"
+    sidecar = cache_root / "events.fingerprint.json"
+
+    if parquet.exists() and sidecar.exists():
+        if json.loads(sidecar.read_text()) == _fingerprint(ds.cache_dir):
+            return parquet
+
+    cache_root.mkdir(parents=True, exist_ok=True)
+    sidecar.unlink(missing_ok=True)
+    sink_global_event_frame(build_event_pipeline(ds), parquet)
+    sidecar.write_text(json.dumps(_fingerprint(ds.cache_dir)))
+    return parquet
 
 
 @st.cache_resource
