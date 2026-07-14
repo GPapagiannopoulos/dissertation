@@ -172,8 +172,9 @@ def cleanse_float_values(
             )
         expr = (
             pl.col(col)
+            .str.replace_all(",", "", literal=True)
+            .str.replace_all(r"(\d)\s*-", "${1}|", literal=False)
             .str.extract_all(r"-?\d*\.?\d+")
-            .str.split("|")
             .cast(pl.List(pl.Float64))
             .list.mean()
             .cast(pl.String)
