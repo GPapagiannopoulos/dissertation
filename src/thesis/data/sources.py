@@ -380,7 +380,7 @@ class PolarsEDASource:
             projection.append(uom_field)
         return additional_filters.select(projection)
 
-    def describe_categorical_field(self, field_name: str) -> pl.LazyFrame:
+    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
         Returns the normalized value counts for each value in a given categorical field.
@@ -411,6 +411,7 @@ class PolarsEDASource:
             )
             .drop("counts")
             .sort(["proportion", field_name], descending=[True, False])
+            .collect(engine="streaming")
         )
 
     def describe_numeric_field(
@@ -473,11 +474,12 @@ class PolarsEDASource:
 
         return hist
 
-    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.LazyFrame:
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the lazyframe."""
         table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
             .filter(pl.sum_horizontal(pl.all().is_not_null()) > 0.6 * len(table_fields))
             .head(n_rows)
+            .collect(engine="streaming")
         )
