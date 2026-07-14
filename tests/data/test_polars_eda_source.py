@@ -806,7 +806,65 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
                     ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
                 ),
             },
-        )
+        ),
+        # 1. Different hadm_ids get excluded
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+                "labevents/hadm_id": pl.Series(["24", "99", None], dtype=pl.String),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(["2025-01-01", "2025-01-03"], dtype=pl.Datetime),
+            },
+        ),
+        # 2. Sorts output by timestamp
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-03",
+                        "2025-01-01",
+                        "2025-01-02",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    [
+                        "labevents",
+                        "diagnoses_icd",
+                        "labevents",
+                    ],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+            },
+        ),
     ],
 )
 def test_polars_eda_get_admission_timeline_happy_path(
