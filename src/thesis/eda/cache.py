@@ -1,6 +1,7 @@
 """Caching module for the dashboard data."""
 
 import json
+import shutil
 from hashlib import sha256
 from importlib import resources
 from pathlib import Path
@@ -18,7 +19,7 @@ from thesis.data.sources import (
 )
 
 # Bump when the transform pipeline changes
-CACHE_VERSION: Final[int] = 1
+CACHE_VERSION: Final[int] = 2
 
 
 def _fingerprint(pyhealth_cache_dir: Path) -> dict:
@@ -55,48 +56,96 @@ def _fingerprint(pyhealth_cache_dir: Path) -> dict:
     }
 
 
-def build_event_pipeline(ds: MIMIC4Dataset) -> pl.LazyFrame:
+def build_event_pipeline(ds: MIMIC4Dataset, event_type: str) -> pl.LazyFrame:
     """Lazily generates a transformation pipeline schema.
+
+    Runs the pipeline per event_type to handle the memory load of the
+    full dataset.
 
     Args:
         ds (MIMIC4Dataset): PyHealth's native MIMIC4Dataset loader object.
+        event_type (str): the event_type on which to run the transformations
 
     Returns:
         LazyFrame: a lf containing the transformed data
     """
+    prefix = f"{event_type}/"
+    table_cols = [
+        "patient_id",
+        "event_type",
+        "timestamp",
+        *[
+            c
+            for c in ds.global_event_df.collect_schema().names()
+            if c.startswith(prefix)
+        ],
+    ]
+    lf = ds.global_event_df.filter(pl.col("event_type") == event_type).select(
+        table_cols
+    )
+
     float_fields = [
         col
         for col, dtype in settings.mimic4_ehr_dtype_mapping.items()
-        if dtype == "Float"
+        if dtype == "Float" and col.startswith(prefix)
     ]
-    cleansed_df = cleanse_float_values(ds.global_event_df, float_fields)
-    lf = cast_frame(cleansed_df, settings.mimic4_ehr_dtype_mapping)
-    event_type_icd_maps: list[tuple[str, Path]] = [
-        ("procedures_icd", settings.mimic4_ehr_d_icd_procedures),
-        ("diagnoses_icd", settings.mimic4_ehr_d_icd_diagnoses),
-    ]
+    if float_fields:
+        lf = cleanse_float_values(lf, float_fields)
 
-    for event_type, mapping in event_type_icd_maps:
-        lf = mimic4_add_descriptions_to_icd_codes(lf, mapping, event_type)
+    dtype_map = {
+        col: dtype
+        for col, dtype in settings.mimic4_ehr_dtype_mapping.items()
+        if col.startswith(prefix)
+    }
+    if dtype_map:
+        lf = cast_frame(lf, dtype_map)
 
-    lf = replace_mimic4_non_icd_codes(lf, settings.mimic4_ehr_d_labitems, "labevents")
+    if event_type == "diagnoses_icd":
+        lf = mimic4_add_descriptions_to_icd_codes(
+            lf, settings.mimic4_ehr_d_icd_diagnoses, event_type
+        )
+    elif event_type == "procedures_icd":
+        lf = mimic4_add_descriptions_to_icd_codes(
+            lf, settings.mimic4_ehr_d_icd_procedures, event_type
+        )
+    elif event_type == "labevents":
+        lf = replace_mimic4_non_icd_codes(
+            lf, settings.mimic4_ehr_d_labitems, event_type
+        )
+
     return lf
 
 
-def sink_global_event_frame(lf: pl.LazyFrame, out: Path) -> None:
-    """Sink the transformed MIMIC4Dataset into a parquet file.
+def _sink_atomic(lf: pl.LazyFrame, out: Path) -> None:
+    """Sinks a single lazyframe into a parquet file.
 
     Uses the streaming engine to sink a parquet file. The file is marked
     .tmp until the sinking completes. If the process crashes then the file
     is clearly marked as .tmp and won't be used downstream.
-
-    Args:
-        lf (pl.LazyFrame): the lf to be sunk into a parquet file
-        out (Path): path at which to sink the file.
     """
     tmp = out.with_name(out.name + ".tmp")
     lf.sink_parquet(tmp)
     tmp.rename(out)
+
+
+def sink_global_event_frame(ds: MIMIC4Dataset, out: Path) -> None:
+    """Sink the transformed MIMIC4Dataset into a parquet file."""
+    parts_dir = out.parent / "parts"
+    # removing tree if prev run crashed
+    if parts_dir.exists():
+        shutil.rmtree(parts_dir)
+    parts_dir.mkdir(parents=True)
+
+    part_paths: list[Path] = []
+    for table in settings.mimic4_ehr_tables:
+        part = parts_dir / f"{table}.parquet"
+        _sink_atomic(build_event_pipeline(ds, table), part)
+        part_paths.append(part)
+
+    _sink_atomic(
+        pl.concat([pl.scan_parquet(p) for p in part_paths], how="diagonal"), out
+    )
+    shutil.rmtree(parts_dir)
 
 
 def ensure_event_cache() -> Path:
@@ -116,6 +165,6 @@ def ensure_event_cache() -> Path:
 
     cache_root.mkdir(parents=True, exist_ok=True)
     sidecar.unlink(missing_ok=True)
-    sink_global_event_frame(build_event_pipeline(ds), parquet)
+    sink_global_event_frame(ds, parquet)
     sidecar.write_text(json.dumps(_fingerprint(ds.cache_dir)))
     return parquet
