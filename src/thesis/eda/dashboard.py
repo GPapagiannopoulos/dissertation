@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import plotly.express as px
+import polars as pl
 import streamlit as st
 from pyhealth.datasets import MIMIC4Dataset
 
@@ -18,20 +19,15 @@ from thesis.data.sources import (
 from thesis.eda.filters import valid_fields
 
 
-@st.cache_resource
-def load_global_event_frame():
-    """Load, transform, and cache the MIMIC-IV dataset.
+def build_event_pipeline(ds: MIMIC4Dataset) -> pl.LazyFrame:
+    """Lazily generates a transformation pipeline schema.
 
-    This function is responsible for loading the MIMIC-IV dataset
-    using the PyHealth MIMIC4Dataset class. The underlying dataframe
-    is used for transformations and then cached for EDA via a Streamlit
-    dashboard.
+    Args:
+        ds (MIMIC4Dataset): PyHealth's native MIMIC4Dataset loader object.
+
+    Returns:
+        LazyFrame: a lf containing the transformed data
     """
-    ds = MIMIC4Dataset(
-        ehr_root=str(settings.mimic4_ehr_data_path),
-        dev=settings.mimic4_ehr_dev_mode,
-        ehr_tables=settings.mimic4_ehr_tables,
-    )
     float_fields = [
         col
         for col, dtype in settings.mimic4_ehr_dtype_mapping.items()
@@ -48,12 +44,29 @@ def load_global_event_frame():
         lf = mimic4_add_descriptions_to_icd_codes(lf, mapping, event_type)
 
     lf = replace_mimic4_non_icd_codes(lf, settings.mimic4_ehr_d_labitems, "labevents")
-    return lf.collect()
+    return lf
 
 
+def sink_global_event_frame(lf: pl.LazyFrame, out: Path) -> None:
+    """Sink the transformed MIMIC4Dataset into a parquet file.
+
+    Uses the streaming engine to sink a parquet file. The file is marked
+    .tmp until the sinking completes. If the process crashes then the file
+    is clearly marked as .tmp and won't be used downstream.
+
+    Args:
+        lf (pl.LazyFrame): the lf to be sunk into a parquet file
+        out (Path): path at which to sink the file.
+    """
+    tmp = out.with_name(out.name + ".tmp")
+    lf.sink_parquet(tmp)
+    tmp.rename(out)
+
+
+@st.cache_resource
 def get_source() -> PolarsEDASource:
     """Pass the cached dataset to the Adapter class."""
-    return PolarsEDASource(load_global_event_frame())
+    return PolarsEDASource(pl.LazyFrame())
 
 
 def _render_overview(src: PolarsEDASource, etype: str) -> None:
