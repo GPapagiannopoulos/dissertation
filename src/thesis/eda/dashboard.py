@@ -2,12 +2,15 @@
 
 import plotly.express as px
 import streamlit as st
+from dotenv import load_dotenv
 
 from thesis.config import settings
 from thesis.data.eda_source import EmptyHistError, MixedUnitsError
 from thesis.data.sources import PolarsEDASource
 from thesis.eda.cache import ensure_event_cache
 from thesis.eda.filters import valid_fields
+
+load_dotenv(override=True)
 
 
 @st.cache_resource
