@@ -173,12 +173,8 @@ def cleanse_float_values(
         expr = (
             pl.col(col)
             .str.replace_all(",", "", literal=True)
-            # replace whitespace and non-digit containing strings
-            .str.replace_all(r"(\s|^\D+$)", "", literal=False)
-            .replace("", None)
-            # replacing only non-leading hyphens
-            .str.replace_all(r"(\d)-", "${1}|", literal=False)
-            .str.split("|")
+            .str.replace_all(r"(\d)\s*-", "${1}|", literal=False)
+            .str.extract_all(r"-?\d*\.?\d+")
             .cast(pl.List(pl.Float64))
             .list.mean()
             .cast(pl.String)
@@ -228,6 +224,11 @@ class PolarsEDASource:
 
         self._events = events
         self._schema = events.collect_schema()
+
+    @classmethod
+    def from_parquet(cls, path_to_parquet: Path) -> "PolarsEDASource":
+        """Constructs an instance from a parquet path."""
+        return cls(pl.scan_parquet(path_to_parquet, low_memory=True))
 
     def event_types(self) -> list[str]:
         """Return an alphabetically sorted list of event types.

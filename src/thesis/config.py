@@ -26,7 +26,10 @@ class Settings(BaseSettings):
 
     """
 
-    model_config = {"env_file": Path(__file__).resolve().parent.parent.parent / ".env"}
+    model_config = {
+        "env_file": Path(__file__).resolve().parent.parent.parent / ".env",
+        "extra": "ignore",
+    }
 
     mimic4_ehr_data_path: Path = Field(..., frozen=True)
     mimic4_ehr_d_icd_procedures: Path = Field(..., frozen=True)
