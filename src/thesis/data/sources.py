@@ -229,6 +229,11 @@ class PolarsEDASource:
         self._events = events
         self._schema = events.collect_schema()
 
+    @classmethod
+    def from_parquet(cls, path_to_parquet: Path) -> "PolarsEDASource":
+        """Constructs an instance from a parquet path."""
+        return cls(pl.scan_parquet(path_to_parquet, low_memory=True))
+
     def event_types(self) -> list[str]:
         """Return an alphabetically sorted list of event types.
 

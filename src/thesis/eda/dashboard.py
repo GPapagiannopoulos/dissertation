@@ -91,7 +91,7 @@ def ensure_event_cache() -> Path:
 @st.cache_resource
 def get_source() -> PolarsEDASource:
     """Pass the cached dataset to the Adapter class."""
-    return PolarsEDASource(pl.LazyFrame())
+    return PolarsEDASource.from_parquet(ensure_event_cache())
 
 
 def _render_overview(src: PolarsEDASource, etype: str) -> None:
