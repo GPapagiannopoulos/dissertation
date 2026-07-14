@@ -56,7 +56,7 @@ def _render_numeric_summary(
 
 def _render_categorical_summary(src: PolarsEDASource, field: str) -> None:
     """Value-count proportions + a top-20 bar chart for a categorical field."""
-    counts = src.describe_categorical_field(field).collect(engine="streaming")
+    counts = src.describe_categorical_field(field)
     st.dataframe(counts, width="stretch")
     st.plotly_chart(
         px.bar(counts.head(20), x=field, y="proportion"),
@@ -100,9 +100,7 @@ def run_dashboard():
         else:
             _render_categorical_summary(src, field)
     with preview_tab:
-        st.dataframe(
-            src.preview_table(etype).collect(engine="streaming"), width="stretch"
-        )
+        st.dataframe(src.preview_table(etype), width="stretch")
 
 
 # Guard necessary for Windows machines
