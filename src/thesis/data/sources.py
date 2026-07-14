@@ -474,6 +474,26 @@ class PolarsEDASource:
 
         return hist
 
+    def get_admission_timeline(self, hadm_id: str) -> pl.DataFrame:
+        """Long-format events for one admission.
+
+        Returns all events associated with a particular admission, one record
+        per event.
+        """
+        hadm = pl.coalesce(pl.selectors.ends_with("/hadm_id"))
+
+        return (
+            self._events.filter(hadm == hadm_id)
+            .select(
+                pl.col("patient_id"),
+                hadm.alias("hadm_id"),
+                pl.col("event_type"),
+                pl.col("timestamp"),
+            )
+            .sort("timestamp")
+            .collect(engine="streaming")
+        )
+
     def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the lazyframe."""
         table_fields = self.fields(event_type)

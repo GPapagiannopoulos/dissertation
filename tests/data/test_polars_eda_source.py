@@ -347,7 +347,7 @@ def test_polars_eda_preview_method_happy_path(
 ) -> None:
     """Asserts that the preview method returns only valid records."""
     source = make_source(**overrides)
-    expected_df = pl.LazyFrame(expected_df_data)
+    expected_df = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.preview_table(event_type), expected_df)
 
 
@@ -409,7 +409,7 @@ def test_polars_eda_describe_categorical_field_happy_path(
 ):
     """Asserts standard behaviour for describe_categorical_field method."""
     source = make_source(**overrides)
-    expectation = pl.LazyFrame(expected_df)
+    expectation = pl.DataFrame(expected_df)
     assert_frame_equal(source.describe_categorical_field(target_field), expectation)
 
 
@@ -777,3 +777,45 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         source.numeric_histogram(
             "labevents/value", {"labevents/label": "test_a"}, bin_count=2
         )
+
+
+@pytest.mark.parametrize(
+    "hadm_id, overrides, expected_df_data",
+    [
+        # 0. Cross table gather and coalesce behaviour
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+            },
+        )
+    ],
+)
+def test_polars_eda_get_admission_timeline_happy_path(
+    make_source: Callable,
+    hadm_id: str,
+    overrides: dict[str, pl.Series],
+    expected_df_data: dict[str, pl.Series],
+) -> None:
+    """Asserts core method behaviour."""
+    source = make_source(**overrides)
+    expected_df = pl.DataFrame(expected_df_data)
+    assert_frame_equal(source.get_admission_timeline(hadm_id), expected_df)
