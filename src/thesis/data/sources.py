@@ -172,12 +172,7 @@ def cleanse_float_values(
             )
         expr = (
             pl.col(col)
-            .str.replace_all(",", "", literal=True)
-            # replace whitespace and non-digit containing strings
-            .str.replace_all(r"(\s|^\D+$)", "", literal=False)
-            .replace("", None)
-            # replacing only non-leading hyphens
-            .str.replace_all(r"(\d)-", "${1}|", literal=False)
+            .str.extract_all(r"-?\d*\.?\d+")
             .str.split("|")
             .cast(pl.List(pl.Float64))
             .list.mean()
