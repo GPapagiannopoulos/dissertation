@@ -87,7 +87,7 @@ def run_dashboard():
                         src.get_unique_field_values(filter_col, filters),
                     )
                 uom = field_info.uom
-            n_bins = st.slider("Number of bins", 5, 50, 20)
+            n_bins = st.slider("Number of bins", 5, 500, 20)
 
     overview_tab, summary_tab, preview_tab = st.tabs(
         ["Overview", "Field summary", "Preview"]
@@ -100,7 +100,9 @@ def run_dashboard():
         else:
             _render_categorical_summary(src, field)
     with preview_tab:
-        st.dataframe(src.preview_table(etype), width="stretch")
+        st.dataframe(
+            src.preview_table(etype).collect(engine="streaming"), width="stretch"
+        )
 
 
 # Guard necessary for Windows machines
