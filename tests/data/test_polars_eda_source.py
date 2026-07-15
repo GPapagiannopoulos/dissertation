@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
-from polars.exceptions import ColumnNotFoundError
+from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 from polars.testing import assert_frame_equal
 
 from thesis.data.eda_source import EmptyHistError, MixedUnitsError
@@ -914,3 +914,14 @@ def test_polars_eda_get_admission_timeline_happy_path(
     source = make_timeline_source(**overrides)
     expected_df = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.get_admission_timeline(hadm_id), expected_df)
+
+
+def test_polars_eda_get_admission_timeline_raises_if_no_hadm_id(
+    make_timeline_source: Callable,
+) -> None:
+    """If there are no columns to coalesce to the method raises."""
+    source = make_timeline_source(drop=["labevents/hadm_id", "diagnoses_icd/hadm_id"])
+    with pytest.raises(
+        InvalidOperationError, match="expected at least 1 input in null.coalesce()"
+    ):
+        source.get_admission_timeline("24")
