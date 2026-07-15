@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
-from polars.exceptions import ColumnNotFoundError
+from polars.exceptions import ColumnNotFoundError, InvalidOperationError
 from polars.testing import assert_frame_equal
 
 from thesis.data.eda_source import EmptyHistError, MixedUnitsError
@@ -347,7 +347,7 @@ def test_polars_eda_preview_method_happy_path(
 ) -> None:
     """Asserts that the preview method returns only valid records."""
     source = make_source(**overrides)
-    expected_df = pl.LazyFrame(expected_df_data)
+    expected_df = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.preview_table(event_type), expected_df)
 
 
@@ -409,7 +409,7 @@ def test_polars_eda_describe_categorical_field_happy_path(
 ):
     """Asserts standard behaviour for describe_categorical_field method."""
     source = make_source(**overrides)
-    expectation = pl.LazyFrame(expected_df)
+    expectation = pl.DataFrame(expected_df)
     assert_frame_equal(source.describe_categorical_field(target_field), expectation)
 
 
@@ -777,3 +777,162 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         source.numeric_histogram(
             "labevents/value", {"labevents/label": "test_a"}, bin_count=2
         )
+
+
+@pytest.mark.parametrize(
+    "hadm_id, overrides, expected_df_data",
+    [
+        # 0. Cross table gather and coalesce behaviour (factory default)
+        (
+            "24",
+            {},
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+            },
+        ),
+        # 1. Different hadm_ids get excluded
+        (
+            "24",
+            {"labevents/hadm_id": pl.Series(["24", "99", None], dtype=pl.String)},
+            {
+                "patient_id": pl.Series(["1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "diagnoses_icd"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(["2025-01-01", "2025-01-03"], dtype=pl.Datetime),
+            },
+        ),
+        # 2. Sorts output by timestamp
+        (
+            "24",
+            {
+                "timestamp": pl.Series(
+                    ["2025-01-03", "2025-01-01", "2025-01-02"], dtype=pl.Datetime
+                )
+            },
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    [
+                        "labevents",
+                        "diagnoses_icd",
+                        "labevents",
+                    ],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+                ),
+            },
+        ),
+        # 3. Rows with no hadm_id are dropped
+        (
+            "24",
+            {
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"], dtype=pl.String
+                ),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    [
+                        "labevents",
+                        "labevents",
+                    ],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(["2025-01-01", "2025-01-02"], dtype=pl.Datetime),
+            },
+        ),
+        # 4. No hadm_id returns an empty df
+        (
+            "24",
+            {
+                "labevents/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "event_type": pl.Series(
+                    [],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+            },
+        ),
+        # 5. Duplicate timestamps retained
+        (
+            "24",
+            {
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    ["2025-01-01", "2025-01-01", "2025-01-01"], dtype=pl.Datetime
+                ),
+                "labevents/hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-01",
+                        "2025-01-01",
+                        "2025-01-01",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+            },
+        ),
+    ],
+)
+def test_polars_eda_get_admission_timeline_happy_path(
+    make_timeline_source: Callable,
+    hadm_id: str,
+    overrides: dict[str, pl.Series],
+    expected_df_data: dict[str, pl.Series],
+) -> None:
+    """Asserts core method behaviour."""
+    source = make_timeline_source(**overrides)
+    expected_df = pl.DataFrame(expected_df_data)
+    assert_frame_equal(source.get_admission_timeline(hadm_id), expected_df)
+
+
+def test_polars_eda_get_admission_timeline_raises_if_no_hadm_id(
+    make_timeline_source: Callable,
+) -> None:
+    """If there are no columns to coalesce to the method raises."""
+    source = make_timeline_source(drop=["labevents/hadm_id", "diagnoses_icd/hadm_id"])
+    with pytest.raises(
+        InvalidOperationError, match="expected at least 1 input in null.coalesce()"
+    ):
+        source.get_admission_timeline("24")
+
+
+def test_polars_eda_get_admission_timeline_raises_if_no_timestamp(
+    make_timeline_source: Callable,
+) -> None:
+    """If no timestamp column method must raise."""
+    source = make_timeline_source(drop=["timestamp"])
+    with pytest.raises(
+        ValueError, match="Missing unified 'timestamp' field. LazyFrame is malformed."
+    ):
+        source.get_admission_timeline("24")
