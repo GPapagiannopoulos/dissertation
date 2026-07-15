@@ -782,20 +782,10 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
 @pytest.mark.parametrize(
     "hadm_id, overrides, expected_df_data",
     [
-        # 0. Cross table gather and coalesce behaviour
+        # 0. Cross table gather and coalesce behaviour (factory default)
         (
             "24",
-            {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
-                "event_type": pl.Series(
-                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
-                ),
-                "timestamp": pl.Series(
-                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
-                ),
-                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
-                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
-            },
+            {},
             {
                 "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
                 "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
@@ -810,17 +800,7 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         # 1. Different hadm_ids get excluded
         (
             "24",
-            {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
-                "event_type": pl.Series(
-                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
-                ),
-                "timestamp": pl.Series(
-                    ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
-                ),
-                "labevents/hadm_id": pl.Series(["24", "99", None], dtype=pl.String),
-                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
-            },
+            {"labevents/hadm_id": pl.Series(["24", "99", None], dtype=pl.String)},
             {
                 "patient_id": pl.Series(["1", "1"], dtype=pl.String),
                 "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
@@ -834,20 +814,9 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         (
             "24",
             {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
-                "event_type": pl.Series(
-                    ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
-                ),
                 "timestamp": pl.Series(
-                    [
-                        "2025-01-03",
-                        "2025-01-01",
-                        "2025-01-02",
-                    ],
-                    dtype=pl.Datetime,
-                ),
-                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
-                "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+                    ["2025-01-03", "2025-01-01", "2025-01-02"], dtype=pl.Datetime
+                )
             },
             {
                 "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
@@ -869,22 +838,10 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         (
             "24",
             {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
                 "event_type": pl.Series(
                     ["labevents", "labevents", "admissions"], dtype=pl.String
                 ),
-                "timestamp": pl.Series(
-                    [
-                        "2025-01-01",
-                        "2025-01-02",
-                        "2025-01-03",
-                    ],
-                    dtype=pl.Datetime,
-                ),
-                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
-                "admissions/outpatients": pl.Series(
-                    [None, None, None], dtype=pl.String
-                ),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
             },
             {
                 "patient_id": pl.Series(["1", "1"], dtype=pl.String),
@@ -903,19 +860,8 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         (
             "24",
             {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
-                "event_type": pl.Series(
-                    ["labevents", "labevents", "admissions"], dtype=pl.String
-                ),
-                "timestamp": pl.Series(
-                    [
-                        "2025-01-01",
-                        "2025-01-02",
-                        "2025-01-03",
-                    ],
-                    dtype=pl.Datetime,
-                ),
                 "labevents/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
             },
             {
                 "patient_id": pl.Series([], dtype=pl.String),
@@ -931,17 +877,11 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         (
             "24",
             {
-                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
                 "event_type": pl.Series(
                     ["labevents", "labevents", "admissions"], dtype=pl.String
                 ),
                 "timestamp": pl.Series(
-                    [
-                        "2025-01-01",
-                        "2025-01-01",
-                        "2025-01-01",
-                    ],
-                    dtype=pl.Datetime,
+                    ["2025-01-01", "2025-01-01", "2025-01-01"], dtype=pl.Datetime
                 ),
                 "labevents/hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
             },
@@ -965,12 +905,12 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
     ],
 )
 def test_polars_eda_get_admission_timeline_happy_path(
-    make_source: Callable,
+    make_timeline_source: Callable,
     hadm_id: str,
     overrides: dict[str, pl.Series],
     expected_df_data: dict[str, pl.Series],
 ) -> None:
     """Asserts core method behaviour."""
-    source = make_source(**overrides)
+    source = make_timeline_source(**overrides)
     expected_df = pl.DataFrame(expected_df_data)
     assert_frame_equal(source.get_admission_timeline(hadm_id), expected_df)
