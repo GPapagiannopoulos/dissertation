@@ -64,7 +64,7 @@ def _render_categorical_summary(src: PolarsEDASource, field: str) -> None:
     )
 
 
-def _render_timeline(src: PolarsEDASource, hadm_id: str) -> None:
+def _render_timeline(src: PolarsEDASource, hadm_id: str | None) -> None:
     """Determines data to return for timeline."""
     if not hadm_id:
         st.info("Please select an admission to view.")
@@ -118,13 +118,13 @@ def run_dashboard():
         st.dataframe(src.preview_table(etype), width="stretch")
     with timeline_tab:
         code = st.selectbox(
-            "Diagnosis (ICD)", src.get_unique_field_values("diagnoses_icd/icd_code")
+            "Diagnosis (ICD)", src.get_unique_field_values(["diagnoses_icd/icd_code"])
         )
         if code:
             hadm_id = st.selectbox(
                 "Admission ID",
                 src.get_unique_field_values(
-                    "diagnoses_icd/hadm_id", {"diagnoses_icd/icd_code": code}
+                    ["diagnoses_icd/hadm_id"], {"diagnoses_icd/icd_code": code}
                 ),
             )
         _render_timeline(src, hadm_id)
