@@ -865,6 +865,103 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
                 ),
             },
         ),
+        # 3. Rows with no hadm_id are dropped
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-01",
+                        "2025-01-02",
+                        "2025-01-03",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+                "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
+                "admissions/outpatients": pl.Series(
+                    [None, None, None], dtype=pl.String
+                ),
+            },
+            {
+                "patient_id": pl.Series(["1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    [
+                        "labevents",
+                        "labevents",
+                    ],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(["2025-01-01", "2025-01-02"], dtype=pl.Datetime),
+            },
+        ),
+        # 4. No hadm_id returns an empty df
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-01",
+                        "2025-01-02",
+                        "2025-01-03",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+                "labevents/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "event_type": pl.Series(
+                    [],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+            },
+        ),
+        # 5. Duplicate timestamps retained
+        (
+            "24",
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"], dtype=pl.String
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-01",
+                        "2025-01-01",
+                        "2025-01-01",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+                "labevents/hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+            },
+            {
+                "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "event_type": pl.Series(
+                    ["labevents", "labevents", "admissions"],
+                    dtype=pl.String,
+                ),
+                "timestamp": pl.Series(
+                    [
+                        "2025-01-01",
+                        "2025-01-01",
+                        "2025-01-01",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+            },
+        ),
     ],
 )
 def test_polars_eda_get_admission_timeline_happy_path(

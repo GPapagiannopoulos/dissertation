@@ -41,6 +41,28 @@ def make_source(events_lf):
 
 
 @pytest.fixture
+def make_timeline_source(make_source: Callable):
+    """Factory for returning a PolarsEDASource with valid timeline features."""
+
+    def _make(**kwargs) -> PolarsEDASource:
+        frame = {
+            "labevents/hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+            "timestamp": pl.Series(
+                [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                ],
+                dtype=pl.Datetime,
+            ),
+        }
+
+        return make_source(**frame)
+
+    return _make
+
+
+@pytest.fixture
 def make_eav_source(make_source):
     """Source shaped for numeric/EAV describe tests."""
 
