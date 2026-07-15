@@ -282,12 +282,16 @@ class PolarsEDASource:
         )
 
     def get_unique_field_values(
-        self, target_field: str, filters: dict[str, str] | None = None
+        self, target_fields: list[str], filters: dict[str, str] | None = None
     ) -> pl.Series:
-        """Returns unique values of a target field sorted alphabetically.
+        """Returns unique value combinations of target fields sorted alphabetically.
+
+        For a selection of fields, it applies a series of filters and returns
+        a series of unique value combinations for the fields. Passing a single
+        element list is equivalent to getting the unique value of that field.
 
         Args:
-            target_field(str): the name of the field to return
+            target_fields (list[str]): the name of the fields to return
             filters(dict[str, str] | None): an optional dict of predicates
             to filter on in the format {'column' = 'value'}
 
@@ -296,15 +300,15 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(
-                pl.col(self._TYPE) == target_field.split("/")[0],
+                *[pl.col(self._TYPE) == f.split("/")[0] for f in target_fields],
                 *[pl.col(col) == val for col, val in filters.items()]
                 if filters
                 else [pl.lit(True)],
             )
-            .select(target_field)
+            .select(target_fields)
             .unique()
             .drop_nulls()
-            .sort(target_field)
+            .sort(target_fields)
             .collect(engine="streaming")
             .to_series()
         )
