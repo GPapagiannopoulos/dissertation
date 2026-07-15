@@ -99,7 +99,7 @@ def run_dashboard():
                 for filter_col in field_info.filters:
                     filters[filter_col] = st.selectbox(
                         filter_col,
-                        src.get_unique_field_values(filter_col, filters),
+                        src.get_unique_field_values([filter_col], filters),
                     )
                 uom = field_info.uom
             n_bins = st.slider("Number of bins", 5, 500, 20)
@@ -117,9 +117,24 @@ def run_dashboard():
     with preview_tab:
         st.dataframe(src.preview_table(etype), width="stretch")
     with timeline_tab:
-        code = st.selectbox(
-            "Diagnosis (ICD)", src.get_unique_field_values(["diagnoses_icd/icd_code"])
+        dx = src.get_unique_field_values(
+            ["diagnoses_icd/icd_code", "diagnoses_icd/description"]
         )
+        descriptions = dict(
+            zip(
+                dx["diagnoses_icd/icd_code"],
+                dx["diagnoses_icd/description"],
+                strict=True,
+            )
+        )
+
+        code = st.selectbox(
+            "Diagnosis (ICD)",
+            descriptions,
+            format_func=lambda x: f"{x} - {descriptions[x]}",
+        )
+
+        hadm_id = None
         if code:
             hadm_id = st.selectbox(
                 "Admission ID",
