@@ -484,7 +484,10 @@ class PolarsEDASource:
             InvalidOperationError: if no hadm_id columns are present.
         """
         hadm = pl.coalesce(pl.selectors.ends_with("/hadm_id"))
-
+        if "timestamp" not in self._schema:
+            raise ValueError(
+                "Missing unified 'timestamp' field. LazyFrame is malformed."
+            )
         return (
             self._events.filter(hadm == hadm_id)
             .select(
