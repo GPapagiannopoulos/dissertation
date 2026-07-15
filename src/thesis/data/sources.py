@@ -283,7 +283,7 @@ class PolarsEDASource:
 
     def get_unique_field_values(
         self, target_fields: list[str], filters: dict[str, str] | None = None
-    ) -> pl.Series:
+    ) -> pl.DataFrame:
         """Returns unique value combinations of target fields sorted alphabetically.
 
         For a selection of fields, it applies a series of filters and returns
@@ -310,7 +310,6 @@ class PolarsEDASource:
             .drop_nulls()
             .sort(target_fields)
             .collect(engine="streaming")
-            .to_series()
         )
 
     def is_numeric(self, target_field: str) -> bool:
