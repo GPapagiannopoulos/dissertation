@@ -282,12 +282,16 @@ class PolarsEDASource:
         )
 
     def get_unique_field_values(
-        self, target_field: str, filters: dict[str, str] | None = None
-    ) -> pl.Series:
-        """Returns unique values of a target field sorted alphabetically.
+        self, target_fields: list[str], filters: dict[str, str] | None = None
+    ) -> pl.DataFrame:
+        """Returns unique value combinations of target fields sorted alphabetically.
+
+        For a selection of fields, it applies a series of filters and returns
+        a series of unique value combinations for the fields. Passing a single
+        element list is equivalent to getting the unique value of that field.
 
         Args:
-            target_field(str): the name of the field to return
+            target_fields (list[str]): the name of the fields to return
             filters(dict[str, str] | None): an optional dict of predicates
             to filter on in the format {'column' = 'value'}
 
@@ -296,17 +300,16 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(
-                pl.col(self._TYPE) == target_field.split("/")[0],
+                *[pl.col(self._TYPE) == f.split("/")[0] for f in target_fields],
                 *[pl.col(col) == val for col, val in filters.items()]
                 if filters
                 else [pl.lit(True)],
             )
-            .select(target_field)
+            .select(target_fields)
             .unique()
             .drop_nulls()
-            .sort(target_field)
+            .sort(target_fields)
             .collect(engine="streaming")
-            .to_series()
         )
 
     def is_numeric(self, target_field: str) -> bool:
@@ -380,7 +383,7 @@ class PolarsEDASource:
             projection.append(uom_field)
         return additional_filters.select(projection)
 
-    def describe_categorical_field(self, field_name: str) -> pl.LazyFrame:
+    def describe_categorical_field(self, field_name: str) -> pl.DataFrame:
         """Return a dataframe with summary measures for a given field.
 
         Returns the normalized value counts for each value in a given categorical field.
@@ -411,6 +414,7 @@ class PolarsEDASource:
             )
             .drop("counts")
             .sort(["proportion", field_name], descending=[True, False])
+            .collect(engine="streaming")
         )
 
     def describe_numeric_field(
@@ -473,11 +477,38 @@ class PolarsEDASource:
 
         return hist
 
-    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.LazyFrame:
+    def get_admission_timeline(self, hadm_id: str) -> pl.DataFrame:
+        """Long-format events for one admission.
+
+        Returns all events associated with a particular admission, one record
+        per event.
+
+        Raises:
+            InvalidOperationError: if no hadm_id columns are present.
+        """
+        hadm = pl.coalesce(pl.selectors.ends_with("/hadm_id"))
+        if "timestamp" not in self._schema:
+            raise ValueError(
+                "Missing unified 'timestamp' field. LazyFrame is malformed."
+            )
+        return (
+            self._events.filter(hadm == hadm_id)
+            .select(
+                pl.col("patient_id"),
+                hadm.alias("hadm_id"),
+                pl.col("event_type"),
+                pl.col("timestamp"),
+            )
+            .sort("timestamp")
+            .collect(engine="streaming")
+        )
+
+    def preview_table(self, event_type: str, n_rows: int = 10) -> pl.DataFrame:
         """Returns the head of the lazyframe."""
         table_fields = self.fields(event_type)
         return (
             self._events.select(table_fields)
             .filter(pl.sum_horizontal(pl.all().is_not_null()) > 0.6 * len(table_fields))
             .head(n_rows)
+            .collect(engine="streaming")
         )

@@ -41,6 +41,33 @@ def make_source(events_lf):
 
 
 @pytest.fixture
+def make_timeline_source(make_source: Callable):
+    """Factory for a PolarsEDASource shaped for timeline tests.
+
+    Defaults to a valid cross-table admission (labevents + diagnoses_icd, all
+    hadm_id "24", ascending timestamps). Pass column=values to override only the
+    columns a case cares about.
+    """
+
+    def _make(**overrides: pl.Series) -> PolarsEDASource:
+        frame = {
+            "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
+            "event_type": pl.Series(
+                ["labevents", "labevents", "diagnoses_icd"], dtype=pl.String
+            ),
+            "timestamp": pl.Series(
+                ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
+            ),
+            "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
+            "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+        }
+        frame.update(overrides)
+        return make_source(**frame)
+
+    return _make
+
+
+@pytest.fixture
 def make_eav_source(make_source):
     """Source shaped for numeric/EAV describe tests."""
 

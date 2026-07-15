@@ -56,10 +56,25 @@ def _render_numeric_summary(
 
 def _render_categorical_summary(src: PolarsEDASource, field: str) -> None:
     """Value-count proportions + a top-20 bar chart for a categorical field."""
-    counts = src.describe_categorical_field(field).collect(engine="streaming")
+    counts = src.describe_categorical_field(field)
     st.dataframe(counts, width="stretch")
     st.plotly_chart(
         px.bar(counts.head(20), x=field, y="proportion"),
+        width="stretch",
+    )
+
+
+def _render_timeline(src: PolarsEDASource, hadm_id: str | None) -> None:
+    """Determines data to return for timeline."""
+    if not hadm_id:
+        st.info("Please select an admission to view.")
+        return
+    events = src.get_admission_timeline(hadm_id)
+    if events.is_empty():
+        st.info(f"No events for admission: {hadm_id}")
+        return
+    st.plotly_chart(
+        px.scatter(events, "timestamp", "event_type", color="event_type"),
         width="stretch",
     )
 
@@ -84,13 +99,13 @@ def run_dashboard():
                 for filter_col in field_info.filters:
                     filters[filter_col] = st.selectbox(
                         filter_col,
-                        src.get_unique_field_values(filter_col, filters),
+                        src.get_unique_field_values([filter_col], filters),
                     )
                 uom = field_info.uom
             n_bins = st.slider("Number of bins", 5, 500, 20)
 
-    overview_tab, summary_tab, preview_tab = st.tabs(
-        ["Overview", "Field summary", "Preview"]
+    overview_tab, summary_tab, preview_tab, timeline_tab = st.tabs(
+        ["Overview", "Field summary", "Preview", "Timeline"]
     )
     with overview_tab:
         _render_overview(src, etype)
@@ -100,9 +115,34 @@ def run_dashboard():
         else:
             _render_categorical_summary(src, field)
     with preview_tab:
-        st.dataframe(
-            src.preview_table(etype).collect(engine="streaming"), width="stretch"
+        st.dataframe(src.preview_table(etype), width="stretch")
+    with timeline_tab:
+        dx = src.get_unique_field_values(
+            ["diagnoses_icd/icd_code", "diagnoses_icd/description"]
         )
+        descriptions = dict(
+            zip(
+                dx["diagnoses_icd/icd_code"],
+                dx["diagnoses_icd/description"],
+                strict=True,
+            )
+        )
+
+        code = st.selectbox(
+            "Diagnosis (ICD)",
+            descriptions,
+            format_func=lambda x: f"{x} - {descriptions[x]}",
+        )
+
+        hadm_id = None
+        if code:
+            hadm_id = st.selectbox(
+                "Admission ID",
+                src.get_unique_field_values(
+                    ["diagnoses_icd/hadm_id"], {"diagnoses_icd/icd_code": code}
+                ),
+            )
+        _render_timeline(src, hadm_id)
 
 
 # Guard necessary for Windows machines
