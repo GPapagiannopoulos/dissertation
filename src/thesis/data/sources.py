@@ -479,6 +479,9 @@ class PolarsEDASource:
 
         Returns all events associated with a particular admission, one record
         per event.
+
+        Raises:
+            InvalidOperationError: if no hadm_id columns are present.
         """
         hadm = pl.coalesce(pl.selectors.ends_with("/hadm_id"))
 
