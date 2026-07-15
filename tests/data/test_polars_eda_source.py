@@ -925,3 +925,14 @@ def test_polars_eda_get_admission_timeline_raises_if_no_hadm_id(
         InvalidOperationError, match="expected at least 1 input in null.coalesce()"
     ):
         source.get_admission_timeline("24")
+
+
+def test_polars_eda_get_admission_timeline_raises_if_no_timestamp(
+    make_timeline_source: Callable,
+) -> None:
+    """If no timestamp column method must raise."""
+    source = make_timeline_source(drop=["timestamp"])
+    with pytest.raises(
+        ValueError, match="Missing unified 'timestamp' field. LazyFrame is malformed."
+    ):
+        source.get_admission_timeline("24")
