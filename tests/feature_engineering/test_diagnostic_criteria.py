@@ -175,7 +175,7 @@ def test_diagnose_ha_aki_criterion_one(
                 "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
                 "patient_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
-                "timestamp": pl.Series(["2025-01-02 00:00:00"], dtype=pl.Datetime),
+                "timestamp": pl.Series(["2025-01-04 06:00:00"], dtype=pl.Datetime),
                 "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
             },
         )
