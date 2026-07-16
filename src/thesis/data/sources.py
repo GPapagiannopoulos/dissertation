@@ -483,19 +483,16 @@ class PolarsEDASource:
         Returns all events associated with a particular admission, one record
         per event.
 
-        Raises:
-            InvalidOperationError: if no hadm_id columns are present.
         """
-        hadm = pl.coalesce(pl.selectors.ends_with("/hadm_id"))
         if "timestamp" not in self._schema:
             raise ValueError(
                 "Missing unified 'timestamp' field. LazyFrame is malformed."
             )
         return (
-            self._events.filter(hadm == hadm_id)
+            self._events.filter(pl.col("hadm_id") == hadm_id)
             .select(
                 pl.col("patient_id"),
-                hadm.alias("hadm_id"),
+                pl.col("hadm_id"),
                 pl.col("event_type"),
                 pl.col("timestamp"),
             )
