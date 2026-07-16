@@ -32,6 +32,7 @@ def labevents_lf():
             "labevents/label": ["Creatinine"] * 14,
             "labevents/valuenum": [1.25] * 14,
             "labevents/valueuom": ["mg/dL"] * 14,
+            "admissions/admittime": [datetime.datetime(2025, 1, 1, 0)] + [None] * 13,
         }
         defaults.update(overrides)
         for col in drop:
