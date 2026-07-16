@@ -19,6 +19,13 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
             the last healthy kidney function, we follow industry standard
             and set this as the min of the last seven days.
     """
+    gate = (
+        source.select("hadm_id", "admissions/admittime")
+        .group_by(pl.col("hadm_id"))
+        .agg(pl.col("admissions/admittime").min().alias("admittime"))
+        .with_columns((pl.col("admittime") + pl.duration(hours=48)).alias("gate"))
+    )
+
     sorted_labevents = (
         source.filter(pl.col("labevents/label") == "Creatinine")
         .select(
@@ -54,6 +61,10 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
         .with_columns(
             event_type=pl.lit("diagnosis_made"), diagnosis=pl.lit("Acute Kidney Injury")
         )
+    )
+
+    result = result.join(gate, on="hadm_id", how="inner").filter(
+        pl.col("timestamp") > pl.col("gate")
     )
 
     return result.select(
