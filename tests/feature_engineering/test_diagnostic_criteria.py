@@ -137,7 +137,7 @@ Desired behaviour includes:
         ),
         # 7. A rise over more than 48h returns an empty lazyframe
         (
-            {"labevents/valuenum": pl.Series([1.25 + 0.05 * i for i in range(14)])},
+            {"labevents/valuenum": pl.Series([1.25 + 0.025 * i for i in range(14)])},
             {
                 "event_type": pl.Series([], dtype=pl.String),
                 "patient_id": pl.Series([], dtype=pl.String),
@@ -165,7 +165,7 @@ def test_diagnose_ha_aki_criterion_one(
     [
         # 0. Identifies the median of the first 24h as baseline
         (
-            6,
+            12,
             {
                 "labevents/valuenum": pl.Series(
                     [0.85] * 3 + [1.10] * 10 + [1.30], dtype=pl.Float64
@@ -175,7 +175,7 @@ def test_diagnose_ha_aki_criterion_one(
                 "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
                 "patient_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
-                "timestamp": pl.Series(["2025-01-04 06:00:00"], dtype=pl.Datetime),
+                "timestamp": pl.Series(["2025-01-07 12:00:00"], dtype=pl.Datetime),
                 "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
             },
         )

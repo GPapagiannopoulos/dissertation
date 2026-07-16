@@ -15,8 +15,9 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
             >=48h after admission. Patients who meet the criteria
             for AKI before that threshold are excluded.
         The definition includes changes to baseline creatinine.
-            We define this as the median measurement <=24h post
-            admission.
+            In the absence of outpatient data for the cohort indicating
+            the last healthy kidney function, we follow industry standard
+            and set this as the min of the last seven days.
     """
     sorted_labevents = (
         source.filter(pl.col("labevents/label") == "Creatinine")
@@ -29,28 +30,23 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
         .sort("hadm_id", "timestamp")
     )
 
-    marker_baseline_added = sorted_labevents.with_columns(
-        _start=pl.col("timestamp").min().over("hadm_id")
-    ).with_columns(
-        baseline=(
-            pl.col("labevents/valuenum")
-            .filter(pl.col("timestamp") <= pl.col("_start") + pl.duration(hours=24))
-            .median()
-            .over("hadm_id")
-        )
-    )
-
-    rolling_min = (
+    rolling_48h_min = (
         pl.col("labevents/valuenum")
         .rolling_min_by("timestamp", window_size="48h")
         .over("hadm_id")
     )
 
+    rolling_7d_min = (
+        pl.col("labevents/valuenum")
+        .rolling_min_by("timestamp", window_size="7d")
+        .over("hadm_id")
+    )
+
     result = (
-        marker_baseline_added.filter(
+        sorted_labevents.filter(
             pl.any_horizontal(
-                pl.col("labevents/valuenum") - rolling_min >= 0.3,
-                pl.col("labevents/valuenum") >= pl.col("baseline") * 1.5,
+                pl.col("labevents/valuenum") - rolling_48h_min >= 0.3,
+                pl.col("labevents/valuenum") >= rolling_7d_min * 1.5,
             )
         )
         .group_by("hadm_id", maintain_order=True)
