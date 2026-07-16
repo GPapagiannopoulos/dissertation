@@ -45,8 +45,9 @@ def make_timeline_source(make_source: Callable):
     """Factory for a PolarsEDASource shaped for timeline tests.
 
     Defaults to a valid cross-table admission (labevents + diagnoses_icd, all
-    hadm_id "24", ascending timestamps). Pass column=values to override only the
-    columns a case cares about.
+    hadm_id "24", ascending timestamps). The frame carries the canonical,
+    build-time-coalesced ``hadm_id`` column the method reads. Pass column=values
+    to override only the columns a case cares about.
     """
 
     def _make(**overrides: pl.Series) -> PolarsEDASource:
@@ -58,8 +59,7 @@ def make_timeline_source(make_source: Callable):
             "timestamp": pl.Series(
                 ["2025-01-01", "2025-01-02", "2025-01-03"], dtype=pl.Datetime
             ),
-            "labevents/hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
-            "diagnoses_icd/hadm_id": pl.Series([None, None, "24"], dtype=pl.String),
+            "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
         }
         frame.update(overrides)
         return make_source(**frame)

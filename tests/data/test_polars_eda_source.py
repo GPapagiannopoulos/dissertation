@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
-from polars.exceptions import ColumnNotFoundError, InvalidOperationError
+from polars.exceptions import ColumnNotFoundError
 from polars.testing import assert_frame_equal
 
 from thesis.data.eda_source import EmptyHistError, MixedUnitsError
@@ -782,7 +782,7 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
 @pytest.mark.parametrize(
     "hadm_id, overrides, expected_df_data",
     [
-        # 0. Cross table gather and coalesce behaviour (factory default)
+        # 0. Gathers all events for the admission (factory default)
         (
             "24",
             {},
@@ -800,7 +800,7 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
         # 1. Different hadm_ids get excluded
         (
             "24",
-            {"labevents/hadm_id": pl.Series(["24", "99", None], dtype=pl.String)},
+            {"hadm_id": pl.Series(["24", "99", "24"], dtype=pl.String)},
             {
                 "patient_id": pl.Series(["1", "1"], dtype=pl.String),
                 "hadm_id": pl.Series(["24", "24"], dtype=pl.String),
@@ -834,14 +834,14 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
                 ),
             },
         ),
-        # 3. Rows with no hadm_id are dropped
+        # 3. Rows with no hadm_id are excluded by the filter
         (
             "24",
             {
                 "event_type": pl.Series(
                     ["labevents", "labevents", "admissions"], dtype=pl.String
                 ),
-                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", None], dtype=pl.String),
             },
             {
                 "patient_id": pl.Series(["1", "1"], dtype=pl.String),
@@ -856,12 +856,11 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
                 "timestamp": pl.Series(["2025-01-01", "2025-01-02"], dtype=pl.Datetime),
             },
         ),
-        # 4. No hadm_id returns an empty df
+        # 4. No matching hadm_id returns an empty df
         (
             "24",
             {
-                "labevents/hadm_id": pl.Series([None, None, None], dtype=pl.String),
-                "diagnoses_icd/hadm_id": pl.Series([None, None, None], dtype=pl.String),
+                "hadm_id": pl.Series([None, None, None], dtype=pl.String),
             },
             {
                 "patient_id": pl.Series([], dtype=pl.String),
@@ -883,7 +882,7 @@ def test_polars_eda_numeric_histogram_raises_when_cohort_all_null(
                 "timestamp": pl.Series(
                     ["2025-01-01", "2025-01-01", "2025-01-01"], dtype=pl.Datetime
                 ),
-                "labevents/hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
+                "hadm_id": pl.Series(["24", "24", "24"], dtype=pl.String),
             },
             {
                 "patient_id": pl.Series(["1", "1", "1"], dtype=pl.String),
@@ -919,11 +918,9 @@ def test_polars_eda_get_admission_timeline_happy_path(
 def test_polars_eda_get_admission_timeline_raises_if_no_hadm_id(
     make_timeline_source: Callable,
 ) -> None:
-    """If there are no columns to coalesce to the method raises."""
-    source = make_timeline_source(drop=["labevents/hadm_id", "diagnoses_icd/hadm_id"])
-    with pytest.raises(
-        InvalidOperationError, match="expected at least 1 input in null.coalesce()"
-    ):
+    """If the canonical hadm_id column is absent the method raises."""
+    source = make_timeline_source(drop=["hadm_id"])
+    with pytest.raises(ColumnNotFoundError, match="hadm_id"):
         source.get_admission_timeline("24")
 
 
