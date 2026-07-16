@@ -172,7 +172,7 @@ def test_diagnose_ha_aki_criterion_one(
     source = labevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
     diagnosis = diagnose_hospital_acquired_aki(source)
-    assert_frame_equal(diagnosis, expected_lf)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
 
 
 @pytest.mark.parametrize(
@@ -273,4 +273,101 @@ def test_diagnose_ha_aki_criterion_two(
     source = labevents_lf(hour_step=hour_step, **overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
     diagnosis = diagnose_hospital_acquired_aki(source)
-    assert_frame_equal(diagnosis, expected_lf)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "overrides, expected_lf_data",
+    [
+        # 0. Onset >48h after admission is hospital-acquired and kept.
+        (
+            {
+                "labevents/valuenum": pl.Series(
+                    [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
+                ),
+                "admissions/admittime": pl.Series(
+                    ["2025-01-04 18:00:00"] * 14, dtype=pl.Datetime
+                ),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-07 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 1. Onset exactly 48h after admission is excluded (the gate is strict).
+        (
+            {
+                "labevents/valuenum": pl.Series(
+                    [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
+                ),
+                "admissions/admittime": pl.Series(
+                    ["2025-01-05 00:00:00"] * 14, dtype=pl.Datetime
+                ),
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 2. Onset within 48h of admission (community / present-on-admission)
+        #    excludes the whole admission.
+        (
+            {
+                "labevents/valuenum": pl.Series(
+                    [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
+                ),
+                "admissions/admittime": pl.Series(
+                    ["2025-01-06 00:00:00"] * 14, dtype=pl.Datetime
+                ),
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 3. Admittime is applied per hadm_id: one admission clears the gate,
+        #    the other is excluded.
+        (
+            {
+                "patient_id": ["1"] * 7 + ["2"] * 7,
+                "hadm_id": ["1"] * 7 + ["2"] * 7,
+                "labevents/valuenum": pl.Series(
+                    [1.25, 1.25, 1.25, 1.25, 1.25, 1.70, 1.25]
+                    + [1.25] * 5
+                    + [1.75, 1.25],
+                    dtype=pl.Float64,
+                ),
+                "admissions/admittime": pl.Series(
+                    ["2025-01-02 00:00:00"] * 7 + ["2025-01-01 00:00:00"] * 7,
+                    dtype=pl.Datetime,
+                ),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["2"], dtype=pl.String),
+                "hadm_id": pl.Series(["2"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-07 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+    ],
+)
+def test_diagnose_ha_aki_gate(
+    labevents_lf: Callable,
+    overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts the >=48h-post-admission gate for hospital-acquired AKI."""
+    source = labevents_lf(**overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    diagnosis = diagnose_hospital_acquired_aki(source)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)

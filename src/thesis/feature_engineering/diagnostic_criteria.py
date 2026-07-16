@@ -12,7 +12,7 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
 
     Notes:
         Hospital Acquired AKI (HA-AKI) is defined as having onset
-            >=48h after admission. Patients who meet the criteria
+            >48h after admission. Patients who meet the criteria
             for AKI before that threshold are excluded.
         The definition includes changes to baseline creatinine.
             In the absence of outpatient data for the cohort indicating
