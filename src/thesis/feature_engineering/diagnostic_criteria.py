@@ -28,6 +28,18 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
         )
         .sort("hadm_id", "timestamp")
     )
+
+    marker_baseline_added = sorted_labevents.with_columns(
+        _start=pl.col("timestamp").min().over("hadm_id")
+    ).with_columns(
+        baseline=(
+            pl.col("labevents/valuenum")
+            .filter(pl.col("timestamp") <= pl.col("_start") + pl.duration(hours=24))
+            .median()
+            .over("hadm_id")
+        )
+    )
+
     rolling_min = (
         pl.col("labevents/valuenum")
         .rolling_min_by("timestamp", window_size="48h")
@@ -35,7 +47,12 @@ def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
     )
 
     result = (
-        sorted_labevents.filter(pl.col("labevents/valuenum") - rolling_min >= 0.3)
+        marker_baseline_added.filter(
+            pl.any_horizontal(
+                pl.col("labevents/valuenum") - rolling_min >= 0.3,
+                pl.col("labevents/valuenum") >= pl.col("baseline") * 1.5,
+            )
+        )
         .group_by("hadm_id", maintain_order=True)
         .agg(pl.col("patient_id").first(), pl.col("timestamp").min().alias("timestamp"))
         .with_columns(
