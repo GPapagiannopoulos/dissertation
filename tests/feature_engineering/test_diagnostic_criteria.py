@@ -158,3 +158,37 @@ def test_diagnose_ha_aki_criterion_one(
     expected_lf = pl.LazyFrame(expected_lf_data)
     diagnosis = diagnose_hospital_acquired_aki(source)
     assert_frame_equal(diagnosis, expected_lf)
+
+
+@pytest.mark.parametrize(
+    "hour_step, overrides, expected_lf_data",
+    [
+        # 0. Identifies the median of the first 24h as baseline
+        (
+            6,
+            {
+                "labevents/valuenum": pl.Series(
+                    [0.85] * 3 + [1.10] * 10 + [1.30], dtype=pl.Float64
+                ),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-02 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        )
+    ],
+)
+def test_diagnose_ha_aki_criterion_two(
+    labevents_lf: Callable,
+    hour_step: int,
+    overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts normal behaviour for the second criterion."""
+    source = labevents_lf(hour_step=hour_step, **overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    diagnosis = diagnose_hospital_acquired_aki(source)
+    assert_frame_equal(diagnosis, expected_lf)
