@@ -146,6 +146,21 @@ Desired behaviour includes:
                 "diagnosis": pl.Series([], dtype=pl.String),
             },
         ),
+        # 8. If meets criteria in first 48h post admission, then not HA
+        (
+            {
+                "labevents/valuenum": pl.Series(
+                    [1.25, 2.00] + [1.25] * 12, dtype=pl.Float64
+                )
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_diagnose_ha_aki_criterion_one(
