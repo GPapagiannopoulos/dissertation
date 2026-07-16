@@ -163,7 +163,8 @@ def test_diagnose_ha_aki_criterion_one(
 @pytest.mark.parametrize(
     "hour_step, overrides, expected_lf_data",
     [
-        # 0. Identifies the median of the first 24h as baseline
+        # 0. Fires on a 1.5x rise off the 7d-min baseline that criterion one
+        #    misses (the low sits >48h before the rise).
         (
             12,
             {
@@ -178,7 +179,73 @@ def test_diagnose_ha_aki_criterion_one(
                 "timestamp": pl.Series(["2025-01-07 12:00:00"], dtype=pl.Datetime),
                 "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
             },
-        )
+        ),
+        # 1. With <7d of data the partial window still references the running
+        #    min, so the rise is detected.
+        (
+            6,
+            {
+                "labevents/valuenum": pl.Series(
+                    [0.80] * 2 + [1.00] * 11 + [1.25], dtype=pl.Float64
+                ),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-04 06:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 2. A low older than 7d has expired from the window and is not used as
+        #    baseline, so no 1.5x rise is registered (empty).
+        (
+            16,
+            {
+                "labevents/valuenum": pl.Series(
+                    [0.80] + [1.00] * 12 + [1.25], dtype=pl.Float64
+                ),
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 3. A value just above 1.5x baseline (ratio 1.5125) fires.
+        (
+            12,
+            {
+                "labevents/valuenum": pl.Series(
+                    [0.80] * 2 + [1.00] * 11 + [1.21], dtype=pl.Float64
+                ),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-07 12:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 4. A value just below 1.5x baseline (ratio 1.4875) does not fire.
+        (
+            12,
+            {
+                "labevents/valuenum": pl.Series(
+                    [0.80] * 2 + [1.00] * 11 + [1.19], dtype=pl.Float64
+                ),
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_diagnose_ha_aki_criterion_two(
