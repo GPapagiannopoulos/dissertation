@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     mimic4_ehr_d_icd_diagnoses: Path = Field(..., frozen=True)
     mimic4_ehr_d_hcpcs: Path = Field(..., frozen=True)
     mimic4_ehr_d_labitems: Path = Field(..., frozen=True)
+    mimic4_ehr_chartevents: Path = Field(..., frozen=True)
+    mimic4_ehr_outputevents: Path = Field(..., frozen=True)
+    mimic4_ehr_weight_parquet: Path = Field(..., frozen=True)
+    mimic4_ehr_urine_output_parquet: Path = Field(..., frozen=True)
     mimic4_ehr_dev_mode: bool = Field(default=True, frozen=True)
 
     @functools.cached_property
