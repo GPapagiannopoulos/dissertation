@@ -84,7 +84,7 @@ def outputevents_lf():
                 for i in range(6)
             ],
             "itemid": ["1"] * 6,
-            "valuenum": [100] * 6,
+            "valuenum": [100.0] * 6,
             "valueuom": ["mL"] * 6,
         }
         defaults.update(**overrides)

@@ -51,4 +51,16 @@ def normalize_weights(source: pl.LazyFrame) -> pl.LazyFrame:
 
 def net_urine(source: pl.LazyFrame) -> pl.LazyFrame:
     """Calculates the net urine output at a given charttime."""
-    pass
+    return (
+        source.drop_nulls()
+        .with_columns(
+            pl.when(
+                (pl.col("itemid") == "227488") & (pl.col("valuenum") > 0)
+            )  # accounting for irrigant
+            .then(pl.col("valuenum") * -1)
+            .otherwise(pl.col("valuenum"))
+        )
+        .group_by(["subject_id", "hadm_id", "charttime"])
+        .agg(pl.col("valuenum").sum())
+        .sort(["subject_id", "hadm_id", "charttime"])
+    )
