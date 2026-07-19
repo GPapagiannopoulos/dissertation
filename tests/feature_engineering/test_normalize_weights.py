@@ -80,6 +80,20 @@ from thesis.feature_engineering.urine_output import normalize_weights
                 "valuenum": [90.627756] * 6,
             },
         ),
+        # 4. Weight not converted unless specific itemid
+        (
+            {"itemid": ["224639"] * 6},
+            {
+                "subject_id": ["1"] * 6,
+                "hadm_id": ["1"] * 6,
+                "stay_id": ["1"] * 6,
+                "charttime": [
+                    datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                    for i in range(6)
+                ],
+                "valuenum": [199.8] + [90.627756] * 5,
+            },
+        ),
     ],
 )
 def test_normalize_weights_happy_path(
