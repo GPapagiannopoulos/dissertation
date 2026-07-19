@@ -16,5 +16,5 @@ def normalize_weights(source: pl.LazyFrame) -> pl.LazyFrame:
             .otherwise(pl.col("valuenum"))
         )
         .drop(["itemid", "valueuom"])
-        .sort("subject_id")
+        .sort(["subject_id", "hadm_id"])
     )
