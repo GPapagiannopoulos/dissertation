@@ -102,7 +102,23 @@ def test_normalize_weights_happy_path(
     expected_lf_data: dict[str, pl.Series],
 ) -> None:
     """Asserts expected behaviour for the helper function."""
-    source = chartevents_lf(**overrides)
+    source = chartevents_lf([], **overrides)
     source = normalize_weights(source)
     expected = pl.LazyFrame(expected_lf_data)
     assert_frame_equal(source, expected)
+
+
+@pytest.mark.parametrize(
+    "drop",
+    [
+        # 0. itemid
+        ["itemid"]
+    ],
+)
+def test_normalize_weights_raises_if_missing_col(
+    chartevents_lf: Callable, drop: list[str]
+) -> None:
+    """Asserts guard behaviour against missing core cols."""
+    with pytest.raises(KeyError, match=f"'{drop[0]}' is missing."):
+        source = chartevents_lf(drop)
+        normalize_weights(source)
