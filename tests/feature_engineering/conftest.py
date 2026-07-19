@@ -68,3 +68,26 @@ def chartevents_lf():
         return pl.LazyFrame(defaults)
 
     return _build
+
+
+@pytest.fixture
+def outputevents_lf():
+    """Factory for creating a valid output events LazyFrame with overrides."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"] * 6,
+            "hadm_id": ["1"] * 6,
+            "stay_id": ["1"] * 6,
+            "charttime": [
+                datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                for i in range(6)
+            ],
+            "itemid": ["1"] * 6,
+            "valuenum": [100] * 6,
+            "valueuom": ["mL"] * 6,
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build
