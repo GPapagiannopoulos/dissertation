@@ -46,7 +46,9 @@ def labevents_lf():
 def chartevents_lf():
     """Factory for creating a valid chartevents LazyFrame with overrides."""
 
-    def _build(drop: list[str], **overrides: dict[str, list]) -> pl.LazyFrame:
+    def _build(
+        drop: list[str] | None = None, **overrides: dict[str, list]
+    ) -> pl.LazyFrame:
         defaults = {
             "subject_id": ["1"] * 6,
             "hadm_id": ["1"] * 6,
@@ -60,8 +62,9 @@ def chartevents_lf():
             "valueuom": [""] + ["kg"] * 5,
         }
         defaults.update(**overrides)
-        for col in drop:
-            defaults.pop(col, None)
+        if drop:
+            for col in drop:
+                defaults.pop(col, None)
         return pl.LazyFrame(defaults)
 
     return _build
