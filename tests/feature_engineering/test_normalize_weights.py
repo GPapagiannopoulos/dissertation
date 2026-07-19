@@ -7,6 +7,8 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
+from thesis.feature_engineering.urine_output import normalize_weights
+
 
 @pytest.mark.parametrize(
     "overrides, expected_lf_data",
@@ -34,5 +36,6 @@ def test_normalize_weights_happy_path(
 ) -> None:
     """Asserts expected behaviour for the helper function."""
     source = chartevents_lf(**overrides)
+    source = normalize_weights(source)
     expected = pl.LazyFrame(expected_lf_data)
     assert_frame_equal(source, expected)

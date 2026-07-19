@@ -55,7 +55,7 @@ def chartevents_lf():
                 datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
                 for i in range(6)
             ],
-            "itemid": [226531] + [224639] * 5,
+            "itemid": ["226531"] + ["224639"] * 5,
             "valuenum": [199.8] + [90.627756] * 5,
             "valueuom": [""] + ["kg"] * 5,
         }
