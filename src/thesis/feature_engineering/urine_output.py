@@ -47,3 +47,8 @@ def normalize_weights(source: pl.LazyFrame) -> pl.LazyFrame:
         .drop(["itemid", "valueuom"])
         .sort(["subject_id", "hadm_id", "charttime"])
     )
+
+
+def net_urine(source: pl.LazyFrame) -> pl.LazyFrame:
+    """Calculates the net urine output at a given charttime."""
+    pass
