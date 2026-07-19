@@ -51,7 +51,7 @@ def chartevents_lf():
             "subject_id": ["1"] * 6,
             "hadm_id": ["1"] * 6,
             "stay_id": ["1"] * 6,
-            "charttiime": [
+            "charttime": [
                 datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
                 for i in range(6)
             ],

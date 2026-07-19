@@ -20,7 +20,7 @@ from thesis.feature_engineering.urine_output import normalize_weights
                 "subject_id": ["1"] * 6,
                 "hadm_id": ["1"] * 6,
                 "stay_id": ["1"] * 6,
-                "charttiime": [
+                "charttime": [
                     datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
                     for i in range(6)
                 ],
@@ -31,13 +31,13 @@ from thesis.feature_engineering.urine_output import normalize_weights
         (
             {
                 "subject_id": ["2"] * 3 + ["1"] * 3,
-                "charttiime": [datetime.datetime(2025, 1, 1, 0)] * 6,
+                "charttime": [datetime.datetime(2025, 1, 1, 0)] * 6,
             },
             {
                 "subject_id": ["1"] * 3 + ["2"] * 3,
                 "hadm_id": ["1"] * 6,
                 "stay_id": ["1"] * 6,
-                "charttiime": [datetime.datetime(2025, 1, 1, 0)] * 6,
+                "charttime": [datetime.datetime(2025, 1, 1, 0)] * 6,
                 "valuenum": [90.627756] * 6,
             },
         ),
@@ -46,13 +46,37 @@ from thesis.feature_engineering.urine_output import normalize_weights
             {
                 "subject_id": ["2"] * 3 + ["1"] * 3,
                 "hadm_id": ["3", "2", "1"] * 2,
-                "charttiime": [datetime.datetime(2025, 1, 1, 0)] * 6,
+                "charttime": [datetime.datetime(2025, 1, 1, 0)] * 6,
             },
             {
                 "subject_id": ["1"] * 3 + ["2"] * 3,
                 "hadm_id": ["1", "2", "3"] * 2,
                 "stay_id": ["1"] * 6,
-                "charttiime": [datetime.datetime(2025, 1, 1, 0)] * 6,
+                "charttime": [datetime.datetime(2025, 1, 1, 0)] * 6,
+                "valuenum": [90.627756] * 6,
+            },
+        ),
+        # 3. Output is finally sorted by datetime
+        (
+            {
+                "subject_id": ["2"] * 3 + ["1"] * 3,
+                "charttime": [
+                    datetime.datetime(2025, 1, 1, 4),
+                    datetime.datetime(2025, 1, 1, 0),
+                    datetime.datetime(2025, 1, 1, 8),
+                ]
+                * 2,
+            },
+            {
+                "subject_id": ["1"] * 3 + ["2"] * 3,
+                "hadm_id": ["1"] * 6,
+                "stay_id": ["1"] * 6,
+                "charttime": [
+                    datetime.datetime(2025, 1, 1, 0),
+                    datetime.datetime(2025, 1, 1, 4),
+                    datetime.datetime(2025, 1, 1, 8),
+                ]
+                * 2,
                 "valuenum": [90.627756] * 6,
             },
         ),
