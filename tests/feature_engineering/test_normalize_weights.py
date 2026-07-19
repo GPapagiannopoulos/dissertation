@@ -112,7 +112,15 @@ def test_normalize_weights_happy_path(
     "drop",
     [
         # 0. itemid
-        ["itemid"]
+        ["itemid"],
+        # 1. hadm_id
+        ["hadm_id"],
+        # 2. subject_id
+        ["subject_id"],
+        # 3. charrtime
+        ["charttime"],
+        # 4. valuenum
+        ["valuenum"],
     ],
 )
 def test_normalize_weights_raises_if_missing_col(
