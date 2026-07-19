@@ -91,3 +91,42 @@ def outputevents_lf():
         return pl.LazyFrame(defaults)
 
     return _build
+
+
+@pytest.fixture
+def net_urine_frame():
+    """Factory for a net-urine-shaped LazyFrame (a ``net_urine`` output)."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"] * 4,
+            "hadm_id": ["1"] * 4,
+            "stay_id": ["1"] * 4,
+            "charttime": [
+                datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                for i in range(4)
+            ],
+            "valuenum": [30.0] * 4,
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build
+
+
+@pytest.fixture
+def weight_frame():
+    """Factory for a normalized-weight LazyFrame (a ``normalize_weights`` output)."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"],
+            "hadm_id": ["1"],
+            "stay_id": ["1"],
+            "charttime": [datetime.datetime(2025, 1, 1, 0)],
+            "valuenum": [60.0],
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build
