@@ -40,3 +40,93 @@ def labevents_lf():
         return pl.LazyFrame(defaults)
 
     return _build
+
+
+@pytest.fixture
+def chartevents_lf():
+    """Factory for creating a valid chartevents LazyFrame with overrides."""
+
+    def _build(
+        drop: list[str] | None = None, **overrides: dict[str, list]
+    ) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"] * 6,
+            "hadm_id": ["1"] * 6,
+            "stay_id": ["1"] * 6,
+            "charttime": [
+                datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                for i in range(6)
+            ],
+            "itemid": ["226531"] + ["224639"] * 5,
+            "valuenum": [199.8] + [90.627756] * 5,
+            "valueuom": [""] + ["kg"] * 5,
+        }
+        defaults.update(**overrides)
+        if drop:
+            for col in drop:
+                defaults.pop(col, None)
+        return pl.LazyFrame(defaults)
+
+    return _build
+
+
+@pytest.fixture
+def outputevents_lf():
+    """Factory for creating a valid output events LazyFrame with overrides."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"] * 6,
+            "hadm_id": ["1"] * 6,
+            "stay_id": ["1"] * 6,
+            "charttime": [
+                datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                for i in range(6)
+            ],
+            "itemid": ["1"] * 6,
+            "valuenum": [100.0] * 6,
+            "valueuom": ["mL"] * 6,
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build
+
+
+@pytest.fixture
+def net_urine_frame():
+    """Factory for a net-urine-shaped LazyFrame (a ``net_urine`` output)."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"] * 4,
+            "hadm_id": ["1"] * 4,
+            "stay_id": ["1"] * 4,
+            "charttime": [
+                datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
+                for i in range(4)
+            ],
+            "valuenum": [30.0] * 4,
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build
+
+
+@pytest.fixture
+def weight_frame():
+    """Factory for a normalized-weight LazyFrame (a ``normalize_weights`` output)."""
+
+    def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": ["1"],
+            "hadm_id": ["1"],
+            "stay_id": ["1"],
+            "charttime": [datetime.datetime(2025, 1, 1, 0)],
+            "valuenum": [60.0],
+        }
+        defaults.update(**overrides)
+        return pl.LazyFrame(defaults)
+
+    return _build

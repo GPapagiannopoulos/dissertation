@@ -3,7 +3,9 @@
 import polars as pl
 
 
-def diagnose_hospital_acquired_aki(source: pl.LazyFrame) -> pl.LazyFrame:
+def diagnose_hospital_acquired_aki(
+    source: pl.LazyFrame, uo_data: pl.LazyFrame | None = None
+) -> pl.LazyFrame:
     """Identifies admissions where the patient developed AKI.
 
     This function uses the KDIGO definition criteria to identify
