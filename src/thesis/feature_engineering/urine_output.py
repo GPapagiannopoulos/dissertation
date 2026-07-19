@@ -25,6 +25,7 @@ def normalize_weights(source: pl.LazyFrame) -> pl.LazyFrame:
     necessary_cols: Final[list[str]] = [
         "subject_id",
         "hadm_id",
+        "stay_id",
         "itemid",
         "charttime",
         "valuenum",
@@ -45,12 +46,45 @@ def normalize_weights(source: pl.LazyFrame) -> pl.LazyFrame:
             .otherwise(pl.col("valuenum"))
         )
         .drop(["itemid", "valueuom"])
-        .sort(["subject_id", "hadm_id", "charttime"])
+        .sort(["subject_id", "hadm_id", "stay_id", "charttime"])
     )
 
 
 def net_urine(source: pl.LazyFrame) -> pl.LazyFrame:
-    """Calculates the net urine output at a given charttime."""
+    """Calculates the net urine output at a given charttime.
+
+    GU irrigant instilled (itemid 227488) is subtracted from the measured
+    output so bladder-irrigation volumes are not counted as urine.
+
+    Args:
+        source (pl.LazyFrame): a lazyframe with the loaded urine output data.
+
+    Returns:
+        pl.LazyFrame: net urine per (subject, admission, stay, charttime),
+            sorted by those keys.
+
+    Raises:
+         KeyError: if core fields are missing from the lazyframe
+         ValueError: if core fields are the wrong dtype preventing processing
+    """
+    schema = source.collect_schema()
+    necessary_cols: Final[list[str]] = [
+        "subject_id",
+        "hadm_id",
+        "stay_id",
+        "itemid",
+        "charttime",
+        "valuenum",
+    ]
+    for col in necessary_cols:
+        dtype = schema.get(col, None)
+        if not dtype:
+            raise KeyError(f"'{col}' is missing.")
+        if col == "charttime" and dtype != pl.Datetime:
+            raise ValueError(f"'charttime' needs to be a Datetime field,not {dtype}.")
+        if col == "valuenum" and not dtype.is_numeric():
+            raise ValueError(f"'valuenum' needs to be a numeric field, not {dtype}.")
+
     return (
         source.drop_nulls()
         .with_columns(
@@ -60,7 +94,12 @@ def net_urine(source: pl.LazyFrame) -> pl.LazyFrame:
             .then(pl.col("valuenum") * -1)
             .otherwise(pl.col("valuenum"))
         )
-        .group_by(["subject_id", "hadm_id", "charttime"])
+        .group_by(["subject_id", "hadm_id", "stay_id", "charttime"])
         .agg(pl.col("valuenum").sum())
-        .sort(["subject_id", "hadm_id", "charttime"])
+        .sort(["subject_id", "hadm_id", "stay_id", "charttime"])
     )
+
+
+def urine_rate(source: pl.LazyFrame) -> pl.LazyFrame:
+    """Calculates the rate of urine output per kg."""
+    pass
