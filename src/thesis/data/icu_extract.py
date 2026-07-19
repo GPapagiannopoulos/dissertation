@@ -109,9 +109,9 @@ def extract_itemids(
 
     wanted = list(itemids)
     kept: list[pl.DataFrame] = [
-        pl.from_arrow(pa.Table.from_batches([batch]))
-        .filter(pl.col("itemid").is_in(wanted))
-        .to_frame()
+        pl.from_arrow(pa.Table.from_batches([batch])).filter(
+            pl.col("itemid").is_in(wanted)
+        )
         for batch in reader
     ]
 
