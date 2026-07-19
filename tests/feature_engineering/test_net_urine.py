@@ -23,6 +23,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "stay_id": pl.Series(["1"], dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)], dtype=pl.Datetime
                 ),
@@ -40,6 +41,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1", "2"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"] * 2, dtype=pl.String),
+                "stay_id": pl.Series(["1"] * 2, dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)] * 2, dtype=pl.Datetime
                 ),
@@ -57,6 +59,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1"] * 2, dtype=pl.String),
                 "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+                "stay_id": pl.Series(["1"] * 2, dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)] * 2, dtype=pl.Datetime
                 ),
@@ -69,6 +72,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": ["1"] * 6,
                 "hadm_id": ["1"] * 6,
+                "stay_id": ["1"] * 6,
                 "charttime": [
                     datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
                     for i in range(6)
@@ -89,6 +93,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "stay_id": pl.Series(["1"], dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)], dtype=pl.Datetime
                 ),
@@ -120,6 +125,7 @@ from thesis.feature_engineering.urine_output import net_urine
                     ["1", "1", "1", "1", "2", "2"], dtype=pl.String
                 ),
                 "hadm_id": pl.Series(["1", "1", "2", "2", "1", "1"], dtype=pl.String),
+                "stay_id": pl.Series(["1"] * 6, dtype=pl.String),
                 "charttime": pl.Series(
                     [
                         datetime.datetime(2025, 1, 1, 0),
@@ -146,6 +152,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "stay_id": pl.Series(["1"], dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)], dtype=pl.Datetime
                 ),
@@ -164,6 +171,7 @@ from thesis.feature_engineering.urine_output import net_urine
             {
                 "subject_id": pl.Series(["1"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "stay_id": pl.Series(["1"], dtype=pl.String),
                 "charttime": pl.Series(
                     [datetime.datetime(2025, 1, 1, 0)], dtype=pl.Datetime
                 ),
@@ -181,3 +189,21 @@ def test_net_urine_happy_path(
     source = outputevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
     assert_frame_equal(net_urine(source), expected_lf)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # 0. charttime isn't datetime
+        {"charttime": pl.Series(["2025-01-01 00:00:00"] * 6, dtype=pl.String)},
+        # 1. valuenum isn't numeric
+        {"valuenum": pl.Series(["1"] * 6, dtype=pl.String)},
+    ],
+)
+def test_net_urine_raises_if_wrong_dtype(
+    outputevents_lf: Callable, overrides: dict[str, pl.Series]
+) -> None:
+    """Asserts guard behaviour against wrong dtypes."""
+    with pytest.raises(ValueError):
+        source = outputevents_lf(**overrides)
+        net_urine(source)
