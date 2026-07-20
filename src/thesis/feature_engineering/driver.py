@@ -16,7 +16,7 @@ from .urine_output import calculate_urine_output_rate, net_urine, normalize_weig
 _ID_COLUMNS: Final[list[str]] = ["subject_id", "hadm_id", "stay_id", "itemid"]
 
 
-def load_uo_data() -> pl.LazyFrame:
+def _load_uo_data() -> pl.LazyFrame:
     """Loads and transforms the weight and urine parquets into a rate frame.
 
     Scans the derived weight and urine-output parquets, casts their integer
@@ -46,9 +46,40 @@ def load_uo_data() -> pl.LazyFrame:
     ).rename({"subject_id": "patient_id"})
 
 
+def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
+    """Applies the diagnostic criteria functions to the base dataset.
+
+    Produces a small LazyFrame that contains the diagnosis_made events
+    in accordance to the diagnostic_criteria functions.
+
+    Args:
+        source (pl.LazyFrame): a LazyFrame containing the base dataset.
+
+    Returns:
+        pl.LazyFrame: a LazyFrame containing the vertically concatenated
+            diagnoses events at admission level.
+    """
+    diagnoses_frames: list[pl.LazyFrame] = []
+    complete_diagnosis_frames: pl.LazyFrame = pl.LazyFrame(
+        {
+            "event_type": pl.Series([], dtype=pl.String),
+            "patient_id": pl.Series([], dtype=pl.String),
+            "hadm_id": pl.Series([], dtype=pl.String),
+            "timestamp": pl.Series([], dtype=pl.Datetime),
+            "diagnosis_made/diagnosis": pl.Series([], dtype=pl.String),
+        }
+    )
+    diagnoses_frames.append(complete_diagnosis_frames)
+
+    uo_rate_data = _load_uo_data()
+    ha_aki_diagnoses_lf = diagnose_hospital_acquired_aki(source, uo_rate_data).rename(
+        {"diagnosis": "diagnosis_made/diagnosis"}
+    )
+    diagnoses_frames.append(ha_aki_diagnoses_lf)
+
+    return pl.concat(diagnoses_frames, how="vertical", parallel=True)
+
+
 def driver() -> pl.LazyFrame:
     """Initiates the diagnostic pipeline."""
-    uo_rate_data = load_uo_data()
-    source = pl.scan_parquet(ensure_event_cache())
-
-    return diagnose_hospital_acquired_aki(source, uo_rate_data)
+    return diagnose_all(pl.scan_parquet(ensure_event_cache()))
