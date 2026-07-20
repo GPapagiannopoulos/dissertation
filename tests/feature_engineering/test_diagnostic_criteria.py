@@ -293,6 +293,49 @@ def test_diagnose_ha_aki_criterion_two(
 @pytest.mark.parametrize(
     "overrides, expected_lf_data",
     [
+        # 0. Single patient, admission, correct rate and window
+        (
+            {},
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        )
+    ],
+)
+def test_diagnose_ha_aki_criterion_three(
+    uo_arm_frame: Callable,
+    overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts normal behaviour for the third criterion."""
+    source = uo_arm_frame(**overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    null_cr_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series(["1"], dtype=pl.String),
+            "hadm_id": pl.Series(["1"], dtype=pl.String),
+            "event_type": pl.Series([None], dtype=pl.String),
+            "timestamp": pl.Series([None], dtype=pl.Datetime),
+            "labevents/label": pl.Series([None], dtype=pl.String),
+            "labevents/valuenum": pl.Series([None], dtype=pl.Float64),
+            "labevents/valueuom": pl.Series([None], dtype=pl.String),
+            "admissions/admittime": pl.Series(
+                ["2024-12-28 00:00:00"],  # ensuring the gate doesn't apply
+                dtype=pl.Datetime,
+            ),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(null_cr_data, source)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "overrides, expected_lf_data",
+    [
         # 0. Onset >48h after admission is hospital-acquired and kept.
         (
             {
