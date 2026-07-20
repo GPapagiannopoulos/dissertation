@@ -8,23 +8,29 @@ import pytest
 
 @pytest.fixture
 def labevents_lf():
-    """Factory for creating a valid LazyFrame with overrides."""
+    """Factory for a real-substrate-shaped hospital-acquired AKI source.
+
+    Mirrors the enriched event substrate: creatinine ``labevents`` rows plus one
+    ``admissions`` event row per admission. There is no ``admissions/admittime``
+    column in the real frame — admittime is the ``timestamp`` of the admissions
+    event, so the gate derives it from those rows. ``admittime`` sets that value,
+    either a single value applied to every admission or a ``{hadm_id: admittime}``
+    mapping.
+    """
 
     def _build(
-        drop: tuple[str, ...] = (), hour_step: int = 12, **overrides: list
+        drop: tuple[str, ...] = (),
+        hour_step: int = 12,
+        admittime: str | dict[str, str] = "2025-01-01 00:00:00",
+        **overrides: list,
     ) -> pl.LazyFrame:
-        defaults = {
+        labevents = {
             "patient_id": ["1"] * 14,
             "hadm_id": ["1"] * 14,
             "event_type": ["labevents"] * 14,
             "timestamp": [
                 (
-                    datetime.datetime(
-                        2025,
-                        1,
-                        1,
-                        0,
-                    )
+                    datetime.datetime(2025, 1, 1, 0)
                     + datetime.timedelta(hours=i * hour_step)
                 )
                 for i in range(14)
@@ -32,12 +38,33 @@ def labevents_lf():
             "labevents/label": ["Creatinine"] * 14,
             "labevents/valuenum": [1.25] * 14,
             "labevents/valueuom": ["mg/dL"] * 14,
-            "admissions/admittime": [datetime.datetime(2025, 1, 1, 0)] * 14,
         }
-        defaults.update(overrides)
+        labevents.update(overrides)
         for col in drop:
-            defaults.pop(col, None)
-        return pl.LazyFrame(defaults)
+            labevents.pop(col, None)
+        labevents_frame = pl.LazyFrame(labevents)
+
+        admissions = list(
+            dict.fromkeys(
+                zip(labevents["patient_id"], labevents["hadm_id"], strict=True)
+            )
+        )
+        admissions_frame = pl.LazyFrame(
+            {
+                "patient_id": [patient for patient, _ in admissions],
+                "hadm_id": [hadm for _, hadm in admissions],
+                "event_type": ["admissions"] * len(admissions),
+                "timestamp": pl.Series(
+                    [
+                        admittime[hadm] if isinstance(admittime, dict) else admittime
+                        for _, hadm in admissions
+                    ],
+                    dtype=pl.Datetime,
+                ),
+            }
+        )
+
+        return pl.concat([labevents_frame, admissions_frame], how="diagonal")
 
     return _build
 
