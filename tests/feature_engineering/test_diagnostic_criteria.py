@@ -374,6 +374,20 @@ def test_diagnose_ha_aki_criterion_two(
                 "diagnosis": pl.Series(["Acute Kidney Injury"] * 2, dtype=pl.String),
             },
         ),
+        # 7. 'None' values are excluded
+        (
+            {
+                "patient_id": pl.Series([None] * 2 + ["2"] * 2, dtype=pl.String),
+                "hadm_id": pl.Series([None] * 2 + ["1"] * 2),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 02:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_diagnose_ha_aki_criterion_three(
