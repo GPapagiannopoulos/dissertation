@@ -152,7 +152,10 @@ def calculate_urine_output_rate(
 
     For each measurement the net urine over the trailing KDIGO oliguria
     window is summed per ICU stay and divided by the patient's weight and
-    the observed span of that window, giving a rate in mL/kg/h.
+    the observed span of that window, giving a rate in mL/kg/h. It is summed
+    over stay_id as opposed to hadm_id because outputevents is ICU-scoped.
+    This means that an admission with a 'bounce-back' (ICU->ward->ICU again)
+    would have a discontinuity in measurements masked.
 
     The denominator is the *observed* span of the window (current
     ``charttime`` minus the earliest ``charttime`` still inside it), not a
@@ -177,12 +180,20 @@ def calculate_urine_output_rate(
     )
 
     window_volume = (
-        pl.col("valuenum").rolling_sum_by("charttime", AKI_UO_WINDOW).over("stay_id")
+        pl.col("valuenum")
+        .rolling_sum_by("charttime", AKI_UO_WINDOW, closed="both")
+        .over("stay_id")
     )
     window_start = (
-        pl.col("charttime").rolling_min_by("charttime", AKI_UO_WINDOW).over("stay_id")
+        pl.col("charttime")
+        .rolling_min_by("charttime", AKI_UO_WINDOW, closed="both")
+        .over("stay_id")
     )
-    n_events = pl.col("_one").rolling_sum_by("charttime", AKI_UO_WINDOW).over("stay_id")
+    n_events = (
+        pl.col("_one")
+        .rolling_sum_by("charttime", AKI_UO_WINDOW, closed="both")
+        .over("stay_id")
+    )
 
     return (
         combined.with_columns(_one=pl.lit(1, dtype=pl.UInt32))
