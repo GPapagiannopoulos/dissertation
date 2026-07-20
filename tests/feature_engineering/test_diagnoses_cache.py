@@ -82,3 +82,21 @@ def test_fingerprint_embeds_base_sidecar(
     assert _fingerprint(base_sidecar_path, [weight_data_path, uo_data_path])[
         "base"
     ] == {"version": 2, "manifest": "abc"}
+
+
+def test_fingerprint_embeds_uo_metadata(
+    make_uo_file: Callable, make_base_sidecar: Callable
+) -> None:
+    """Asserts that metadata is embedded by _fingerprint."""
+    weight_data_path = make_uo_file("weight_data", "mock data")
+    uo_data_path = make_uo_file("uo_data", "mock data")
+    base_sidecar_path = make_base_sidecar({"version": 2, "manifest": "abc"})
+
+    assert (
+        len(
+            _fingerprint(base_sidecar_path, [weight_data_path, uo_data_path])[
+                "uo_sources"
+            ]
+        )
+        == 2
+    )

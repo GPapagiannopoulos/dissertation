@@ -13,4 +13,7 @@ def _fingerprint(base_sidecar_path: Path, uo_sources: list[Path]) -> dict:
     return {
         "enrich_version": ENRICH_VERSION,
         "base": json.loads(base_sidecar_path.read_text()),
+        "uo_sources": sorted(
+            [[p.name, p.stat().st_size, p.stat().st_mtime_ns] for p in uo_sources]
+        ),
     }
