@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from thesis.feature_engineering import diagnoses_cache
 from thesis.feature_engineering.diagnoses_cache import ENRICH_VERSION, _fingerprint
 
 
@@ -100,3 +101,75 @@ def test_fingerprint_embeds_uo_metadata(
         )
         == 2
     )
+
+
+def _mutate_base_sidecar(
+    make_uo_file: Callable, make_base_sidecar: Callable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overwrites the base sidecar with different JSON (a base rebuild)."""
+    make_base_sidecar({"version": 999})
+
+
+def _mutate_uo_source(
+    make_uo_file: Callable, make_base_sidecar: Callable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Grows a UO source file so its st_size changes (re-derived data)."""
+    make_uo_file("weight_data", "mock data with many more bytes")
+
+
+def _mutate_enrich_version(
+    make_uo_file: Callable, make_base_sidecar: Callable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bumps the module-level ENRICH_VERSION (a diagnosis-logic change)."""
+    monkeypatch.setattr(diagnoses_cache, "ENRICH_VERSION", 999)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [_mutate_base_sidecar, _mutate_uo_source, _mutate_enrich_version],
+    ids=["base_sidecar_changed", "uo_source_grew", "enrich_version_bumped"],
+)
+def test_fingerprint_detects_staleness(
+    make_uo_file: Callable,
+    make_base_sidecar: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    mutate: Callable,
+) -> None:
+    """Asserts any tracked input changing produces a different fingerprint."""
+    weight_data_path = make_uo_file("weight_data", "mock data")
+    uo_data_path = make_uo_file("uo_data", "mock data")
+    base_sidecar_path = make_base_sidecar({"version": 2, "manifest": "abc"})
+    uo_sources = [weight_data_path, uo_data_path]
+
+    fingerprint_before = _fingerprint(base_sidecar_path, uo_sources)
+    mutate(make_uo_file, make_base_sidecar, monkeypatch)
+    fingerprint_after = _fingerprint(base_sidecar_path, uo_sources)
+
+    assert fingerprint_before != fingerprint_after
+
+
+def test_fingerprint_stable_when_unchanged(
+    make_uo_file: Callable, make_base_sidecar: Callable
+) -> None:
+    """Asserts an unchanged cache recomputes to an identical fingerprint."""
+    weight_data_path = make_uo_file("weight_data", "mock data")
+    uo_data_path = make_uo_file("uo_data", "mock data")
+    base_sidecar_path = make_base_sidecar({"version": 2, "manifest": "abc"})
+    uo_sources = [weight_data_path, uo_data_path]
+
+    assert _fingerprint(base_sidecar_path, uo_sources) == _fingerprint(
+        base_sidecar_path, uo_sources
+    )
+
+
+def test_fingerprint_survives_json_round_trip(
+    make_uo_file: Callable, make_base_sidecar: Callable
+) -> None:
+    """Asserts the fingerprint equals its own JSON round-trip."""
+    weight_data_path = make_uo_file("weight_data", "mock data")
+    uo_data_path = make_uo_file("uo_data", "mock data")
+    base_sidecar_path = make_base_sidecar({"version": 2, "manifest": "abc"})
+
+    fingerprint = _fingerprint(base_sidecar_path, [weight_data_path, uo_data_path])
+
+    assert fingerprint == json.loads(json.dumps(fingerprint))
