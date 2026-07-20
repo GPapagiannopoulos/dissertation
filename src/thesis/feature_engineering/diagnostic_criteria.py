@@ -22,9 +22,9 @@ def diagnose_hospital_acquired_aki(
             and set this as the min of the last seven days.
     """
     gate = (
-        source.select("hadm_id", "admissions/admittime")
+        source.filter(pl.col("event_type") == "admissions")
         .group_by(pl.col("hadm_id"))
-        .agg(pl.col("admissions/admittime").min().alias("admittime"))
+        .agg(pl.col("timestamp").min().alias("admittime"))
         .with_columns((pl.col("admittime") + pl.duration(hours=48)).alias("gate"))
     )
 

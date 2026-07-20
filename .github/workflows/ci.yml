@@ -16,3 +16,13 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+        env:
+          MIMIC4_EHR_DATA_PATH: unused
+          MIMIC4_EHR_D_ICD_PROCEDURES: unused
+          MIMIC4_EHR_D_ICD_DIAGNOSES: unused
+          MIMIC4_EHR_D_HCPCS: unused
+          MIMIC4_EHR_D_LABITEMS: unused
+          MIMIC4_EHR_CHARTEVENTS: unused
+          MIMIC4_EHR_OUTPUTEVENTS: unused
+          MIMIC4_EHR_WEIGHT_PARQUET: unused
+          MIMIC4_EHR_URINE_OUTPUT_PARQUET: unused

@@ -14,7 +14,8 @@ from thesis.config import settings
 from thesis.data.normalize import build_event_pipeline
 
 # Bump when the transform pipeline in thesis.data.normalize changes
-CACHE_VERSION: Final[int] = 2
+# Parsing the bytes of the repository was thought excessive
+CACHE_VERSION: Final[int] = 3
 
 
 def _fingerprint(pyhealth_cache_dir: Path) -> dict:
@@ -51,7 +52,7 @@ def _fingerprint(pyhealth_cache_dir: Path) -> dict:
     }
 
 
-def _sink_atomic(lf: pl.LazyFrame, out: Path) -> None:
+def sink_atomic(lf: pl.LazyFrame, out: Path) -> None:
     """Sinks a single lazyframe into a parquet file.
 
     Uses the streaming engine to sink a parquet file. The file is marked
@@ -74,10 +75,10 @@ def sink_global_event_frame(ds: MIMIC4Dataset, out: Path) -> None:
     part_paths: list[Path] = []
     for table in settings.mimic4_ehr_tables:
         part = parts_dir / f"{table}.parquet"
-        _sink_atomic(build_event_pipeline(ds, table), part)
+        sink_atomic(build_event_pipeline(ds, table), part)
         part_paths.append(part)
 
-    _sink_atomic(
+    sink_atomic(
         pl.concat([pl.scan_parquet(p) for p in part_paths], how="diagonal"), out
     )
     shutil.rmtree(parts_dir)
