@@ -79,9 +79,10 @@ def build_event_pipeline(ds: MIMIC4Dataset, event_type: str) -> pl.LazyFrame:
             lf, settings.mimic4_ehr_d_labitems, event_type
         )
 
-    hadm_selector = pl.selectors.ends_with("/hadm_id")
-    lf = lf.with_columns(pl.coalesce(hadm_selector).alias("hadm_id")).drop(
-        hadm_selector,
-    )
+    hadm_cols = [c for c in lf.collect_schema().name() if c.endswith("/hamd_id")]
+    if hadm_cols:
+        lf = lf.with_columns(pl.coalesce(hadm_cols).alias("hadm_id")).drop(
+            hadm_cols,
+        )
 
     return lf
