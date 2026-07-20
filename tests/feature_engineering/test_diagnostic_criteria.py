@@ -10,14 +10,6 @@ from thesis.feature_engineering.diagnostic_criteria import (
     diagnose_hospital_acquired_aki,
 )
 
-"""
-Desired behaviour includes:
-1) identifies a patient with increase in serum creatinine by
-26micromol/ 0.3mg within 48 hours
-2) increase in serum creatinine to >1.5x baseline in the last 7 days
-3) Urine volume <0.5mL/kg/hour - labevents/description == Urine Volume, Total
-"""
-
 
 @pytest.mark.parametrize(
     "overrides, expected_lf_data",
@@ -171,7 +163,18 @@ def test_diagnose_ha_aki_criterion_one(
     """Asserts normal behaviour of criterion one for aki diagnosis."""
     source = labevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
 
 
@@ -272,7 +275,280 @@ def test_diagnose_ha_aki_criterion_two(
     """Asserts normal behaviour for the second criterion."""
     source = labevents_lf(hour_step=hour_step, **overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "overrides, expected_lf_data",
+    [
+        # 0. Single patient, admission, correct rate and window
+        (
+            {},
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 1. Rate is too high
+        (
+            {"rate": pl.Series([0.5] * 4, dtype=pl.Float64)},
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 2. Rate is negative
+        (
+            {"rate": pl.Series([-0.1] * 4, dtype=pl.Float64)},
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 3. Time window is too small
+        (
+            {"window_hours": pl.Series([4] * 4)},
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 4. Selects the first entry to fulfill the criteria
+        (
+            {"rate": pl.Series([0.5] * 3 + [0.2], dtype=pl.Float64)},
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 03:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 5. Groups by patient_id
+        (
+            {"patient_id": pl.Series(["1"] * 2 + ["2"] * 2)},
+            {
+                "event_type": pl.Series(["diagnosis_made"] * 2, dtype=pl.String),
+                "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"] * 2, dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-01 00:00:00", "2025-01-01 02:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(["Acute Kidney Injury"] * 2, dtype=pl.String),
+            },
+        ),
+        # 6 Groups by hadm_id
+        (
+            {"hadm_id": pl.Series(["1"] * 2 + ["2"] * 2)},
+            {
+                "event_type": pl.Series(["diagnosis_made"] * 2, dtype=pl.String),
+                "patient_id": pl.Series(["1"] * 2, dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-01 00:00:00", "2025-01-01 02:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(["Acute Kidney Injury"] * 2, dtype=pl.String),
+            },
+        ),
+        # 7. 'None' values are excluded
+        (
+            {
+                "patient_id": pl.Series([None] * 2 + ["2"] * 2, dtype=pl.String),
+                "hadm_id": pl.Series([None] * 2 + ["1"] * 2),
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 02:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 8. Rate is exactly '0' (testing for anuric aki)
+        (
+            {"rate": pl.Series([0] * 4, dtype=pl.Float64)},
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+    ],
+)
+def test_diagnose_ha_aki_criterion_three(
+    uo_arm_frame: Callable,
+    overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts normal behaviour for the third criterion."""
+    source = uo_arm_frame(**overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    null_cr_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+            "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+            "event_type": pl.Series([None, None], dtype=pl.String),
+            "timestamp": pl.Series([None, None], dtype=pl.Datetime),
+            "labevents/label": pl.Series([None, None], dtype=pl.String),
+            "labevents/valuenum": pl.Series([None, None], dtype=pl.Float64),
+            "labevents/valueuom": pl.Series([None, None], dtype=pl.String),
+            "admissions/admittime": pl.Series(
+                [
+                    "2024-12-28 00:00:00",
+                    "2024-12-28 00:00:00",
+                ],  # ensuring the gate doesn't apply
+                dtype=pl.Datetime,
+            ),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(null_cr_data, source)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "cr_overrides, uo_overrides, expected_lf_data",
+    [
+        # 0. Both arms fire on the same admission and uo is earlier
+        (
+            {"labevents/valuenum": pl.Series([1.25] * 8 + [1.75] + [1.25] * 5)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-04 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 1. Both arms fire on the same admission and cr_arm is earlier
+        (
+            {"labevents/valuenum": pl.Series([1.25] * 6 + [1.75] + [1.25] * 7)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-05 00:00:00",
+                        "2025-01-05 01:00:00",
+                        "2025-01-05 02:00:00",
+                        "2025-01-05 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-04 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 2. Outer join preserves arms independently
+        (
+            {
+                "patient_id": ["1"] * 7 + ["2"] * 7,
+                "hadm_id": ["1"] * 7 + ["2"] * 7,
+                "labevents/valuenum": pl.Series([1.25] * 5 + [1.75, 1.25] + [1.25] * 7),
+            },
+            {
+                "patient_id": ["2"] * 4,
+                "hadm_id": ["2"] * 4,
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+            },
+            {
+                "event_type": pl.Series(
+                    ["diagnosis_made", "diagnosis_made"], dtype=pl.String
+                ),
+                "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-03 12:00:00", "2025-01-04 00:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(
+                    ["Acute Kidney Injury", "Acute Kidney Injury"], dtype=pl.String
+                ),
+            },
+        ),
+        # 3. Early meeting of criteria excludes record even if we have a
+        # later fulfillment
+        (
+            {"labevents/valuenum": pl.Series([1.25, 1.25, 1.75] + [1.25] * 11)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+    ],
+)
+def test_diagnose_ha_aki_composition(
+    labevents_lf: Callable,
+    uo_arm_frame: Callable,
+    cr_overrides: dict[str, pl.Series],
+    uo_overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts the two arms merge (full-outer, min onset) then gate together."""
+    source = labevents_lf(**cr_overrides)
+    uo_data = uo_arm_frame(**uo_overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    diagnosis = diagnose_hospital_acquired_aki(source, uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
 
 
@@ -369,5 +645,16 @@ def test_diagnose_ha_aki_gate(
     """Asserts the >=48h-post-admission gate for hospital-acquired AKI."""
     source = labevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)

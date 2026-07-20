@@ -4,7 +4,7 @@ import polars as pl
 
 
 def diagnose_hospital_acquired_aki(
-    source: pl.LazyFrame, uo_data: pl.LazyFrame | None = None
+    source: pl.LazyFrame, uo_data: pl.LazyFrame
 ) -> pl.LazyFrame:
     """Identifies admissions where the patient developed AKI.
 
@@ -51,22 +51,36 @@ def diagnose_hospital_acquired_aki(
         .over("hadm_id")
     )
 
-    result = (
+    creatinine_arm = (
         sorted_labevents.filter(
             pl.any_horizontal(
                 pl.col("labevents/valuenum") - rolling_48h_min >= 0.3,
                 pl.col("labevents/valuenum") >= rolling_7d_min * 1.5,
             )
         )
-        .group_by("hadm_id", maintain_order=True)
-        .agg(pl.col("patient_id").first(), pl.col("timestamp").min().alias("timestamp"))
+        .group_by(["patient_id", "hadm_id"], maintain_order=True)
+        .agg(pl.col("timestamp").min().alias("cr_time"))
+    )
+    uo_arm = (
+        uo_data.filter(
+            (pl.col("rate") < 0.5) & (pl.col("rate") >= 0), pl.col("window_hours") >= 6
+        )
+        .group_by(["patient_id", "hadm_id"], maintain_order=True)
+        .agg(pl.col("charttime").min().alias("uo_time"))
+    )
+
+    combined_arms = creatinine_arm.join(
+        uo_arm, on=["patient_id", "hadm_id"], how="full", coalesce=True
+    ).with_columns(
+        pl.min_horizontal(pl.col("cr_time"), pl.col("uo_time")).alias("timestamp")
+    )
+
+    result = (
+        combined_arms.join(gate, on="hadm_id", how="inner")
+        .filter(pl.col("timestamp") > pl.col("gate"))
         .with_columns(
             event_type=pl.lit("diagnosis_made"), diagnosis=pl.lit("Acute Kidney Injury")
         )
-    )
-
-    result = result.join(gate, on="hadm_id", how="inner").filter(
-        pl.col("timestamp") > pl.col("gate")
     )
 
     return result.select(
