@@ -337,7 +337,43 @@ def test_diagnose_ha_aki_criterion_two(
                 "diagnosis": pl.Series([], dtype=pl.String),
             },
         ),
-        # 4. Select the first entry to fullfill the criteria
+        # 4. Selects the first entry to fulfill the criteria
+        (
+            {"rate": pl.Series([0.5] * 3 + [0.2], dtype=pl.Float64)},
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-01 03:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 5. Groups by patient_id
+        (
+            {"patient_id": pl.Series(["1"] * 2 + ["2"] * 2)},
+            {
+                "event_type": pl.Series(["diagnosis_made"] * 2, dtype=pl.String),
+                "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"] * 2, dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-01 00:00:00", "2025-01-01 02:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(["Acute Kidney Injury"] * 2, dtype=pl.String),
+            },
+        ),
+        # 6 Groups by hadm_id
+        (
+            {"hadm_id": pl.Series(["1"] * 2 + ["2"] * 2)},
+            {
+                "event_type": pl.Series(["diagnosis_made"] * 2, dtype=pl.String),
+                "patient_id": pl.Series(["1"] * 2, dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-01 00:00:00", "2025-01-01 02:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(["Acute Kidney Injury"] * 2, dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_diagnose_ha_aki_criterion_three(
@@ -350,15 +386,18 @@ def test_diagnose_ha_aki_criterion_three(
     expected_lf = pl.LazyFrame(expected_lf_data)
     null_cr_data = pl.LazyFrame(
         {
-            "patient_id": pl.Series(["1"], dtype=pl.String),
-            "hadm_id": pl.Series(["1"], dtype=pl.String),
-            "event_type": pl.Series([None], dtype=pl.String),
-            "timestamp": pl.Series([None], dtype=pl.Datetime),
-            "labevents/label": pl.Series([None], dtype=pl.String),
-            "labevents/valuenum": pl.Series([None], dtype=pl.Float64),
-            "labevents/valueuom": pl.Series([None], dtype=pl.String),
+            "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+            "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+            "event_type": pl.Series([None, None], dtype=pl.String),
+            "timestamp": pl.Series([None, None], dtype=pl.Datetime),
+            "labevents/label": pl.Series([None, None], dtype=pl.String),
+            "labevents/valuenum": pl.Series([None, None], dtype=pl.Float64),
+            "labevents/valueuom": pl.Series([None, None], dtype=pl.String),
             "admissions/admittime": pl.Series(
-                ["2024-12-28 00:00:00"],  # ensuring the gate doesn't apply
+                [
+                    "2024-12-28 00:00:00",
+                    "2024-12-28 00:00:00",
+                ],  # ensuring the gate doesn't apply
                 dtype=pl.Datetime,
             ),
         }
