@@ -421,6 +421,127 @@ def test_diagnose_ha_aki_criterion_three(
 
 
 @pytest.mark.parametrize(
+    "cr_overrides, uo_overrides, expected_lf_data",
+    [
+        # 0. Both arms fire on the same admission and uo is earlier
+        (
+            {"labevents/valuenum": pl.Series([1.25] * 8 + [1.75] + [1.25] * 5)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-04 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 1. Both arms fire on the same admission and cr_arm is earlier
+        (
+            {"labevents/valuenum": pl.Series([1.25] * 6 + [1.75] + [1.25] * 7)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-05 00:00:00",
+                        "2025-01-05 01:00:00",
+                        "2025-01-05 02:00:00",
+                        "2025-01-05 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
+                "patient_id": pl.Series(["1"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+                "timestamp": pl.Series(["2025-01-04 00:00:00"], dtype=pl.Datetime),
+                "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
+            },
+        ),
+        # 2. Outer join preserves arms independently
+        (
+            {
+                "patient_id": ["1"] * 7 + ["2"] * 7,
+                "hadm_id": ["1"] * 7 + ["2"] * 7,
+                "labevents/valuenum": pl.Series([1.25] * 5 + [1.75, 1.25] + [1.25] * 7),
+            },
+            {
+                "patient_id": ["2"] * 4,
+                "hadm_id": ["2"] * 4,
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                ),
+            },
+            {
+                "event_type": pl.Series(
+                    ["diagnosis_made", "diagnosis_made"], dtype=pl.String
+                ),
+                "patient_id": pl.Series(["1", "2"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+                "timestamp": pl.Series(
+                    ["2025-01-03 12:00:00", "2025-01-04 00:00:00"], dtype=pl.Datetime
+                ),
+                "diagnosis": pl.Series(
+                    ["Acute Kidney Injury", "Acute Kidney Injury"], dtype=pl.String
+                ),
+            },
+        ),
+        # 3. Early meeting of criteria excludes record even if we have a
+        # later fulfillment
+        (
+            {"labevents/valuenum": pl.Series([1.25, 1.25, 1.75] + [1.25] * 11)},
+            {
+                "charttime": pl.Series(
+                    [
+                        "2025-01-04 00:00:00",
+                        "2025-01-04 01:00:00",
+                        "2025-01-04 02:00:00",
+                        "2025-01-04 03:00:00",
+                    ],
+                    dtype=pl.Datetime,
+                )
+            },
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+    ],
+)
+def test_diagnose_ha_aki_composition(
+    labevents_lf: Callable,
+    uo_arm_frame: Callable,
+    cr_overrides: dict[str, pl.Series],
+    uo_overrides: dict[str, pl.Series],
+    expected_lf_data: dict[str, pl.Series],
+) -> None:
+    """Asserts the two arms merge (full-outer, min onset) then gate together."""
+    source = labevents_lf(**cr_overrides)
+    uo_data = uo_arm_frame(**uo_overrides)
+    expected_lf = pl.LazyFrame(expected_lf_data)
+    diagnosis = diagnose_hospital_acquired_aki(source, uo_data)
+    assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
+
+
+@pytest.mark.parametrize(
     "overrides, expected_lf_data",
     [
         # 0. Onset >48h after admission is hospital-acquired and kept.
