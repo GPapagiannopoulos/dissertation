@@ -14,6 +14,7 @@ from thesis.config import settings
 from thesis.data.normalize import build_event_pipeline
 
 # Bump when the transform pipeline in thesis.data.normalize changes
+# Parsing the bytes of the repository was thought excessive
 CACHE_VERSION: Final[int] = 2
 
 
