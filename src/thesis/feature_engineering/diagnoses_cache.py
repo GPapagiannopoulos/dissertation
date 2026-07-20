@@ -47,3 +47,11 @@ def ensure_diagnosis_cache() -> Path:
     diagnoses_sidecar.write_text(json.dumps(fingerprint))
 
     return diagnoses_path
+
+
+def compose_enriched(base_parquet: Path, diagnoses_parquet: Path) -> pl.LazyFrame:
+    """Concatenates the diagnoses_made LazyFrame to the base dataset LazyFrame."""
+    return pl.concat(
+        [pl.scan_parquet(base_parquet), pl.scan_parquet(diagnoses_parquet)],
+        how="diagonal",
+    )

@@ -1,13 +1,20 @@
 """Testing suite for the diagnoses caching module."""
 
+import datetime
 import json
 from collections.abc import Callable
 from pathlib import Path
 
+import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 from thesis.feature_engineering import diagnoses_cache
-from thesis.feature_engineering.diagnoses_cache import ENRICH_VERSION, _fingerprint
+from thesis.feature_engineering.diagnoses_cache import (
+    ENRICH_VERSION,
+    _fingerprint,
+    compose_enriched,
+)
 
 
 @pytest.fixture
@@ -173,3 +180,95 @@ def test_fingerprint_survives_json_round_trip(
     fingerprint = _fingerprint(base_sidecar_path, [weight_data_path, uo_data_path])
 
     assert fingerprint == json.loads(json.dumps(fingerprint))
+
+
+@pytest.fixture
+def make_base_parquet(tmp_path: Path) -> Callable[..., Path]:
+    """Returns a factory writing a wide base-events parquet, returning its path.
+
+    The base carries a ``labevents/valuenum`` column absent from the diagnoses
+    frame, so the diagonal concat must null-fill it on the diagnosis rows.
+    """
+
+    def _make(**overrides: list) -> Path:
+        defaults = {
+            "event_type": ["labevents", "labevents"],
+            "patient_id": ["1", "2"],
+            "hadm_id": ["1", "2"],
+            "timestamp": [
+                datetime.datetime(2025, 1, 1, 0),
+                datetime.datetime(2025, 1, 2, 0),
+            ],
+            "labevents/valuenum": [1.25, 2.5],
+        }
+        defaults.update(overrides)
+        path = tmp_path / "events.parquet"
+        pl.DataFrame(defaults).write_parquet(path)
+        return path
+
+    return _make
+
+
+@pytest.fixture
+def make_diagnoses_parquet(tmp_path: Path) -> Callable[..., Path]:
+    """Returns a factory writing a narrow diagnoses parquet, returning its path.
+
+    Carries a ``diagnosis_made/diagnosis`` column absent from the base frame,
+    so the diagonal concat must null-fill it on the base rows.
+    """
+
+    def _make(**overrides: list) -> Path:
+        defaults = {
+            "event_type": ["diagnosis_made"],
+            "patient_id": ["1"],
+            "hadm_id": ["1"],
+            "timestamp": [datetime.datetime(2025, 1, 3, 0)],
+            "diagnosis_made/diagnosis": ["Acute Kidney Injury"],
+        }
+        defaults.update(overrides)
+        path = tmp_path / "diagnoses.parquet"
+        pl.DataFrame(defaults).write_parquet(path)
+        return path
+
+    return _make
+
+
+def test_compose_enriched_unions_base_and_diagnoses(
+    make_base_parquet: Callable, make_diagnoses_parquet: Callable
+) -> None:
+    """Asserts the diagonal concat unions both event types and null-fills columns."""
+    base_parquet = make_base_parquet()
+    diagnoses_parquet = make_diagnoses_parquet()
+
+    expected_lf = pl.LazyFrame(
+        {
+            "event_type": ["labevents", "labevents", "diagnosis_made"],
+            "patient_id": ["1", "2", "1"],
+            "hadm_id": ["1", "2", "1"],
+            "timestamp": [
+                datetime.datetime(2025, 1, 1, 0),
+                datetime.datetime(2025, 1, 2, 0),
+                datetime.datetime(2025, 1, 3, 0),
+            ],
+            "labevents/valuenum": [1.25, 2.5, None],
+            "diagnosis_made/diagnosis": [None, None, "Acute Kidney Injury"],
+        }
+    )
+
+    assert_frame_equal(
+        compose_enriched(base_parquet, diagnoses_parquet),
+        expected_lf,
+        check_row_order=False,
+    )
+
+
+def test_compose_enriched_preserves_shared_timestamp_dtype(
+    make_base_parquet: Callable, make_diagnoses_parquet: Callable
+) -> None:
+    """Guards the shared timestamp column keeps a single dtype."""
+    base_parquet = make_base_parquet()
+    diagnoses_parquet = make_diagnoses_parquet()
+
+    schema = compose_enriched(base_parquet, diagnoses_parquet).collect_schema()
+
+    assert schema["timestamp"] == pl.Datetime("us")
