@@ -63,9 +63,7 @@ def diagnose_hospital_acquired_aki(
     )
     uo_arm = (
         uo_data.filter(
-            (pl.col("rate") < 0.5) & (pl.col("rate") >= 0),
-            pl.col("window_hours") >= 6,
-            pl.col("n_events") >= 2,
+            (pl.col("rate") < 0.5) & (pl.col("rate") >= 0), pl.col("window_hours") >= 6
         )
         .group_by(["patient_id", "hadm_id"], maintain_order=True)
         .agg(pl.col("charttime").min().alias("uo_time"))
