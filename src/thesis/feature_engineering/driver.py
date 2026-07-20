@@ -41,9 +41,11 @@ def _load_uo_data() -> pl.LazyFrame:
     normalized_weights_lf = normalize_weights(weights_lf)
     net_urine_output_lf = net_urine(urine_output_lf)
 
-    return calculate_urine_output_rate(
-        normalized_weights_lf, net_urine_output_lf
-    ).rename({"subject_id": "patient_id"})
+    return (
+        calculate_urine_output_rate(normalized_weights_lf, net_urine_output_lf)
+        .rename({"subject_id": "patient_id"})
+        .with_columns(pl.col("charttime").dt.cast_time_unit("ns"))
+    )
 
 
 def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
@@ -65,7 +67,7 @@ def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
             "event_type": pl.Series([], dtype=pl.String),
             "patient_id": pl.Series([], dtype=pl.String),
             "hadm_id": pl.Series([], dtype=pl.String),
-            "timestamp": pl.Series([], dtype=pl.Datetime),
+            "timestamp": pl.Series([], dtype=pl.Datetime("ns")),
             "diagnosis_made/diagnosis": pl.Series([], dtype=pl.String),
         }
     )
