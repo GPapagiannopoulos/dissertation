@@ -195,10 +195,13 @@ def make_base_parquet(tmp_path: Path) -> Callable[..., Path]:
             "event_type": ["labevents", "labevents"],
             "patient_id": ["1", "2"],
             "hadm_id": ["1", "2"],
-            "timestamp": [
-                datetime.datetime(2025, 1, 1, 0),
-                datetime.datetime(2025, 1, 2, 0),
-            ],
+            "timestamp": pl.Series(
+                [
+                    datetime.datetime(2025, 1, 1, 0),
+                    datetime.datetime(2025, 1, 2, 0),
+                ],
+                dtype=pl.Datetime("ns"),
+            ),
             "labevents/valuenum": [1.25, 2.5],
         }
         defaults.update(overrides)
@@ -222,7 +225,9 @@ def make_diagnoses_parquet(tmp_path: Path) -> Callable[..., Path]:
             "event_type": ["diagnosis_made"],
             "patient_id": ["1"],
             "hadm_id": ["1"],
-            "timestamp": [datetime.datetime(2025, 1, 3, 0)],
+            "timestamp": pl.Series(
+                [datetime.datetime(2025, 1, 3, 0)], dtype=pl.Datetime("ns")
+            ),
             "diagnosis_made/diagnosis": ["Acute Kidney Injury"],
         }
         defaults.update(overrides)
@@ -245,11 +250,14 @@ def test_compose_enriched_unions_base_and_diagnoses(
             "event_type": ["labevents", "labevents", "diagnosis_made"],
             "patient_id": ["1", "2", "1"],
             "hadm_id": ["1", "2", "1"],
-            "timestamp": [
-                datetime.datetime(2025, 1, 1, 0),
-                datetime.datetime(2025, 1, 2, 0),
-                datetime.datetime(2025, 1, 3, 0),
-            ],
+            "timestamp": pl.Series(
+                [
+                    datetime.datetime(2025, 1, 1, 0),
+                    datetime.datetime(2025, 1, 2, 0),
+                    datetime.datetime(2025, 1, 3, 0),
+                ],
+                dtype=pl.Datetime("ns"),
+            ),
             "labevents/valuenum": [1.25, 2.5, None],
             "diagnosis_made/diagnosis": [None, None, "Acute Kidney Injury"],
         }
@@ -271,4 +279,4 @@ def test_compose_enriched_preserves_shared_timestamp_dtype(
 
     schema = compose_enriched(base_parquet, diagnoses_parquet).collect_schema()
 
-    assert schema["timestamp"] == pl.Datetime("us")
+    assert schema["timestamp"] == pl.Datetime("ns")
