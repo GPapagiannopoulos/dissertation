@@ -38,7 +38,7 @@ def ensure_diagnosis_cache() -> Path:
     diagnoses_sidecar = base_path.parent / "diagnoses.fingerprint.json"
     fingerprint = _fingerprint(sidecar, uo_sources)
 
-    if base_path.exists() and sidecar.exists():
+    if diagnoses_path.exists() and diagnoses_sidecar.exists():
         if json.loads(diagnoses_sidecar.read_text()) == fingerprint:
             return diagnoses_path
 
