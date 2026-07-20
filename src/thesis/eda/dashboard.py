@@ -10,14 +10,14 @@ import streamlit as st
 from thesis.config import settings
 from thesis.data.eda_source import EmptyHistError, MixedUnitsError
 from thesis.data.sources import PolarsEDASource
-from thesis.eda.cache import ensure_event_cache
 from thesis.eda.filters import valid_fields
+from thesis.feature_engineering.diagnoses_cache import load_enriched
 
 
 @st.cache_resource
 def get_source() -> PolarsEDASource:
     """Pass the cached dataset to the Adapter class."""
-    return PolarsEDASource.from_parquet(ensure_event_cache())
+    return PolarsEDASource(load_enriched())
 
 
 def _render_overview(src: PolarsEDASource, etype: str) -> None:

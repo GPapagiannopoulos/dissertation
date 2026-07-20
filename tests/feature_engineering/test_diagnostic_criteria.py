@@ -413,18 +413,15 @@ def test_diagnose_ha_aki_criterion_three(
         {
             "patient_id": pl.Series(["1", "2"], dtype=pl.String),
             "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
-            "event_type": pl.Series([None, None], dtype=pl.String),
-            "timestamp": pl.Series([None, None], dtype=pl.Datetime),
+            # admissions rows supply admittime as their timestamp; an early value
+            # keeps the >=48h gate from excluding the urine-output onsets.
+            "event_type": pl.Series(["admissions", "admissions"], dtype=pl.String),
+            "timestamp": pl.Series(
+                ["2024-12-28 00:00:00", "2024-12-28 00:00:00"], dtype=pl.Datetime
+            ),
             "labevents/label": pl.Series([None, None], dtype=pl.String),
             "labevents/valuenum": pl.Series([None, None], dtype=pl.Float64),
             "labevents/valueuom": pl.Series([None, None], dtype=pl.String),
-            "admissions/admittime": pl.Series(
-                [
-                    "2024-12-28 00:00:00",
-                    "2024-12-28 00:00:00",
-                ],  # ensuring the gate doesn't apply
-                dtype=pl.Datetime,
-            ),
         }
     )
     diagnosis = diagnose_hospital_acquired_aki(null_cr_data, source)
@@ -561,9 +558,7 @@ def test_diagnose_ha_aki_composition(
                 "labevents/valuenum": pl.Series(
                     [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
                 ),
-                "admissions/admittime": pl.Series(
-                    ["2025-01-04 18:00:00"] * 14, dtype=pl.Datetime
-                ),
+                "admittime": "2025-01-04 18:00:00",
             },
             {
                 "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
@@ -579,9 +574,7 @@ def test_diagnose_ha_aki_composition(
                 "labevents/valuenum": pl.Series(
                     [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
                 ),
-                "admissions/admittime": pl.Series(
-                    ["2025-01-05 00:00:00"] * 14, dtype=pl.Datetime
-                ),
+                "admittime": "2025-01-05 00:00:00",
             },
             {
                 "event_type": pl.Series([], dtype=pl.String),
@@ -598,9 +591,7 @@ def test_diagnose_ha_aki_composition(
                 "labevents/valuenum": pl.Series(
                     [1.25] * 12 + [1.75, 1.25], dtype=pl.Float64
                 ),
-                "admissions/admittime": pl.Series(
-                    ["2025-01-06 00:00:00"] * 14, dtype=pl.Datetime
-                ),
+                "admittime": "2025-01-06 00:00:00",
             },
             {
                 "event_type": pl.Series([], dtype=pl.String),
@@ -622,10 +613,10 @@ def test_diagnose_ha_aki_composition(
                     + [1.75, 1.25],
                     dtype=pl.Float64,
                 ),
-                "admissions/admittime": pl.Series(
-                    ["2025-01-02 00:00:00"] * 7 + ["2025-01-01 00:00:00"] * 7,
-                    dtype=pl.Datetime,
-                ),
+                "admittime": {
+                    "1": "2025-01-02 00:00:00",
+                    "2": "2025-01-01 00:00:00",
+                },
             },
             {
                 "event_type": pl.Series(["diagnosis_made"], dtype=pl.String),
