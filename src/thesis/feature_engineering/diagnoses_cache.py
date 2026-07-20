@@ -55,3 +55,8 @@ def compose_enriched(base_parquet: Path, diagnoses_parquet: Path) -> pl.LazyFram
         [pl.scan_parquet(base_parquet), pl.scan_parquet(diagnoses_parquet)],
         how="diagonal",
     )
+
+
+def load_enriched() -> pl.LazyFrame:
+    """Loads the dataset enriched with diagnoses_made events."""
+    return compose_enriched(ensure_event_cache(), ensure_diagnosis_cache())
