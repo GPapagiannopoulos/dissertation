@@ -10,14 +10,6 @@ from thesis.feature_engineering.diagnostic_criteria import (
     diagnose_hospital_acquired_aki,
 )
 
-"""
-Desired behaviour includes:
-1) identifies a patient with increase in serum creatinine by
-26micromol/ 0.3mg within 48 hours
-2) increase in serum creatinine to >1.5x baseline in the last 7 days
-3) Urine volume <0.5mL/kg/hour - labevents/description == Urine Volume, Total
-"""
-
 
 @pytest.mark.parametrize(
     "overrides, expected_lf_data",
@@ -171,7 +163,18 @@ def test_diagnose_ha_aki_criterion_one(
     """Asserts normal behaviour of criterion one for aki diagnosis."""
     source = labevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
 
 
@@ -272,7 +275,18 @@ def test_diagnose_ha_aki_criterion_two(
     """Asserts normal behaviour for the second criterion."""
     source = labevents_lf(hour_step=hour_step, **overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
 
 
@@ -369,5 +383,16 @@ def test_diagnose_ha_aki_gate(
     """Asserts the >=48h-post-admission gate for hospital-acquired AKI."""
     source = labevents_lf(**overrides)
     expected_lf = pl.LazyFrame(expected_lf_data)
-    diagnosis = diagnose_hospital_acquired_aki(source)
+    null_uo_data = pl.LazyFrame(
+        {
+            "patient_id": pl.Series([None], dtype=pl.String),
+            "hadm_id": pl.Series([None], dtype=pl.String),
+            "stay_id": pl.Series([None], dtype=pl.String),
+            "charttime": pl.Series([None], dtype=pl.Datetime),
+            "rate": pl.Series([None], dtype=pl.Float64),
+            "window_hours": pl.Series([None], dtype=pl.Int16),
+            "n_events": pl.Series([None], dtype=pl.Int16),
+        }
+    )
+    diagnosis = diagnose_hospital_acquired_aki(source, null_uo_data)
     assert_frame_equal(diagnosis, expected_lf, check_row_order=False)
