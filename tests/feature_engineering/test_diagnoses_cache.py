@@ -56,7 +56,7 @@ def make_base_sidecar(tmp_path: Path) -> Callable[[dict], Path]:
 
 
 def test_fingerprint_embeds_pipeline_version(
-    make_uo_file: Callable, make_base_sidecar: Callable, tmp_path: Path
+    make_uo_file: Callable, make_base_sidecar: Callable
 ) -> None:
     """Asserts that part of the fingerprint is the current cache version."""
     weight_data_path = make_uo_file("weight_data", "mock data")
@@ -69,3 +69,16 @@ def test_fingerprint_embeds_pipeline_version(
         ]
         == ENRICH_VERSION
     )
+
+
+def test_fingerprint_embeds_base_sidecar(
+    make_uo_file: Callable, make_base_sidecar: Callable
+) -> None:
+    """Asserts that the base dataset sidecar is embedded by fingerprint."""
+    weight_data_path = make_uo_file("weight_data", "mock data")
+    uo_data_path = make_uo_file("uo_data", "mock data")
+    base_sidecar_path = make_base_sidecar({"version": 2, "manifest": "abc"})
+
+    assert _fingerprint(base_sidecar_path, [weight_data_path, uo_data_path])[
+        "base"
+    ] == {"version": 2, "manifest": "abc"}
