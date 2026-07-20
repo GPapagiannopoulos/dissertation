@@ -138,16 +138,16 @@ def uo_arm_frame():
 
     def _build(**overrides: dict[str, list]) -> pl.LazyFrame:
         defaults = {
-            "patient_id": ["1"] * 2,
-            "hadm_id": ["1"] * 2,
-            "stay_id": ["1"] * 2,
+            "patient_id": ["1"] * 4,
+            "hadm_id": ["1"] * 4,
+            "stay_id": ["1"] * 4,
             "charttime": [
                 datetime.datetime(2025, 1, 1, 0) + datetime.timedelta(hours=i)
-                for i in range(2)
+                for i in range(4)
             ],
-            "rate": [0.2] * 2,
-            "window_hours": [6] * 2,
-            "n_events": [2] * 2,
+            "rate": [0.2] * 4,
+            "window_hours": [6] * 4,
+            "n_events": [2] * 4,
         }
         defaults.update(**overrides)
         return pl.LazyFrame(defaults)
