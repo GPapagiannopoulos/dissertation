@@ -303,7 +303,29 @@ def test_diagnose_ha_aki_criterion_two(
                 "timestamp": pl.Series(["2025-01-01 00:00:00"], dtype=pl.Datetime),
                 "diagnosis": pl.Series(["Acute Kidney Injury"], dtype=pl.String),
             },
-        )
+        ),
+        # 1. Rate is too high
+        (
+            {"rate": pl.Series([0.5] * 2, dtype=pl.Float64)},
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
+        # 2. Rate is negative
+        (
+            {"rate": pl.Series([-0.1] * 2, dtype=pl.Float64)},
+            {
+                "event_type": pl.Series([], dtype=pl.String),
+                "patient_id": pl.Series([], dtype=pl.String),
+                "hadm_id": pl.Series([], dtype=pl.String),
+                "timestamp": pl.Series([], dtype=pl.Datetime),
+                "diagnosis": pl.Series([], dtype=pl.String),
+            },
+        ),
     ],
 )
 def test_diagnose_ha_aki_criterion_three(
