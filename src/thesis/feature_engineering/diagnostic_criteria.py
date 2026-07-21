@@ -36,6 +36,7 @@ def diagnose_hospital_acquired_aki(
             pl.col("timestamp"),
             pl.col("labevents/valuenum"),
         )
+        .drop_nulls(["labevents/valuenum", "timestamp"])
         .sort("hadm_id", "timestamp")
     )
 
