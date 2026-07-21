@@ -300,7 +300,11 @@ class PolarsEDASource:
         """
         return (
             self._events.filter(
-                *[pl.col(self._TYPE) == f.split("/")[0] for f in target_fields],
+                *[
+                    pl.col(self._TYPE) == f.split("/")[0]
+                    for f in target_fields
+                    if "/" in f
+                ],
                 *[pl.col(col) == val for col, val in filters.items()]
                 if filters
                 else [pl.lit(True)],

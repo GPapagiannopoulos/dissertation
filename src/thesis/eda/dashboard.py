@@ -139,7 +139,7 @@ def run_dashboard():
             hadm_id = st.selectbox(
                 "Admission ID",
                 src.get_unique_field_values(
-                    ["diagnoses_icd/hadm_id"], {"diagnoses_icd/icd_code": code}
+                    ["hadm_id"], {"diagnoses_icd/icd_code": code}
                 ),
             )
         _render_timeline(src, hadm_id)
