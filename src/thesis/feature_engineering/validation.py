@@ -117,3 +117,49 @@ def confusion_matrix(
             "actual_negative": pl.Series([counts["fp"], counts["tn"]], dtype=pl.UInt32),
         }
     )
+
+
+def metrics(confusion: pl.DataFrame) -> pl.DataFrame:
+    """Derives diagnostic metrics from an AKI confusion matrix.
+
+    A metric whose denominator is zero (e.g. sensitivity with no actual
+    positives) is undefined and reported as null rather than a placeholder
+    number.
+
+    Args:
+        confusion (pl.DataFrame): a 2x2 matrix as returned by confusion_matrix.
+
+    Returns:
+        pl.DataFrame: a tidy frame with a metric column and a value
+            column, covering sensitivity, specificity, precision, NPV, F1,
+            accuracy, and prevalence.
+    """
+
+    def _safe_div(numerator: int, denominator: int) -> float | None:
+        """Returns numerator / denominator, or None when the denominator is 0."""
+        return numerator / denominator if denominator else None
+
+    positive = confusion.filter(pl.col("predicted") == "positive")
+    negative = confusion.filter(pl.col("predicted") == "negative")
+    tp = positive["actual_positive"].item()
+    fp = positive["actual_negative"].item()
+    fn = negative["actual_positive"].item()
+    tn = negative["actual_negative"].item()
+
+    total = tp + fp + fn + tn
+    scores = {
+        "sensitivity": _safe_div(tp, tp + fn),
+        "specificity": _safe_div(tn, tn + fp),
+        "precision": _safe_div(tp, tp + fp),
+        "npv": _safe_div(tn, tn + fn),
+        "f1": _safe_div(2 * tp, 2 * tp + fp + fn),
+        "accuracy": _safe_div(tp + tn, total),
+        "prevalence": _safe_div(tp + fn, total),
+    }
+
+    return pl.DataFrame(
+        {
+            "metric": pl.Series(list(scores.keys()), dtype=pl.String),
+            "value": pl.Series(list(scores.values()), dtype=pl.Float64),
+        }
+    )
