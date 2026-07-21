@@ -19,7 +19,17 @@ from thesis.feature_engineering.validation import aki_ground_truth
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
             },
             pl.Series("hadm_id", ["1"], dtype=pl.String),
-        )
+        ),
+        # 1. Correctly identifies v10 codes
+        (
+            {
+                "event_type": pl.Series(["diagnoses_icd"], dtype=pl.String),
+                "diagnoses_icd/icd_version": pl.Series(["10"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["N17"], dtype=pl.String),
+                "hadm_id": pl.Series(["1"], dtype=pl.String),
+            },
+            pl.Series("hadm_id", ["1"], dtype=pl.String),
+        ),
     ],
 )
 def test_aki_ground_truth_happy_path(
