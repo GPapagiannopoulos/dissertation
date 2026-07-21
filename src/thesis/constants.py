@@ -12,3 +12,6 @@ DTYPE_TO_POLARS_DTYPE_MAP: Final[dict[str, type[pl.DataType]]] = {
     "Boolean": pl.Boolean,
     "Float": pl.Float32,
 }
+
+ICD_V9_AKI_PREFIX: Final[str] = "584"
+ICD_V10_AKI_PREFIX: Final[str] = "N17"
