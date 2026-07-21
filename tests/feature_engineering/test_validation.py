@@ -8,12 +8,34 @@ from thesis.feature_engineering.validation import (
     aki_ground_truth,
     confusion_matrix,
     evaluable_admissions,
+    metrics,
 )
+
+_METRIC_ORDER = [
+    "sensitivity",
+    "specificity",
+    "precision",
+    "npv",
+    "f1",
+    "accuracy",
+    "prevalence",
+]
 
 
 def _id_lf(ids: list[str]) -> pl.LazyFrame:
     """Builds a single-column ``hadm_id`` LazyFrame for the set-op inputs."""
     return pl.LazyFrame({"hadm_id": pl.Series(ids, dtype=pl.String)})
+
+
+def _cm(tp: int, fp: int, fn: int, tn: int) -> pl.DataFrame:
+    """Builds a 2x2 confusion matrix in the ``confusion_matrix`` output shape."""
+    return pl.DataFrame(
+        {
+            "predicted": pl.Series(["positive", "negative"], dtype=pl.String),
+            "actual_positive": pl.Series([tp, fn], dtype=pl.UInt32),
+            "actual_negative": pl.Series([fp, tn], dtype=pl.UInt32),
+        }
+    )
 
 
 @pytest.mark.parametrize(
@@ -197,3 +219,107 @@ def test_confusion_matrix(
         _id_lf(predicted_ids), _id_lf(actual_ids), _id_lf(evaluable_ids)
     )
     assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "tp, fp, fn, tn, expected_values",
+    [
+        # 0. A normal mix (total = 10)
+        (
+            2,
+            1,
+            1,
+            6,
+            {
+                "sensitivity": 2 / 3,
+                "specificity": 6 / 7,
+                "precision": 2 / 3,
+                "npv": 6 / 7,
+                "f1": 4 / 6,
+                "accuracy": 0.8,
+                "prevalence": 0.3,
+            },
+        ),
+        # 1. Perfect agreement
+        (
+            5,
+            0,
+            0,
+            5,
+            {
+                "sensitivity": 1.0,
+                "specificity": 1.0,
+                "precision": 1.0,
+                "npv": 1.0,
+                "f1": 1.0,
+                "accuracy": 1.0,
+                "prevalence": 0.5,
+            },
+        ),
+        # 2. No positives at all -> positive-side metrics undefined
+        (
+            0,
+            0,
+            0,
+            5,
+            {
+                "sensitivity": None,
+                "specificity": 1.0,
+                "precision": None,
+                "npv": 1.0,
+                "f1": None,
+                "accuracy": 1.0,
+                "prevalence": 0.0,
+            },
+        ),
+        # 3. No negatives at all -> negative-side metrics undefined
+        (
+            3,
+            0,
+            0,
+            0,
+            {
+                "sensitivity": 1.0,
+                "specificity": None,
+                "precision": 1.0,
+                "npv": None,
+                "f1": 1.0,
+                "accuracy": 1.0,
+                "prevalence": 1.0,
+            },
+        ),
+        # 4. Empty cohort -> every metric undefined
+        (
+            0,
+            0,
+            0,
+            0,
+            {
+                "sensitivity": None,
+                "specificity": None,
+                "precision": None,
+                "npv": None,
+                "f1": None,
+                "accuracy": None,
+                "prevalence": None,
+            },
+        ),
+    ],
+)
+def test_metrics(
+    tp: int,
+    fp: int,
+    fn: int,
+    tn: int,
+    expected_values: dict[str, float | None],
+) -> None:
+    """Asserts metric arithmetic and null-on-zero-denominator behaviour."""
+    expected = pl.DataFrame(
+        {
+            "metric": pl.Series(_METRIC_ORDER, dtype=pl.String),
+            "value": pl.Series(
+                [expected_values[m] for m in _METRIC_ORDER], dtype=pl.Float64
+            ),
+        }
+    )
+    assert_frame_equal(metrics(_cm(tp, fp, fn, tn)), expected)
