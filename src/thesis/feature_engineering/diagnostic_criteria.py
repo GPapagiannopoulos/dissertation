@@ -3,31 +3,21 @@
 import polars as pl
 
 
-def diagnose_hospital_acquired_aki(
-    source: pl.LazyFrame, uo_data: pl.LazyFrame
-) -> pl.LazyFrame:
+def diagnose_aki(source: pl.LazyFrame, uo_data: pl.LazyFrame) -> pl.LazyFrame:
     """Identifies admissions where the patient developed AKI.
 
     This function uses the KDIGO definition criteria to identify
-    admissions where the patient developed AKI. It uses the timestamp
-    at first laboratory confirmation to create a new record.
+    admissions where the patient developed AKI. It filters for the first
+    laboratory confirmation of AKI and assigns a diagnosis to it.
 
-    Notes:
-        Hospital Acquired AKI (HA-AKI) is defined as having onset
-            >48h after admission. Patients who meet the criteria
-            for AKI before that threshold are excluded.
-        The definition includes changes to baseline creatinine.
-            In the absence of outpatient data for the cohort indicating
-            the last healthy kidney function, we follow industry standard
-            and set this as the min of the last seven days.
+    Args:
+        source (pl.LazyFrame):source dataset containing the labevents
+        uo_data (pl.LazyFrame): urine output rate data
+
+    Returns:
+        pl.LazyFrame: LazyFrame containing a "diagnosis_made" event_type
+            where "diagnosis_made/diagnosis" is "Acute Kidney Injury"
     """
-    gate = (
-        source.filter(pl.col("event_type") == "admissions")
-        .group_by(pl.col("hadm_id"))
-        .agg(pl.col("timestamp").min().alias("admittime"))
-        .with_columns((pl.col("admittime") + pl.duration(hours=48)).alias("gate"))
-    )
-
     sorted_labevents = (
         source.filter(pl.col("labevents/label") == "Creatinine")
         .select(
@@ -76,12 +66,36 @@ def diagnose_hospital_acquired_aki(
         pl.min_horizontal(pl.col("cr_time"), pl.col("uo_time")).alias("timestamp")
     )
 
-    result = (
-        combined_arms.join(gate, on="hadm_id", how="inner")
-        .filter(pl.col("timestamp") > pl.col("gate"))
-        .with_columns(
-            event_type=pl.lit("diagnosis_made"), diagnosis=pl.lit("Acute Kidney Injury")
-        )
+    return combined_arms.select(["patient_id", "hadm_id", "timestamp"]).with_columns(
+        event_type=pl.lit("diagnosis_made"), diagnosis=pl.lit("Acute Kidney Injury")
+    )
+
+
+def diagnose_hospital_acquired_aki(
+    source: pl.LazyFrame, uo_data: pl.LazyFrame
+) -> pl.LazyFrame:
+    """Enforces the 48h post admission gate for HA-AKI.
+
+    Notes:
+        Hospital Acquired AKI (HA-AKI) is defined as having onset
+            >48h after admission. Patients who meet the criteria
+            for AKI before that threshold are excluded.
+        The definition includes changes to baseline creatinine.
+            In the absence of outpatient data for the cohort indicating
+            the last healthy kidney function, we follow industry standard
+            and set this as the min of the last seven days.
+    """
+    gate = (
+        source.filter(pl.col("event_type") == "admissions")
+        .group_by(pl.col("hadm_id"))
+        .agg(pl.col("timestamp").min().alias("admittime"))
+        .with_columns((pl.col("admittime") + pl.duration(hours=48)).alias("gate"))
+    )
+
+    combined_arms = diagnose_aki(source, uo_data)
+
+    result = combined_arms.join(gate, on="hadm_id", how="inner").filter(
+        pl.col("timestamp") > pl.col("gate")
     )
 
     return result.select(
