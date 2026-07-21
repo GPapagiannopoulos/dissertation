@@ -63,3 +63,57 @@ def evaluable_admissions(source: pl.LazyFrame, uo_data: pl.LazyFrame) -> pl.Lazy
         .unique()
         .sort("hadm_id")
     )
+
+
+def confusion_matrix(
+    predicted: pl.LazyFrame,
+    actual: pl.LazyFrame,
+    evaluable: pl.LazyFrame,
+) -> pl.DataFrame:
+    """Returns the 2x2 AKI confusion matrix over the evaluable cohort.
+
+    Compares the algorithm's predictions against the ICD ground truth,
+    restricted to the admissions the algorithm could evaluate. Both ``actual``
+    and ``predicted`` are narrowed to ``evaluable`` first, so the four cells
+    always sum to the size of the evaluable cohort: an ICD-positive admission
+    with no creatinine or urine-output data is out of scope, not a false
+    negative.
+
+    Args:
+        predicted (pl.LazyFrame): hadm_ids flagged by ``diagnose_aki``.
+        actual (pl.LazyFrame): hadm_ids with an AKI ICD code
+            (``aki_ground_truth``).
+        evaluable (pl.LazyFrame): the evaluable cohort
+            (``evaluable_admissions``).
+
+    Returns:
+        pl.DataFrame: a 2x2 matrix with a ``predicted`` label column
+            ("positive"/"negative") and ``actual_positive``/``actual_negative``
+            count columns, laid out as::
+
+                predicted   actual_positive   actual_negative
+                positive    TP                FP
+                negative    FN                TN
+    """
+    actual_evaluable = actual.join(evaluable, on="hadm_id", how="semi")
+    predicted_evaluable = predicted.join(evaluable, on="hadm_id", how="semi")
+
+    cells = {
+        "tp": predicted_evaluable.join(actual_evaluable, on="hadm_id", how="semi"),
+        "fp": predicted_evaluable.join(actual_evaluable, on="hadm_id", how="anti"),
+        "fn": actual_evaluable.join(predicted_evaluable, on="hadm_id", how="anti"),
+        "tn": evaluable.join(predicted_evaluable, on="hadm_id", how="anti").join(
+            actual_evaluable, on="hadm_id", how="anti"
+        ),
+    }
+    counts = {
+        name: frame.select(pl.len()).collect().item() for name, frame in cells.items()
+    }
+
+    return pl.DataFrame(
+        {
+            "predicted": pl.Series(["positive", "negative"], dtype=pl.String),
+            "actual_positive": pl.Series([counts["tp"], counts["fn"]], dtype=pl.UInt32),
+            "actual_negative": pl.Series([counts["fp"], counts["tn"]], dtype=pl.UInt32),
+        }
+    )
