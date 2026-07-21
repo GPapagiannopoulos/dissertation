@@ -84,6 +84,14 @@ def diagnose_hospital_acquired_aki(
             In the absence of outpatient data for the cohort indicating
             the last healthy kidney function, we follow industry standard
             and set this as the min of the last seven days.
+
+    Args:
+        source (pl.LazyFrame):source dataset containing the labevents
+        uo_data (pl.LazyFrame): urine output rate data
+
+    Returns:
+        pl.LazyFrame: LazyFrame containing a admissions with AKI diagnoses
+            filtered for confirmation 48h post admission.
     """
     gate = (
         source.filter(pl.col("event_type") == "admissions")
