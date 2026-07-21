@@ -6,8 +6,14 @@ from polars.testing import assert_frame_equal
 
 from thesis.feature_engineering.validation import (
     aki_ground_truth,
+    confusion_matrix,
     evaluable_admissions,
 )
+
+
+def _id_lf(ids: list[str]) -> pl.LazyFrame:
+    """Builds a single-column ``hadm_id`` LazyFrame for the set-op inputs."""
+    return pl.LazyFrame({"hadm_id": pl.Series(ids, dtype=pl.String)})
 
 
 @pytest.mark.parametrize(
@@ -149,3 +155,45 @@ def test_evaluable_admissions_happy_path(
     uo_data = pl.LazyFrame({"hadm_id": pl.Series(uo_ids, dtype=pl.String)})
     expected = pl.DataFrame({"hadm_id": pl.Series(expected_ids, dtype=pl.String)})
     assert_frame_equal(evaluable_admissions(source, uo_data).collect(), expected)
+
+
+@pytest.mark.parametrize(
+    "predicted_ids, actual_ids, evaluable_ids, tp, fp, fn, tn",
+    [
+        # 0. A mix of every cell
+        (["1", "2"], ["1", "3"], ["1", "2", "3", "4", "5"], 1, 1, 1, 2),
+        # 1. An ICD-positive admission outside the cohort is out of scope, not a FN
+        (["1"], ["1", "3"], ["1", "2"], 1, 0, 0, 1),
+        # 2. A predicted admission outside the cohort is ignored, not a FP
+        (["1", "9"], ["1"], ["1", "2"], 1, 0, 0, 1),
+        # 3. Nothing predicted, nothing positive -> all true negatives
+        ([], [], ["1", "2", "3"], 0, 0, 0, 3),
+        # 4. Perfect agreement
+        (["1", "2"], ["1", "2"], ["1", "2"], 2, 0, 0, 0),
+        # 5. Every prediction is a false positive
+        (["1", "2"], [], ["1", "2"], 0, 2, 0, 0),
+        # 6. Empty cohort collapses every cell to zero
+        (["1"], ["1"], [], 0, 0, 0, 0),
+    ],
+)
+def test_confusion_matrix(
+    predicted_ids: list[str],
+    actual_ids: list[str],
+    evaluable_ids: list[str],
+    tp: int,
+    fp: int,
+    fn: int,
+    tn: int,
+) -> None:
+    """Asserts the 2x2 matrix cells over the evaluable cohort."""
+    expected = pl.DataFrame(
+        {
+            "predicted": pl.Series(["positive", "negative"], dtype=pl.String),
+            "actual_positive": pl.Series([tp, fn], dtype=pl.UInt32),
+            "actual_negative": pl.Series([fp, tn], dtype=pl.UInt32),
+        }
+    )
+    result = confusion_matrix(
+        _id_lf(predicted_ids), _id_lf(actual_ids), _id_lf(evaluable_ids)
+    )
+    assert_frame_equal(result, expected)
