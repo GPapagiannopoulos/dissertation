@@ -19,9 +19,11 @@ def aki_ground_truth(source: pl.LazyFrame) -> pl.Series:
             ),
         )
         .select("hadm_id")
+        .drop_nulls()
         .unique()
         .collect(engine="streaming")
         .to_series()
+        .sort()
     )
 
     return valid_ids

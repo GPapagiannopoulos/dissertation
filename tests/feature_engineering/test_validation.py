@@ -25,8 +25,48 @@ from thesis.feature_engineering.validation import aki_ground_truth
             {
                 "event_type": pl.Series(["diagnoses_icd"], dtype=pl.String),
                 "diagnoses_icd/icd_version": pl.Series(["10"], dtype=pl.String),
-                "diagnoses_icd/icd_code": pl.Series(["N17"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["N170"], dtype=pl.String),
                 "hadm_id": pl.Series(["1"], dtype=pl.String),
+            },
+            pl.Series("hadm_id", ["1"], dtype=pl.String),
+        ),
+        # 2. Correctly doesn't identify mismatched version and code pairs
+        (
+            {
+                "event_type": pl.Series(["diagnoses_icd"] * 2, dtype=pl.String),
+                "diagnoses_icd/icd_version": pl.Series(["10", "9"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["5841", "N170"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+            },
+            pl.Series("hadm_id", [], dtype=pl.String),
+        ),
+        # 3. Returns multiple hadm_ids
+        (
+            {
+                "event_type": pl.Series(["diagnoses_icd"] * 2, dtype=pl.String),
+                "diagnoses_icd/icd_version": pl.Series(["9", "10"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["5841", "N170"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", "2"], dtype=pl.String),
+            },
+            pl.Series("hadm_id", ["1", "2"], dtype=pl.String),
+        ),
+        # 4. Doesn't return duplicates
+        (
+            {
+                "event_type": pl.Series(["diagnoses_icd"] * 2, dtype=pl.String),
+                "diagnoses_icd/icd_version": pl.Series(["9", "10"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["5841", "N170"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", "1"], dtype=pl.String),
+            },
+            pl.Series("hadm_id", ["1"], dtype=pl.String),
+        ),
+        # 5. Doesn't return 'None' values
+        (
+            {
+                "event_type": pl.Series(["diagnoses_icd"] * 2, dtype=pl.String),
+                "diagnoses_icd/icd_version": pl.Series(["9", "10"], dtype=pl.String),
+                "diagnoses_icd/icd_code": pl.Series(["5841", "N170"], dtype=pl.String),
+                "hadm_id": pl.Series(["1", None], dtype=pl.String),
             },
             pl.Series("hadm_id", ["1"], dtype=pl.String),
         ),
