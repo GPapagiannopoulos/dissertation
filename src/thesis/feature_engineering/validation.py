@@ -12,7 +12,7 @@ def aki_ground_truth(source: pl.LazyFrame) -> pl.LazyFrame:
         source (pl.LazyFrame): base MIMIC-IV dataset.
 
     Returns:
-        pl.LazyFrame: a single ``hadm_id`` column of the unique, non-null,
+        pl.LazyFrame: a single hadm_id column of the unique, non-null,
             sorted admission IDs with an AKI diagnosis code.
     """
     return (
@@ -65,6 +65,36 @@ def evaluable_admissions(source: pl.LazyFrame, uo_data: pl.LazyFrame) -> pl.Lazy
     )
 
 
+def assert_evaluable_within_source(
+    evaluable: pl.LazyFrame, source: pl.LazyFrame
+) -> None:
+    """Guards that every evaluable admission exists in the source population.
+
+    evaluable is unioned from the source and the urine-output frame, so the two
+    must describe the same admissions. When they don't — e.g. a full-dataset UO
+    parquet scored against a dev-mode source — each orphan UO admission becomes a FP.
+    This function turns a mismatch in populations into a loud failure to avoid future
+    fails.
+
+    Args:
+        evaluable (pl.LazyFrame): the evaluable cohort (evaluable_admissions).
+        source (pl.LazyFrame): base MIMIC-IV dataset
+
+    Raises:
+        ValueError: if any evaluable hadm_id is absent from source
+    """
+    source_ids = source.select("hadm_id").drop_nulls().unique()
+    orphans = evaluable.join(source_ids, on="hadm_id", how="anti").collect()
+    if orphans.height:
+        sample = orphans.get_column("hadm_id").head(5).to_list()
+        raise ValueError(
+            f"{orphans.height} evaluable admissions are absent from the source "
+            f"population (e.g. {sample}). The urine-output/weight parquets and "
+            f"the event substrate are from different extracts — check "
+            f"mimic4_ehr_dev_mode and the cohort guard in load_uo_data."
+        )
+
+
 def confusion_matrix(
     predicted: pl.LazyFrame,
     actual: pl.LazyFrame,
@@ -73,22 +103,22 @@ def confusion_matrix(
     """Returns the 2x2 AKI confusion matrix over the evaluable cohort.
 
     Compares the algorithm's predictions against the ICD ground truth,
-    restricted to the admissions the algorithm could evaluate. Both ``actual``
-    and ``predicted`` are narrowed to ``evaluable`` first, so the four cells
+    restricted to the admissions the algorithm could evaluate. Both actual
+    and predicted are narrowed to evaluable first, so the four cells
     always sum to the size of the evaluable cohort: an ICD-positive admission
     with no creatinine or urine-output data is out of scope, not a false
     negative.
 
     Args:
-        predicted (pl.LazyFrame): hadm_ids flagged by ``diagnose_aki``.
+        predicted (pl.LazyFrame): hadm_ids flagged by diagnose_aki.
         actual (pl.LazyFrame): hadm_ids with an AKI ICD code
-            (``aki_ground_truth``).
+            (aki_ground_truth).
         evaluable (pl.LazyFrame): the evaluable cohort
-            (``evaluable_admissions``).
+            (evaluable_admissions).
 
     Returns:
-        pl.DataFrame: a 2x2 matrix with a ``predicted`` label column
-            ("positive"/"negative") and ``actual_positive``/``actual_negative``
+        pl.DataFrame: a 2x2 matrix with a predicted label column
+            ("positive"/"negative") and actual_positive/actual_negative
             count columns, laid out as::
 
                 predicted   actual_positive   actual_negative

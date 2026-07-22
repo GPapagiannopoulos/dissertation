@@ -16,7 +16,7 @@ from .urine_output import calculate_urine_output_rate, net_urine, normalize_weig
 _ID_COLUMNS: Final[list[str]] = ["subject_id", "hadm_id", "stay_id", "itemid"]
 
 
-def _load_uo_data() -> pl.LazyFrame:
+def load_uo_data() -> pl.LazyFrame:
     """Loads and transforms the weight and urine parquets into a rate frame.
 
     Scans the derived weight and urine-output parquets, casts their integer
@@ -41,11 +41,20 @@ def _load_uo_data() -> pl.LazyFrame:
     normalized_weights_lf = normalize_weights(weights_lf)
     net_urine_output_lf = net_urine(urine_output_lf)
 
-    return (
+    uo_rate = (
         calculate_urine_output_rate(normalized_weights_lf, net_urine_output_lf)
         .rename({"subject_id": "patient_id"})
         .with_columns(pl.col("charttime").dt.cast_time_unit("ns"))
     )
+
+    if settings.mimic4_ehr_dev_mode:
+        uo_rate = uo_rate.join(
+            pl.scan_parquet(ensure_event_cache()).select("hadm_id").unique(),
+            on="hadm_id",
+            how="semi",
+        )
+
+    return uo_rate
 
 
 def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
@@ -73,7 +82,7 @@ def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
     )
     diagnoses_frames.append(complete_diagnosis_frames)
 
-    uo_rate_data = _load_uo_data()
+    uo_rate_data = load_uo_data()
     ha_aki_diagnoses_lf = diagnose_hospital_acquired_aki(source, uo_rate_data).rename(
         {"diagnosis": "diagnosis_made/diagnosis"}
     )
