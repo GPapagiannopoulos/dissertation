@@ -6,6 +6,7 @@ from polars.testing import assert_frame_equal
 
 from thesis.feature_engineering.validation import (
     aki_ground_truth,
+    assert_evaluable_within_source,
     confusion_matrix,
     evaluable_admissions,
     metrics,
@@ -177,6 +178,47 @@ def test_evaluable_admissions_happy_path(
     uo_data = pl.LazyFrame({"hadm_id": pl.Series(uo_ids, dtype=pl.String)})
     expected = pl.DataFrame({"hadm_id": pl.Series(expected_ids, dtype=pl.String)})
     assert_frame_equal(evaluable_admissions(source, uo_data).collect(), expected)
+
+
+@pytest.mark.parametrize(
+    "evaluable_ids, source_ids",
+    [
+        # 0. Evaluable is a strict subset of the source population
+        (["1", "2"], ["1", "2", "3"]),
+        # 1. Evaluable equals the source population
+        (["1", "2"], ["1", "2"]),
+        # 2. An empty evaluable cohort can never orphan
+        ([], ["1", "2"]),
+        # 3. Nulls in the source are irrelevant to a valid evaluable id
+        (["1"], ["1", None]),
+    ],
+)
+def test_assert_evaluable_within_source_passes(
+    evaluable_ids: list[str], source_ids: list[str | None]
+) -> None:
+    """Asserts the guard is silent when evaluable is within the source cohort."""
+    source = pl.LazyFrame({"hadm_id": pl.Series(source_ids, dtype=pl.String)})
+    assert assert_evaluable_within_source(_id_lf(evaluable_ids), source) is None
+
+
+@pytest.mark.parametrize(
+    "evaluable_ids, source_ids",
+    [
+        # 0. A single orphan admission trips the guard
+        (["1", "9"], ["1"]),
+        # 1. Every evaluable admission is absent from the source
+        (["1", "2"], ["3"]),
+        # 2. A non-empty cohort against an empty source population
+        (["1"], []),
+    ],
+)
+def test_assert_evaluable_within_source_raises(
+    evaluable_ids: list[str], source_ids: list[str]
+) -> None:
+    """Asserts the guard raises when an evaluable admission escapes the cohort."""
+    source = pl.LazyFrame({"hadm_id": pl.Series(source_ids, dtype=pl.String)})
+    with pytest.raises(ValueError, match="absent from the source population"):
+        assert_evaluable_within_source(_id_lf(evaluable_ids), source)
 
 
 @pytest.mark.parametrize(
