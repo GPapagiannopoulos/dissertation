@@ -24,6 +24,7 @@ def _fingerprint(pyhealth_cache_dir: Path) -> dict:
     This function serves to "version" the cached data so that staleness
     is detectable. It uses hashing for configuration parameters and metadata
     for the dataset.
+    PyHealth handles the directory pathing for dev vs non-dev settings.
 
     Args:
         pyhealth_cache_dir (Path): Path to the cache directory.
