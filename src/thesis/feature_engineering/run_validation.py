@@ -10,6 +10,7 @@ from thesis.feature_engineering.diagnostic_criteria import diagnose_aki
 from thesis.feature_engineering.driver import load_uo_data
 from thesis.feature_engineering.validation import (
     aki_ground_truth,
+    assert_evaluable_within_source,
     confusion_matrix,
     evaluable_admissions,
     metrics,
@@ -33,6 +34,8 @@ def run_validation() -> tuple[pl.DataFrame, pl.DataFrame]:
     predicted = diagnose_aki(source, uo_data).select("hadm_id").unique()
     actual = aki_ground_truth(source)
     evaluable = evaluable_admissions(source, uo_data)
+
+    assert_evaluable_within_source(evaluable, source)
 
     matrix = confusion_matrix(predicted, actual, evaluable)
     return matrix, metrics(matrix)
