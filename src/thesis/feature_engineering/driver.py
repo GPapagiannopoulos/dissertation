@@ -41,11 +41,20 @@ def load_uo_data() -> pl.LazyFrame:
     normalized_weights_lf = normalize_weights(weights_lf)
     net_urine_output_lf = net_urine(urine_output_lf)
 
-    return (
+    uo_rate = (
         calculate_urine_output_rate(normalized_weights_lf, net_urine_output_lf)
         .rename({"subject_id": "patient_id"})
         .with_columns(pl.col("charttime").dt.cast_time_unit("ns"))
     )
+
+    if settings.mimic4_ehr_dev_mode:
+        uo_rate = uo_rate.join(
+            pl.scan_parquet(ensure_event_cache()).select("hadm_id").unique(),
+            on="hadm_id",
+            how="semi",
+        )
+
+    return uo_rate
 
 
 def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
