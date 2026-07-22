@@ -16,7 +16,7 @@ from .urine_output import calculate_urine_output_rate, net_urine, normalize_weig
 _ID_COLUMNS: Final[list[str]] = ["subject_id", "hadm_id", "stay_id", "itemid"]
 
 
-def _load_uo_data() -> pl.LazyFrame:
+def load_uo_data() -> pl.LazyFrame:
     """Loads and transforms the weight and urine parquets into a rate frame.
 
     Scans the derived weight and urine-output parquets, casts their integer
@@ -73,7 +73,7 @@ def diagnose_all(source: pl.LazyFrame) -> pl.LazyFrame:
     )
     diagnoses_frames.append(complete_diagnosis_frames)
 
-    uo_rate_data = _load_uo_data()
+    uo_rate_data = load_uo_data()
     ha_aki_diagnoses_lf = diagnose_hospital_acquired_aki(source, uo_rate_data).rename(
         {"diagnosis": "diagnosis_made/diagnosis"}
     )

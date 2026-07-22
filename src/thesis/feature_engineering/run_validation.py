@@ -7,7 +7,7 @@ import polars as pl
 
 from thesis.eda.cache import ensure_event_cache
 from thesis.feature_engineering.diagnostic_criteria import diagnose_aki
-from thesis.feature_engineering.driver import _load_uo_data
+from thesis.feature_engineering.driver import load_uo_data
 from thesis.feature_engineering.validation import (
     aki_ground_truth,
     confusion_matrix,
@@ -28,7 +28,7 @@ def run_validation() -> tuple[pl.DataFrame, pl.DataFrame]:
             derived metrics frame.
     """
     source = pl.scan_parquet(ensure_event_cache())
-    uo_data = _load_uo_data()
+    uo_data = load_uo_data()
 
     predicted = diagnose_aki(source, uo_data).select("hadm_id").unique()
     actual = aki_ground_truth(source)
