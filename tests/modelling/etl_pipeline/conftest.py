@@ -4,19 +4,24 @@ from pathlib import Path
 
 import pytest
 
-from src.thesis.modelling.etl_pipeline.base_meds import build_command
+from thesis.modelling.etl_pipeline.base_meds import build_command
 
 
 @pytest.fixture
-def make_command(tmp_path: Path):
-    """Returns a factory for building meds_mimic_cli commands."""
+def command_paths(tmp_path: Path) -> dict[str, Path]:
+    """Returns the path arguments shared by the command factory and expectations."""
+    return {
+        "src": tmp_path / "mimic",
+        "dest": tmp_path / "out",
+        "executable": tmp_path / "bin" / "meds_etl_mimic",
+    }
 
-    def _make(**overrides):
-        kwargs = {
-            "src": tmp_path / "mimic",
-            "dest": tmp_path / "out",
-            "executable": tmp_path / "bin" / "meds_etl_mimic",
-        }
-        return build_command(**(kwargs | overrides))
+
+@pytest.fixture
+def make_command(command_paths: dict[str, Path]):
+    """Returns a factory for building meds_etl_mimic commands."""
+
+    def _make(**overrides) -> list[str]:
+        return build_command(**(command_paths | overrides))
 
     return _make
