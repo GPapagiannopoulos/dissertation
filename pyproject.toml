@@ -4,17 +4,32 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "dotenv>=0.9.9",
-    "plotly>=6.9.0",
     "polars>=1.35.2",
     "pre-commit>=4.6.0",
     "pydantic>=2.11.10",
     "pydantic-settings>=2.14.2",
-    "pyhealth>=2.0.1",
     "pytest>=9.1.1",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+# pyhealth pins numpy>=2.2; femr (via nptyping) pins numpy<2. The two stacks
+# cannot share an environment, so they are declared as conflicting extras.
+eda = [
+    "plotly>=6.9.0",
+    "pyhealth>=2.0.1",
     "streamlit>=1.58.0",
 ]
+modelling = [
+    "femr>=0.2.4",
+    "meds==0.3.3",
+    "meds-etl[cpp]==0.3.11",
+    "meds-reader>=0.1.16",
+]
+
+[tool.uv]
+conflicts = [[{ extra = "eda" }, { extra = "modelling" }]]
 
 [dependency-groups]
 dev = [
