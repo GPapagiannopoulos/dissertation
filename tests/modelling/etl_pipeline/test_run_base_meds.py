@@ -29,3 +29,15 @@ def test_run_base_meds_checks_exit_status(
 
     _, kwargs = spy_run[0]
     assert kwargs.get("check") is True
+
+
+def test_run_base_meds_does_not_capture_output(
+    spy_run: list[tuple[list[str], dict]], etl_layout: dict[str, Path]
+) -> None:
+    """Asserts progress streams to the terminal not into buffer."""
+    run_base_meds(**etl_layout)
+
+    _, kwargs = spy_run[0]
+    assert kwargs.get("capture_output") is not True
+    assert "stdout" not in kwargs
+    assert "stderr" not in kwargs
