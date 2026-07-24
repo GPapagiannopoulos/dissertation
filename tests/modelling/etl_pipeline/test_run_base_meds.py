@@ -19,3 +19,13 @@ def test_run_base_meds_launches_the_build_command(
     cmd, _ = spy_run[0]
     assert cmd == expected
     assert result == etl_layout["dest"]
+
+
+def test_run_base_meds_checks_exit_status(
+    spy_run: list[tuple[list[str], dict]], etl_layout: dict[str, Path]
+) -> None:
+    """Asserts a non-zero exit status is raised."""
+    run_base_meds(**etl_layout)
+
+    _, kwargs = spy_run[0]
+    assert kwargs.get("check") is True
