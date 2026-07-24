@@ -48,7 +48,7 @@ def spy_run(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], dict]]:
 
     def _fake_run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
         calls.append((cmd, kwargs))
-        return subprocess.CompletedProcess(cmd=cmd, returncode=0)
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
 
     monkeypatch.setattr(base_meds.subprocess, "run", _fake_run)
     return calls

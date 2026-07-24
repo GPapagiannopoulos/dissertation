@@ -5,6 +5,7 @@ be converted into long format by patient and its codes into OMOP
 format.
 """
 
+import subprocess
 from pathlib import Path
 from typing import Literal
 
@@ -67,4 +68,13 @@ def run_base_meds(
     backend: Literal["cpp", "polars"] = "cpp",
 ) -> Path:
     """Initiates a process to run the MEDS conversion."""
-    pass
+    cmd = build_command(
+        src,
+        dest,
+        executable=executable,
+        num_shards=num_shards,
+        num_proc=num_proc,
+        backend=backend,
+    )
+    subprocess.run(cmd)
+    return dest
