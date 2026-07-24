@@ -76,5 +76,5 @@ def run_base_meds(
         num_proc=num_proc,
         backend=backend,
     )
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
     return dest
