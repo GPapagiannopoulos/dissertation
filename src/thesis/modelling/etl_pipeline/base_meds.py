@@ -5,11 +5,14 @@ be converted into long format by patient and its codes into OMOP
 format.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Literal
 
 _BACKENDS = frozenset({"cpp", "polars"})
+_EXECUTABLE_NAME = "meds_etl_mimic"
+_VERSION_SUBDIR = "2.2"
 
 
 def build_command(
@@ -67,7 +70,26 @@ def run_base_meds(
     num_proc: int = 1,
     backend: Literal["cpp", "polars"] = "cpp",
 ) -> Path:
-    """Initiates a process to run the MEDS conversion."""
+    """Initiates a subprocess to run the MEDS conversion."""
+    if not (src / _VERSION_SUBDIR).is_dir():
+        raise FileNotFoundError(
+            f"Expected a {_VERSION_SUBDIR!r} subfolder inside src {src}. "
+            f"Point src at the directory containing {_VERSION_SUBDIR}/, "
+            f"not at the version folder itself."
+        )
+    if dest.exists():
+        raise FileExistsError(
+            f"Destination {dest} already exists; refusing to overwrite. "
+            f"Remove it or choose a new path."
+        )
+    if executable is None:
+        found = shutil.which(_EXECUTABLE_NAME)
+        if found is None:
+            raise FileNotFoundError(
+                f"Could not find {_EXECUTABLE_NAME!r} on PATH. Is the modelling "
+                f"environment active? (e.g. .venv-modelling/bin/{_EXECUTABLE_NAME})"
+            )
+        executable = Path(found)
     cmd = build_command(
         src,
         dest,
