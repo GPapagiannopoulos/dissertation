@@ -1,7 +1,10 @@
 .venv/
+.venv-modelling/
 .idea/
 __pycache__/
 *.pyc
 .env
 mimic_data/
+meds_output/
 CLAUDE.md
+athena/
