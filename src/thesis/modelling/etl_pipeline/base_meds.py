@@ -55,3 +55,16 @@ def build_command(
         "--backend",
         backend,
     ]
+
+
+def run_base_meds(
+    src: Path,
+    dest: Path,
+    *,
+    executable: Path | None = None,
+    num_shards: int = 100,
+    num_proc: int = 1,
+    backend: Literal["cpp", "polars"] = "cpp",
+) -> Path:
+    """Initiates a process to run the MEDS conversion."""
+    pass
