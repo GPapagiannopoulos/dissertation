@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
 jobs:
-  lint-and-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +15,22 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run pytest
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [ eda, modelling ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra ${{ matrix.stack }}
+      # -m selects the stack; tests/conftest.py skips the other stack's tree
+      # before import, so this extra's env never imports the other's deps.
+      - run: uv run pytest -m ${{ matrix.stack }}
         env:
           MIMIC4_EHR_DATA_PATH: unused
           MIMIC4_EHR_D_ICD_PROCEDURES: unused
