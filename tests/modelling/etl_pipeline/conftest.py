@@ -63,6 +63,18 @@ def etl_layout(tmp_path: Path) -> dict[str, Path]:
 
 
 @pytest.fixture
+def reader_layout(tmp_path: Path) -> dict[str, Path]:
+    """Returns a valid on-disk layout for the reader."""
+    src = tmp_path / "meds"
+    (src / "data").mkdir(parents=True)
+    return {
+        "src": src,
+        "dest": tmp_path / "reader_db",
+        "executable": tmp_path / "bin" / "meds_reader_convert",
+    }
+
+
+@pytest.fixture
 def spy_run(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], dict]]:
     """Replaces subprocess.run with a recorder, so no real ETL is ever launched."""
     calls: list[tuple[list[str], dict]] = []
