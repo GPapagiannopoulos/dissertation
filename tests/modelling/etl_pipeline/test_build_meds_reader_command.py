@@ -6,13 +6,6 @@ from typing import Any
 
 import pytest
 
-"""
-Test cases:
-1) assert default number of threads
-2) assert multiple threads
-3) assert exact argv list
-"""
-
 
 @pytest.mark.parametrize(
     "overrides, expected_options",
@@ -20,7 +13,7 @@ Test cases:
         # 0. Default values
         ({}, ["--num_threads", "1"]),
         # 1. 3 threads
-        ({"num_threads": "3"}, ["--num_threads", "3"]),
+        ({"num_threads": 3}, ["--num_threads", "3"]),
     ],
 )
 def test_build_command_happy_path(
@@ -39,6 +32,18 @@ def test_build_command_happy_path(
     assert make_db_command(**overrides) == expected
 
 
-def test_build_command_rejects_non_positive_threads() -> None:
+@pytest.mark.parametrize(
+    "num_threads",
+    [
+        # 0. 0 threads raises
+        {"num_threads": 0},
+        # 1. Negative threads raises
+        {"num_threads": -2},
+    ],
+)
+def test_build_command_rejects_non_positive_threads(
+    make_db_command: Callable, num_threads: dict[str, str]
+) -> None:
     """Asserts that the command needs >=1 threads."""
-    pass
+    with pytest.raises(ValueError):
+        make_db_command(**num_threads)
