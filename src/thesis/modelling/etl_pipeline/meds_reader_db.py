@@ -16,6 +16,9 @@ def build_db_command(
 
     Returns:
         list[str]: a list of the command arguments
+
+    Raises:
+        ValueError: if the number of threads is not positive
     """
     if num_threads <= 0:
         raise ValueError(f"The minimum number of threads is 1. Received {num_threads}")

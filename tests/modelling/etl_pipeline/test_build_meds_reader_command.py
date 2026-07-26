@@ -33,7 +33,7 @@ def test_build_command_happy_path(
 
 
 @pytest.mark.parametrize(
-    "num_threads",
+    "threads",
     [
         # 0. 0 threads raises
         {"num_threads": 0},
@@ -42,8 +42,16 @@ def test_build_command_happy_path(
     ],
 )
 def test_build_command_rejects_non_positive_threads(
-    make_db_command: Callable, num_threads: dict[str, str]
+    make_db_command: Callable, threads: dict[str, int]
 ) -> None:
     """Asserts that the command needs >=1 threads."""
-    with pytest.raises(ValueError):
-        make_db_command(**num_threads)
+    with pytest.raises(
+        ValueError,
+        match=f"The minimum number of threads is 1. Received {threads['num_threads']}",
+    ):
+        make_db_command(**threads)
+
+
+def test_build_command_returns_strings(make_db_command: Callable) -> None:
+    """Asserts that the arg list is all strings."""
+    assert all(isinstance(arg, str) for arg in make_db_command())
