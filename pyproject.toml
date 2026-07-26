@@ -53,6 +53,11 @@ convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--strict-markers"]
+markers = [
+    "eda: needs the eda extra (pyhealth/streamlit/plotly); auto-applied by tests/conftest.py.",
+    "modelling: needs the modelling extra (meds-etl/femr); auto-applied by tests/conftest.py.",
+]
 
 [build-system]
 requires = ["hatchling"]
