@@ -43,8 +43,8 @@ def test_run_base_meds_does_not_capture_output(
 
     _, kwargs = spy_run[0]
     assert kwargs.get("capture_output") is not True
-    assert "stdout" not in kwargs
-    assert "stderr" not in kwargs
+    assert kwargs.get("stdout") is None
+    assert kwargs.get("stderr") is None
 
 
 def test_run_base_meds_refuses_existing_destination(

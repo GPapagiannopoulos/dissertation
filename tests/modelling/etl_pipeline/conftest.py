@@ -7,6 +7,7 @@ import pytest
 
 from thesis.modelling.etl_pipeline import base_meds
 from thesis.modelling.etl_pipeline.base_meds import build_command
+from thesis.modelling.etl_pipeline.meds_reader_db import build_db_command
 
 
 @pytest.fixture
@@ -30,6 +31,26 @@ def make_command(command_paths: dict[str, Path]):
 
 
 @pytest.fixture
+def reader_paths(tmp_path: Path) -> dict[str, Path]:
+    """Returns the path arguments shared by the command factory and expectations."""
+    return {
+        "src": tmp_path / "mimic",
+        "dest": tmp_path / "out",
+        "executable": tmp_path / "bin" / "meds_reader_convert",
+    }
+
+
+@pytest.fixture
+def make_db_command(reader_paths: dict[str, Path]):
+    """Returns a factory for building MEDS reader commands."""
+
+    def _make(**overrides) -> list[str]:
+        return build_db_command(**(reader_paths | overrides))
+
+    return _make
+
+
+@pytest.fixture
 def etl_layout(tmp_path: Path) -> dict[str, Path]:
     """Returns a valid on-disk layout: src holds a 2.2/ folder, dest does not exist."""
     src = tmp_path / "mimic"
@@ -38,6 +59,18 @@ def etl_layout(tmp_path: Path) -> dict[str, Path]:
         "src": src,
         "dest": tmp_path / "out",
         "executable": tmp_path / "bin" / "meds_etl_mimic",
+    }
+
+
+@pytest.fixture
+def reader_layout(tmp_path: Path) -> dict[str, Path]:
+    """Returns a valid on-disk layout for the reader."""
+    src = tmp_path / "meds"
+    (src / "data").mkdir(parents=True)
+    return {
+        "src": src,
+        "dest": tmp_path / "reader_db",
+        "executable": tmp_path / "bin" / "meds_reader_convert",
     }
 
 
