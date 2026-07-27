@@ -20,7 +20,31 @@ from thesis.modelling.etl_pipeline.coverage import code_inventory
                 "code": pl.Series(["a", "b", "c"], dtype=pl.String),
                 "count": pl.Series([1] * 3, dtype=pl.UInt32),
             },
-        )
+        ),
+        # 1. Correctly counts duplicates
+        (
+            [],
+            {"code": pl.Series(["a"] * 3, dtype=pl.String)},
+            {
+                "code": pl.Series(["a"], dtype=pl.String),
+                "count": pl.Series([3], dtype=pl.UInt32),
+            },
+        ),
+        # 2. 'Null' codes get their own rows
+        (
+            [],
+            {"code": pl.Series(["a"] * 2 + [None], dtype=pl.String)},
+            {
+                "code": pl.Series(["a", None], dtype=pl.String),
+                "count": pl.Series([2, 1], dtype=pl.UInt32),
+            },
+        ),
+        # 3. An empty LF returns an empty LF
+        (
+            [],
+            {"code": pl.Series([]), "subject_id": pl.Series([])},
+            {"code": pl.Series([]), "count": pl.Series([], dtype=pl.UInt32)},
+        ),
     ],
 )
 def test_code_inventory_happy_path(
