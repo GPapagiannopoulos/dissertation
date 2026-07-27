@@ -8,5 +8,5 @@ def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
     return (
         events.group_by(pl.col("code"))
         .agg(pl.len().alias("count"))
-        .sort(pl.col("code"))
+        .sort(pl.col("code"), nulls_last=True)
     )
