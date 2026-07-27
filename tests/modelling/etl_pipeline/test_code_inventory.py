@@ -56,3 +56,18 @@ def test_code_inventory_happy_path(
     """Asserts standard intended behaviour for code_inventory."""
     data_lf = pl.LazyFrame(meds_outputs(drops, **overrides))
     assert_frame_equal(code_inventory(data_lf), pl.LazyFrame(expected))
+
+
+def test_concat_frames_aggregate_correctly() -> None:
+    """Asserts that two aggregated frames are concatenated correctly."""
+    frame_1 = pl.LazyFrame({"code": pl.Series(["a", "b", "c"], dtype=pl.String)})
+    frame_2 = pl.LazyFrame({"code": pl.Series(["a", "b"] * 2, dtype=pl.String)})
+    expected = pl.LazyFrame(
+        {
+            "code": pl.Series(["a", "b", "c"], dtype=pl.String),
+            "count": pl.Series([3, 3, 1], dtype=pl.UInt32),
+        }
+    )
+    assert_frame_equal(
+        code_inventory(pl.concat([frame_1, frame_2], how="diagonal")), expected
+    )
