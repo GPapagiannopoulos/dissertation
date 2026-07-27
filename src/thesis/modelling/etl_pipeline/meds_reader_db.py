@@ -36,5 +36,5 @@ def run_meds_reader_convert(
         executable=executable,
         num_threads=num_threads,
     )
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
     return dest

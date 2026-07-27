@@ -26,13 +26,26 @@ def test_launches_build_command(
     assert result == reader_layout["dest"]
 
 
-def test_checks_exit_status() -> None:
-    """Asserts that kwargs are recorded."""
+def test_checks_exit_status(
+    spy_run: list[tuple[list[str], dict]], reader_layout: dict[str, Path]
+) -> None:
+    """Asserts a non-zero exit status is raised."""
+    run_meds_reader_convert(**reader_layout)
+
+    _, kwargs = spy_run[0]
+    assert kwargs.get("check") is True
 
 
-def test_does_not_capture_output() -> None:
+def test_does_not_capture_output(
+    spy_run: list[tuple[list[str], dict]], reader_layout: dict[str, Path]
+) -> None:
     """Asserts that the output is not captured to a buffer."""
-    pass
+    run_meds_reader_convert(**reader_layout)
+
+    _, kwargs = spy_run[0]
+    assert kwargs.get("capture_output") is not True
+    assert kwargs.get("stdout") is None
+    assert kwargs.get("stderr") is None
 
 
 def test_refuses_existing_destination() -> None:
