@@ -1,7 +1,11 @@
 """Generates the MEDS database return the subject ids for downstream consumption."""
 
+import shutil
 import subprocess
 from pathlib import Path
+
+_EXECUTABLE_NAME = "meds_reader_convert"
+_DATA_SUBDIR = "data"
 
 
 def build_db_command(
@@ -27,9 +31,47 @@ def build_db_command(
 
 
 def run_meds_reader_convert(
-    src: Path, dest: Path, *, executable: Path, num_threads: int = 1
+    src: Path, dest: Path, *, executable: Path | None = None, num_threads: int = 1
 ) -> Path:
-    """Runs the MEDS reader convert command."""
+    """Initiates a subprocess to build the meds_reader database.
+
+    The database is built by a CLI, which fans out across num_threads.
+
+    Args:
+        src: Path to the MEDS dataset root, the directory holding data/
+        dest: Path to the database root, which must not already exist
+        executable: Path to the meds_reader_convert console script. When
+            omitted it is resolved from PATH
+        num_threads: Number of threads the CLI uses to build the database
+
+    Returns:
+        Path: the database root, for downstream consumption
+
+    Raises:
+        FileNotFoundError: If src holds no data/ subfolder
+        FileNotFoundError: If the executable is neither given nor on PATH
+        FileExistsError: If dest already exists
+        subprocess.CalledProcessError: If the conversion exits non-zero
+    """
+    if not (src / _DATA_SUBDIR).is_dir():
+        raise FileNotFoundError(
+            f"Expected a {_DATA_SUBDIR!r} subfolder inside src {src}. "
+            f"Point src at the MEDS dataset root containing {_DATA_SUBDIR}/, "
+            f"not at the shard folder itself."
+        )
+    if dest.exists():
+        raise FileExistsError(
+            f"Destination {dest} already exists; refusing to overwrite. "
+            f"Remove it or choose a new path."
+        )
+    if executable is None:
+        found = shutil.which(_EXECUTABLE_NAME)
+        if found is None:
+            raise FileNotFoundError(
+                f"Could not find {_EXECUTABLE_NAME!r} on PATH. Is the modelling "
+                f"environment active? (e.g. .venv-modelling/bin/{_EXECUTABLE_NAME})"
+            )
+        executable = Path(found)
     cmd = build_db_command(
         src,
         dest,
