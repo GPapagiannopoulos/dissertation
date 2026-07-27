@@ -1,6 +1,7 @@
 """Fixtures for ETL pipeline testing suite."""
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -85,3 +86,21 @@ def spy_run(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], dict]]:
 
     monkeypatch.setattr(base_meds.subprocess, "run", _fake_run)
     return calls
+
+
+@pytest.fixture
+def meds_outputs() -> Callable:
+    """Returns a factory for building MEDS base outputs."""
+
+    def _make(drops: list, **overrides: dict[str, list]) -> dict[str, list]:
+        defaults = {
+            "subject_id": ["1", "2", "3"],
+            "code": ["a", "b", "c"],
+        }
+        defaults.update(**overrides)
+        for col in drops:
+            defaults.pop(col, None)
+
+        return defaults
+
+    return _make
