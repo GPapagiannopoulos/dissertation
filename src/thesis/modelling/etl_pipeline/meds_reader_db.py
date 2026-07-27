@@ -1,5 +1,6 @@
 """Generates the MEDS database return the subject ids for downstream consumption."""
 
+import subprocess
 from pathlib import Path
 
 
@@ -26,7 +27,14 @@ def build_db_command(
 
 
 def run_meds_reader_convert(
-    source: Path, dest: Path, *, executable: Path, num_threads: int = 1
+    src: Path, dest: Path, *, executable: Path, num_threads: int = 1
 ) -> Path:
     """Runs the MEDS reader convert command."""
-    pass
+    cmd = build_db_command(
+        src,
+        dest,
+        executable=executable,
+        num_threads=num_threads,
+    )
+    subprocess.run(cmd)
+    return dest
