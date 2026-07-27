@@ -1,4 +1,9 @@
-"""Generates the MEDS database return the subject ids for downstream consumption."""
+"""Builds the meds_reader database from a MEDS dataset.
+
+Stage 2 of the MOTOR ETL: the long-format shards produced by base_meds are
+converted into the column store meds_reader queries. Reading subject ids back
+out of the built database is a separate, read-only stage.
+"""
 
 import shutil
 import subprocess
@@ -17,7 +22,7 @@ def build_db_command(
         src (Path): Path to the sharded MEDS output
         dest (Path): Path to the db root
         executable (Path): Path to the cli
-        num_threads (int): Number of subprocesses to spawn
+        num_threads (int): Number of threads the cli uses to process shards
 
     Returns:
         list[str]: a list of the command arguments
