@@ -41,6 +41,7 @@ import polars as pl
 METHOD_DIRECT: Literal["direct"] = "direct"
 METHOD_SSSOM: Literal["sssom"] = "sssom"
 METHOD_MAPS_TO: Literal["maps_to"] = "maps_to"
+METHOD_MANUAL: Literal["manual"] = "manual"
 
 
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -274,5 +275,44 @@ def resolve_maps_to(
         .join(mappings, on="concept_id", how="inner")
         .join(targets, on="target_id", how="inner")
         .with_columns(pl.lit(METHOD_MAPS_TO).alias("method"))
+        .select(pl.col("code"), pl.col("target"), pl.col("method"))
+    )
+
+
+def resolve_manual(codes: pl.LazyFrame, mapping: Mapping[str, str]) -> pl.LazyFrame:
+    """Resolves the curated mapping for MIMIC codes no crosswalk can reach.
+
+    MIMIC invents a handful of families outright: ``MIMIC_IV_Gender/M`` is a column
+    value, not a code in any vocabulary, so neither the SSSOM crosswalks nor Athena
+    can say anything about it. The mapping in ``codes`` is the hand-written bridge for
+    those, and because we wrote it, it is the least authoritative layer and runs last.
+
+    The mapping is a parameter rather than an import so the layer stays independent of
+    the table it happens to be driven by, in keeping with the other resolvers.
+
+    Args:
+        codes: any frame with a ``code`` (String) column; other columns are ignored
+        mapping: MEDS code to OMOP concept, e.g. ``MANUAL_CONCEPT_MAP``
+
+    Returns:
+        pl.LazyFrame: the shared resolver schema, method = "manual"::
+
+            code   (String)  the code as it appears in the MEDS events
+            target (String)  the curated OMOP concept
+            method (String)  "manual"
+
+        Codes the mapping does not mention emit no row. Entries the mapping holds for
+        codes the events never carried are not invented.
+    """
+    mapping_frame = pl.LazyFrame(
+        {
+            "code": pl.Series(list(mapping), dtype=pl.String),
+            "target": pl.Series(list(mapping.values()), dtype=pl.String),
+        }
+    )
+
+    return (
+        codes.join(mapping_frame, on="code", how="inner")
+        .with_columns(pl.lit(METHOD_MANUAL).alias("method"))
         .select(pl.col("code"), pl.col("target"), pl.col("method"))
     )
