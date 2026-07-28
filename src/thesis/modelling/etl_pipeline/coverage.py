@@ -1,4 +1,33 @@
-"""Helpers for mapping MIMIC-IV native codes to the standardized SSSOMOP of MOTOR."""
+"""Stage 2.5: maps the codes our MEDS data emits onto codes MOTOR understands.
+
+Every layer produces one code shape <vocabulary_id>/<concept_code> (e.g.
+LOINC/2160-0). What differs is whether OMOP considers a concept standard, and
+whether MOTOR kept it. MEDS standardises the container, not the vocabulary, so
+meds_etl emits concepts such as ICD10CM/I50.84 untouched. These are not standard;
+MOTOR's dictionary holds standard concepts only. Closing that gap is this module's job.
+
+The work runs in two phases:
+
+1. Resolve -- our code to a standard OMOP concept. One helper per kind of gap:
+   resolve_direct (already a token), resolve_sssom (MIMIC itemids, which have
+   no OMOP vocabulary at all), resolve_maps_to (valid but non-standard, e.g.
+   ICD10CM/NDC) and the manual table (MIMIC inventions such as MIMIC_IV_Gender/M).
+   They run most-authoritative first, each anti-joined against what remains, so a
+   curated mapping always wins over one we derive.
+2. Climb -- that concept to the nearest ancestor MOTOR actually holds. This acts on
+   targets, not source codes, which is why the resolvers take no vocabulary argument
+   and why a standard-but-unknown code still needs a target: it is where the climb
+   starts.
+
+Every resolver shares one output schema so the driver can chain them::
+
+    code   (String)  the code as it appears in the MEDS events
+    target (String)  the OMOP concept it resolved to
+    method (String)  which layer resolved it, one of the METHOD_* constants
+
+A code the layer cannot resolve emits no row rather than a null target; the
+driver's anti-joins depend on absence to pass work down the chain.
+"""
 
 import functools
 from collections.abc import Mapping
@@ -14,7 +43,21 @@ METHOD_SSSOM: Literal["sssom"] = "sssom"
 
 
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
-    """Determines the number of events per code in the dataset."""
+    """Determines the number of events per code in the dataset.
+
+    The inventory is the denominator for every coverage claim we make, so null codes
+    are counted rather than dropped: their events are real, they simply cannot map.
+
+    Args:
+        events: MEDS events, of which only ``code`` (String) is read. Stage 1's
+            shards carry 21 columns; the rest are ignored
+
+    Returns:
+        pl.LazyFrame: sorted by code, nulls last::
+
+            code  (String)  a distinct code appearing in the events
+            count (UInt32)  how many events carry it
+    """
     return (
         events.group_by(pl.col("code"))
         .agg(pl.len().alias("count"))
@@ -96,15 +139,24 @@ def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
 
 
 def resolve_direct(codes: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
-    """Resolves direct code matches into MOTOR-native vocab codes.
+    """Resolves codes MOTOR already holds, which map to themselves.
+
+    The first and cheapest layer: no external data, and nothing downstream can improve
+    on a code that is already a token. Membership is tested against the union of the
+    token sets.
 
     Args:
-        codes (pl.LazyFrame): a LazyFrame containing a code field to be mapped
-        vocab (MotorVocab): a MotorVocab object holding the vocabulary codes
+        codes: any frame with a code (String) column; other columns are ignored
+        vocab: the extracted MOTOR vocabulary
 
     Returns:
-        pl.LazyFrame: a LazyFrame of format (code, target, method) with the
-            resolved codes and resolution method
+        pl.LazyFrame: the shared resolver schema, method = "direct"::
+
+            code   (String)  the code as it appears in the MEDS events
+            target (String)  identical to code, since it is already a token
+            method (String)  "direct"
+
+        Codes absent from the vocabulary emit no row, passing to the next layer.
     """
     return (
         codes.filter(pl.col("code").is_in(list(vocab.tokens)))
@@ -116,7 +168,36 @@ def resolve_direct(codes: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
 
 
 def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFrame:
-    """Resolves MIMIC native codes to OMOP codes."""
+    """Resolves MIMIC itemids through the crosswalks meds_etl ships.
+
+    MIMIC itemids (MIMIC_IV_LABITEM/50912, MIMIC_IV_ITEM/220045) belong to no
+    OMOP vocabulary, so no Athena lookup can reach them. meds_etl bundles MIT-LCP
+    SSSOM crosswalks for exactly these and records the result in parent_codes.
+    Those crosswalks are curated, so this layer runs before the general Athena bridge.
+
+    Note the metadata covers only the two itemid families. Diagnoses and drugs are
+    absent from it entirely, which is why resolve_maps_to exists.
+
+    Args:
+        codes: any frame with a code (String) column; other columns are ignored
+        code_metadata: the MEDS sidecar, metadata/codes.parquet::
+
+            code         (String)       the MEDS code
+            description  (String)       human label, unused here
+            parent_codes (List(String)) standard concepts, null when unmapped
+
+    Returns:
+        pl.LazyFrame: the shared resolver schema, method = "sssom"::
+
+            code   (String)  the code as it appears in the MEDS events
+            target (String)  a standard OMOP concept from parent_codes
+            method (String)  "sssom"
+
+        One row per parent: the column is a list, so a code may emit several rows
+        Codes whose parent_codes is null and codes the metadata does not mention
+        emit no row. Codes the metadata knows but the events never carried are not
+        invented.
+    """
     metadata = (
         code_metadata.select(pl.col("code"), pl.col("parent_codes"))
         .explode("parent_codes")
@@ -128,3 +209,10 @@ def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFr
     return codes.join(metadata, on=pl.col("code"), how="inner").select(
         pl.col("code"), pl.col("target"), pl.col("method")
     )
+
+
+def resolve_maps_to(
+    codes: pl.LazyFrame, concept: pl.LazyFrame, relationship: pl.LazyFrame
+) -> pl.LazyFrame:
+    """Converts MIMIC native codes to Athena concepts."""
+    pass
