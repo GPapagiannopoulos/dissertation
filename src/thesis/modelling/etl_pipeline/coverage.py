@@ -10,6 +10,7 @@ import msgpack
 import polars as pl
 
 METHOD_DIRECT: Literal["direct"] = "direct"
+METHOD_SSSOM: Literal["sssom"] = "sssom"
 
 
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -111,4 +112,19 @@ def resolve_direct(codes: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
             pl.col("code").alias("target"), pl.lit(METHOD_DIRECT).alias("method")
         )
         .select(pl.col("code"), pl.col("target"), pl.col("method"))
+    )
+
+
+def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFrame:
+    """Resolves MIMIC native codes to OMOP codes."""
+    metadata = (
+        code_metadata.select(pl.col("code"), pl.col("parent_codes"))
+        .explode("parent_codes")
+        .rename({"parent_codes": "target"})
+        .drop_nulls("target")
+        .with_columns(pl.lit(METHOD_SSSOM).alias("method"))
+    )
+
+    return codes.join(metadata, on=pl.col("code"), how="inner").select(
+        pl.col("code"), pl.col("target"), pl.col("method")
     )
