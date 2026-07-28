@@ -28,10 +28,37 @@ class MotorVocab:
 
 
 def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
-    """Extraccts the vocabulary of MOTOR."""
+    """Extracts the vocabulary of MOTOR.
+
+    The released dictionary holds a candidate list far longer than the model's
+    vocabulary; only its first vocab_size entries are real tokens, their position
+    in the list being the embedding row they index. Entries past the cut, and
+    entries of the unused type, never reach the model.
+
+    Args:
+        dictionary_path: Path to the msgpack dictionary shipped with the weights
+        vocab_size: Number of leading entries that form the vocabulary, as
+            declared by the model's own config
+
+    Returns:
+        MotorVocab: the token sets, split by entry type, plus the full ancestor map
+
+    Raises:
+        ValueError: If vocab_size is not positive
+        ValueError: If vocab_size exceeds the entries the dictionary holds
+    """
+    if vocab_size <= 0:
+        raise ValueError(f"The minimum vocabulary size is 1. Received {vocab_size}")
     with open(dictionary_path, "rb") as f:
         dictionary = msgpack.load(f, use_list=False, strict_map_key=False)
-    vocab = dictionary["ontology_rollup"][:vocab_size]
+    rollup = dictionary["ontology_rollup"]
+    if vocab_size > len(rollup):
+        raise ValueError(
+            f"vocab_size {vocab_size} exceeds the {len(rollup)} entries in "
+            f"{dictionary_path}. The tokens would not line up with the model's "
+            f"embedding table; check the vocab_size the model config declares."
+        )
+    vocab = rollup[:vocab_size]
     all_parents = dictionary["all_parents"]
 
     code_tokens: set[str] = set()
