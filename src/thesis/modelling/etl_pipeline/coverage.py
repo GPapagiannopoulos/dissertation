@@ -40,6 +40,7 @@ import polars as pl
 
 METHOD_DIRECT: Literal["direct"] = "direct"
 METHOD_SSSOM: Literal["sssom"] = "sssom"
+METHOD_MAPS_TO: Literal["maps_to"] = "maps_to"
 
 
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -214,5 +215,64 @@ def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFr
 def resolve_maps_to(
     codes: pl.LazyFrame, concept: pl.LazyFrame, relationship: pl.LazyFrame
 ) -> pl.LazyFrame:
-    """Converts MIMIC native codes to Athena concepts."""
-    pass
+    """Resolves valid but non-standard codes through OMOP's 'Maps to' bridge.
+
+    ICD10CM, ICD9CM and NDC are legitimate OMOP vocabularies, so meds_etl emits
+    them untouched, but they are source concepts: OMOP expects analysis to happen on
+    the standard concept each maps to (SNOMED for conditions, RxNorm for drugs).
+    CONCEPT_RELATIONSHIP carries that bridge as a directed edge,
+    ``concept_id_1 --[Maps to]--> concept_id_2``.
+
+    Already-standard codes map to themselves, and those self-edges are kept
+    deliberately: ICD10PCS/0T773DZ is standard yet absent from MOTOR's kept
+    vocabulary, so it needs a target purely to give the climb a starting point.
+    Filtering self-edges out, as femr's own ontology loader does, would silently strip
+    the procedure codes.
+
+    Athena keys everything on integer concept_id, so concept is consulted
+    twice: once to turn our code string into a source id, once to turn the target id
+    back into a string. That costs two scans of a 766 MB file, which is the deliberate
+    trade against holding ~9.9M rows in memory.
+
+    Args:
+        codes: any frame with a code (String) column; other columns are ignored
+        concept: Athena CONCEPT.csv, of which concept_id, vocabulary_id
+            and concept_code are read. All columns arrive as String
+        relationship: Athena CONCEPT_RELATIONSHIP.csv, of which
+            concept_id_1, concept_id_2, relationship_id and
+            invalid_reason are read
+
+    Returns:
+        pl.LazyFrame: the shared resolver schema, method = "maps_to"::
+
+            code   (String)  the code as it appears in the MEDS events
+            target (String)  the standard concept it maps to
+            method (String)  "maps_to"
+
+        One row per mapping: roughly 5% of codes map to several standard concepts,
+        so fan-out is expected and picking a primary is the assembly step's job. Codes
+        Athena does not know, codes carrying no 'Maps to' edge, and edges flagged with
+        an invalid_reason all emit no row.
+    """
+    lookup = concept.select(
+        (pl.col("vocabulary_id") + "/" + pl.col("concept_code")).alias("code"),
+        pl.col("concept_id").cast(pl.Int64),
+    )
+    mappings = relationship.filter(
+        pl.col("relationship_id") == "Maps to",
+        pl.col("invalid_reason").is_null(),
+    ).select(
+        pl.col("concept_id_1").cast(pl.Int64).alias("concept_id"),
+        pl.col("concept_id_2").cast(pl.Int64).alias("target_id"),
+    )
+    targets = lookup.select(
+        pl.col("concept_id").alias("target_id"), pl.col("code").alias("target")
+    )
+
+    return (
+        codes.join(lookup, on="code", how="inner")
+        .join(mappings, on="concept_id", how="inner")
+        .join(targets, on="target_id", how="inner")
+        .with_columns(pl.lit(METHOD_MAPS_TO).alias("method"))
+        .select(pl.col("code"), pl.col("target"), pl.col("method"))
+    )
