@@ -1,11 +1,15 @@
 """Helpers for mapping MIMIC-IV native codes to the standardized SSSOMOP of MOTOR."""
 
+import functools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import msgpack
 import polars as pl
+
+METHOD_DIRECT: Literal["direct"] = "direct"
 
 
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -26,6 +30,11 @@ class MotorVocab:
     text_codes: frozenset[str]
     all_parents: Mapping[str, tuple]
 
+    @functools.cached_property
+    def tokens(self) -> frozenset[str]:
+        """Returns the union of all codes in the vocabulary."""
+        return self.code_tokens.union(self.numeric_codes.union(self.text_codes))
+
 
 def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
     """Extracts the vocabulary of MOTOR.
@@ -33,7 +42,8 @@ def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
     The released dictionary holds a candidate list far longer than the model's
     vocabulary; only its first vocab_size entries are real tokens, their position
     in the list being the embedding row they index. Entries past the cut, and
-    entries of the unused type, never reach the model.
+    entries of the unused type, never reach the model. This represents unused
+    model capacity built into MOTOR.
 
     Args:
         dictionary_path: Path to the msgpack dictionary shipped with the weights
@@ -81,4 +91,24 @@ def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
         frozenset(numeric_codes),
         frozenset(text_codes),
         all_parents,
+    )
+
+
+def resolve_direct(codes: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
+    """Resolves direct code matches into MOTOR-native vocab codes.
+
+    Args:
+        codes (pl.LazyFrame): a LazyFrame containing a code field to be mapped
+        vocab (MotorVocab): a MotorVocab object holding the vocabulary codes
+
+    Returns:
+        pl.LazyFrame: a LazyFrame of format (code, target, method) with the
+            resolved codes and resolution method
+    """
+    return (
+        codes.filter(pl.col("code").is_in(list(vocab.tokens)))
+        .with_columns(
+            pl.col("code").alias("target"), pl.lit(METHOD_DIRECT).alias("method")
+        )
+        .select(pl.col("code"), pl.col("target"), pl.col("method"))
     )
