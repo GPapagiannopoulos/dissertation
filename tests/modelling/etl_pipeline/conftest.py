@@ -9,6 +9,7 @@ import pytest
 
 from thesis.modelling.etl_pipeline import base_meds
 from thesis.modelling.etl_pipeline.base_meds import build_command
+from thesis.modelling.etl_pipeline.coverage import MotorVocab
 from thesis.modelling.etl_pipeline.meds_reader_db import build_db_command
 
 
@@ -122,6 +123,23 @@ def make_dictionary(tmp_path: Path) -> Callable:
         path = tmp_path / "dictionary"
         path.write_bytes(msgpack.dumps(defaults))
         return path
+
+    return _make
+
+
+@pytest.fixture
+def make_vocab() -> Callable:
+    """Returns a factory for MotorVocab objects, one code seeded per token set."""
+
+    def _make(**overrides) -> MotorVocab:
+        defaults = {
+            "code_tokens": frozenset({"SNOMED/1"}),
+            "numeric_codes": frozenset({"LOINC/2"}),
+            "text_codes": frozenset({"SNOMED/3"}),
+            "all_parents": {"SNOMED/1": ("SNOMED/1",)},
+        }
+
+        return MotorVocab(**(defaults | overrides))
 
     return _make
 
