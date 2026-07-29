@@ -138,8 +138,18 @@ def make_vocab() -> Callable:
             "text_codes": frozenset({"SNOMED/3"}),
             "all_parents": {"SNOMED/1": ("SNOMED/1",)},
         }
+        fields = defaults | overrides
+        # weights covers exactly the tokens, so overriding a set alone stays coherent;
+        # a case that cares about the tie-break passes its own spread of weights
+        fields.setdefault(
+            "weights",
+            dict.fromkeys(
+                fields["code_tokens"] | fields["numeric_codes"] | fields["text_codes"],
+                -0.1,
+            ),
+        )
 
-        return MotorVocab(**(defaults | overrides))
+        return MotorVocab(**fields)
 
     return _make
 
