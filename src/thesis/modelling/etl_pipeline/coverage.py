@@ -514,20 +514,6 @@ def build_concept_map(
     the tokens MOTOR holds. The result is the artefact that rewrites code in the
     normalised shards, with the original kept as source_code.
 
-    The chain runs most-reliable first. A token needs no mapping at all; the SSSOM
-    crosswalks are published by MIT-LCP; 'Maps to' is derived from the vocabulary
-    itself; the manual table is hand-written and therefore last, the fallback for
-    codes nothing else can reach. Each layer is anti-joined on code alone, never on
-    (code, target): a code is finished once a layer speaks for it, and the several
-    targets it may have fanned out to travel forward together to be judged after the
-    climb.
-
-    Each layer is materialised as it is produced. resolve_maps_to scans a 766 MB
-    CONCEPT.csv twice and a 1.9 GB CONCEPT_RELATIONSHIP.csv once, and its output is
-    read twice more here, by the anti-join and by the concatenation. Left lazy, those
-    scans would be re-executed. The frames are a few tens of thousands of
-    single-column rows, so holding them costs nothing.
-
     Null codes are dropped entering the chain but kept in the inventory. Their events
     are real and belong in any denominator; they simply carry nothing to map, and
     counting them as a mapping failure would overstate the gap.
@@ -569,8 +555,12 @@ def build_concept_map(
 
     return (
         resolved.join(climbed, on="target", how="inner")
-        .sort(pl.col("hops"), pl.col("weights"), pl.col("vocab_code"))
-        .unique(subset=["code"], keep="first", maintain_order=True)
+        .group_by(pl.col("code"))
+        .agg(
+            pl.all()
+            .sort_by(pl.col("hops"), pl.col("weights"), pl.col("vocab_code"))
+            .first()
+        )
         .join(inventory, on="code", how="left")
         .select(
             pl.col("code"),
