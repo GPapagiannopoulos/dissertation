@@ -30,6 +30,7 @@ driver's anti-joins depend on absence to pass work down the chain.
 """
 
 import functools
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,6 +75,7 @@ class MotorVocab:
     code_tokens: frozenset[str]
     numeric_codes: frozenset[str]
     text_codes: frozenset[str]
+    weights: Mapping[str, float]
     all_parents: Mapping[str, tuple]
 
     @functools.cached_property
@@ -120,22 +122,28 @@ def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
     code_tokens: set[str] = set()
     numeric_codes: set[str] = set()
     text_codes: set[str] = set()
+    weights: dict[str, float] = {}
 
     for vocab_entry in vocab:
+        code = vocab_entry["code_string"]
         match vocab_entry["type"]:
             case 0:
-                code_tokens.add(vocab_entry["code_string"])
+                code_tokens.add(code)
             case 1:
-                numeric_codes.add(vocab_entry["code_string"])
+                numeric_codes.add(code)
             case 2:
-                text_codes.add(vocab_entry["code_string"])
+                text_codes.add(code)
             case _:
                 continue
+        weight = vocab_entry["weight"]
+        if weight < weights.get(code, math.inf):
+            weights[code] = weight
 
     return MotorVocab(
         frozenset(code_tokens),
         frozenset(numeric_codes),
         frozenset(text_codes),
+        weights,
         all_parents,
     )
 
@@ -316,3 +324,25 @@ def resolve_manual(codes: pl.LazyFrame, mapping: Mapping[str, str]) -> pl.LazyFr
         .with_columns(pl.lit(METHOD_MANUAL).alias("method"))
         .select(pl.col("code"), pl.col("target"), pl.col("method"))
     )
+
+
+def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
+    """Converts valid OMOP codes to valid MOTOR vocab codes.
+
+    MOTOR has a limited vocabulary of vocab_size unique tokens.
+    These are all standardized OMOP codes. However, not all OMOP codes
+    have a valid embedding. For every code not directly in the vocabulary
+    we are called to find the nearest ontology parent so that the event may
+    be parsed by the model.
+
+    The weight of each code is stored as the negative Shanon entropy. This means
+    that the most negative weight represents the most informative
+
+    Args:
+        targets (pl.LazyFrame): the codes emitted by the previous code
+            resolution steps
+        vocab (MotorVocab): custom container for MOTOR's vocabulary
+    """
+    # dictionary holding already discovered OMOP->vocab mappings
+    # including how many levels away it is
+    pass

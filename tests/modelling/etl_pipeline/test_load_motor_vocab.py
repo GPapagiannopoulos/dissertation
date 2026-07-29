@@ -105,6 +105,106 @@ def test_code_may_hold_tokens_of_several_types(
     assert "LOINC/2160-0" in vocab.numeric_codes
 
 
+def test_records_the_weight_of_every_token(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """Every token carries a weight, whichever set it landed in."""
+    rollup = [
+        rollup_entry("SNOMED/1", CODE, weight=-0.4),
+        rollup_entry("LOINC/2", NUMERIC, weight=-0.2),
+        rollup_entry("SNOMED/3", TEXT, weight=-0.1),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    vocab = load_motor_vocab(path, vocab_size=len(rollup))
+
+    assert vocab.weights == {"SNOMED/1": -0.4, "LOINC/2": -0.2, "SNOMED/3": -0.1}
+
+
+@pytest.mark.parametrize(
+    "weights",
+    [
+        # 0. The best entry arrives last
+        [-0.1, -0.2, -0.9],
+        # 1. The best entry arrives first, so it must survive the later ones
+        [-0.9, -0.2, -0.1],
+        # 2. The best entry is buried mid-list
+        [-0.2, -0.9, -0.1],
+    ],
+)
+def test_keeps_the_most_informative_entry_per_code(
+    make_dictionary: Callable, rollup_entry: Callable, weights: list[float]
+) -> None:
+    """A code repeats once per numeric bin; weight is negative, so min() is best."""
+    rollup = [
+        rollup_entry("LOINC/2160-0", NUMERIC, weight=weight) for weight in weights
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    vocab = load_motor_vocab(path, vocab_size=len(rollup))
+
+    assert vocab.weights == {"LOINC/2160-0": -0.9}
+
+
+def test_records_a_zero_weight(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """Zero is a legal weight -- a concept firing exactly when its parent does."""
+    path = make_dictionary(ontology_rollup=[rollup_entry("SNOMED/1", CODE, weight=0.0)])
+
+    vocab = load_motor_vocab(path, vocab_size=1)
+
+    assert vocab.weights == {"SNOMED/1": 0.0}
+
+
+def test_ignores_the_weight_of_entries_that_bear_no_token(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """An unused slot must not win the tie-break for a code it never tokenised."""
+    rollup = [
+        rollup_entry("SNOMED/1", CODE, weight=-0.1),
+        rollup_entry("SNOMED/1", UNUSED, weight=-0.9),
+        rollup_entry("SNOMED/2", UNUSED, weight=-0.5),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    vocab = load_motor_vocab(path, vocab_size=len(rollup))
+
+    assert vocab.weights == {"SNOMED/1": -0.1}
+
+
+def test_ignores_the_weight_of_entries_past_the_cut(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """Truncation binds the weights too: a better entry outside the vocab is not one."""
+    rollup = [
+        rollup_entry("SNOMED/1", CODE, weight=-0.1),
+        rollup_entry("SNOMED/1", CODE, weight=-0.9),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    vocab = load_motor_vocab(path, vocab_size=1)
+
+    assert vocab.weights == {"SNOMED/1": -0.1}
+
+
+def test_weights_cover_exactly_the_vocabulary(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """The climb looks weights up for anything in tokens, so the two must agree."""
+    rollup = [
+        rollup_entry("SNOMED/1", CODE),
+        rollup_entry("LOINC/2", NUMERIC),
+        rollup_entry("SNOMED/3", TEXT),
+        rollup_entry("SNOMED/4", UNUSED),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    vocab = load_motor_vocab(path, vocab_size=len(rollup))
+
+    assert vocab.weights.keys() == vocab.tokens
+
+
 def test_returns_the_whole_ancestor_map(
     make_dictionary: Callable, rollup_entry: Callable
 ) -> None:
