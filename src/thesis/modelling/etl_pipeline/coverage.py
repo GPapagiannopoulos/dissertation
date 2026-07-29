@@ -358,6 +358,58 @@ def _immediate_parents(
     return tuple(sorted(immediate_parents))
 
 
+def _best_ancestor(
+    code: str,
+    vocab: MotorVocab,
+    parents: dict[str, tuple[str, ...]],
+    best: dict[str, tuple[str, int] | None],
+) -> tuple[str, int] | None:
+    """Finds the token nearest to a code, climbing one ontology layer at a time.
+
+    The algorithm is agnostic to whether the code refers to a token already in the
+    vocabulary or a concept. If the code is in the vocabulary it is the answer.
+    Otherwise, the answer is the best of what the immediate parents report.
+    Candidates are ranked by hops first, then weight, then the code itself.
+
+    Args:
+        code (str): the code to climb from, which need not be a target
+        vocab (MotorVocab): the extracted MOTOR vocabulary, read for its tokens, weights
+            and ancestor closure
+        parents (dict[str, tuple]): cache of immediate parents per code
+        best (dict[str, tuple]): memo of answers per code. None records a
+            code nothing climbs from
+
+    Returns:
+        tuple[str, int] | None: the token climbed to and the hops it took, or None
+            for a code with no token above it.
+    """
+    if code in best:
+        return best[code]
+    if code in vocab.tokens:
+        best[code] = (code, 0)
+        return best[code]
+
+    best[code] = None
+    if code not in vocab.all_parents:
+        return None
+    if code not in parents:
+        parents[code] = _immediate_parents(code, vocab.all_parents)
+
+    candidates: list[tuple[int, float, str]] = []
+    for parent in parents[code]:
+        climbed = _best_ancestor(parent, vocab, parents, best)
+        if climbed is None:
+            continue
+        token, hops = climbed
+        candidates.append((hops + 1, vocab.weights[token], token))
+
+    if candidates:
+        hops, _, token = min(candidates)
+        best[code] = (token, hops)
+
+    return best[code]
+
+
 def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     """Converts valid OMOP codes to valid MOTOR vocab codes.
 
@@ -368,13 +420,55 @@ def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     be parsed by the model.
 
     The weight of each code is stored as the negative Shanon entropy. This means
-    that the most negative weight represents the most informative
+    that the most negative weight represents the most informative. Ties are settled
+    on hops first, then weight, then the code itself, so the map a run produces does
+    not depend on the order a set happened to iterate in.
 
     Args:
         targets (pl.LazyFrame): the codes emitted by the previous code
-            resolution steps
+            resolution steps, of which only target (String) is read
         vocab (MotorVocab): custom container for MOTOR's vocabulary
+
+    Returns:
+        pl.LazyFrame: one row per distinct target, sorted by target::
+
+            target     (String)  the OMOP concept a resolver produced
+            vocab_code (String)  the token it climbs to
+            hops       (UInt32)  layers climbed, 0 when the target is itself a token
+
+        A target with no token above it emits no row rather than a null vocab_code,
+        matching the resolvers: absence is what the driver's joins read.
     """
-    # dictionary holding already discovered OMOP->vocab mappings
-    # including how many levels away it is
-    pass
+    # discovered OMOP->vocab mappings, including how many levels away they are,
+    # and the immediate parents behind them. Both are shared across targets
+    memo: dict[str, tuple[str, int] | None] = {}
+    parents: dict[str, tuple[str, ...]] = {}
+
+    distinct_targets = (
+        targets.select(pl.col("target"))
+        .unique()
+        .drop_nulls()
+        .collect(engine="streaming")
+        .to_series()
+    )
+
+    climbed: list[str] = []
+    vocab_codes: list[str] = []
+    distances: list[int] = []
+
+    for target in distinct_targets:
+        answer = _best_ancestor(target, vocab, parents, memo)
+        if answer is None:
+            continue
+        vocab_code, hops = answer
+        climbed.append(target)
+        vocab_codes.append(vocab_code)
+        distances.append(hops)
+
+    return pl.LazyFrame(
+        {
+            "target": pl.Series(climbed, dtype=pl.String),
+            "vocab_code": pl.Series(vocab_codes, dtype=pl.String),
+            "hops": pl.Series(distances, dtype=pl.UInt32),
+        }
+    ).sort(pl.col("target"))
