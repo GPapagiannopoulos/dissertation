@@ -68,6 +68,28 @@ def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
     )
 
 
+def scan_athena(path: Path) -> pl.LazyFrame:
+    """Opens one of Athena's vocabulary exports.
+
+    The exports are tab separated rather than comma separated, and concept names
+    carry unbalanced quotes, so quoting must be disabled outright: left on, a stray
+    quote swallows every row until the next one and silently shortens the file. femr
+    passes quote_char for CONCEPT but not for CONCEPT_RELATIONSHIP, which is a bug to
+    avoid inheriting rather than a convention to copy.
+
+    Every column is read as String. Athena's own header types are advisory, the ids
+    are only ever joined on, and inference over a 766 MB file costs more than the
+    casts the resolvers do for themselves.
+
+    Args:
+        path: Path to an Athena export, e.g. athena/CONCEPT.csv
+
+    Returns:
+        pl.LazyFrame: the file's columns, unaltered, all of dtype String
+    """
+    return pl.scan_csv(path, separator="\t", infer_schema_length=0, quote_char=None)
+
+
 @dataclass(frozen=True)
 class MotorVocab:
     """Custom class representing the vocabulary of MOTOR."""
@@ -475,3 +497,89 @@ def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
             "weights": pl.Series(weights, dtype=pl.Float64),
         }
     ).sort(pl.col("target"))
+
+
+def build_concept_map(
+    inventory: pl.LazyFrame,
+    vocab: MotorVocab,
+    code_metadata: pl.LazyFrame,
+    concept: pl.LazyFrame,
+    relationship: pl.LazyFrame,
+    manual_map: Mapping[str, str],
+) -> pl.LazyFrame:
+    """Builds a concept map out of the MEDS data format.
+
+    Assembles the module: the resolvers run in a chain, each seeing only what the
+    layer above it could not place, and the concepts they produce are then climbed to
+    the tokens MOTOR holds. The result is the artefact that rewrites code in the
+    normalised shards, with the original kept as source_code.
+
+    The chain runs most-reliable first. A token needs no mapping at all; the SSSOM
+    crosswalks are published by MIT-LCP; 'Maps to' is derived from the vocabulary
+    itself; the manual table is hand-written and therefore last, the fallback for
+    codes nothing else can reach. Each layer is anti-joined on code alone, never on
+    (code, target): a code is finished once a layer speaks for it, and the several
+    targets it may have fanned out to travel forward together to be judged after the
+    climb.
+
+    Each layer is materialised as it is produced. resolve_maps_to scans a 766 MB
+    CONCEPT.csv twice and a 1.9 GB CONCEPT_RELATIONSHIP.csv once, and its output is
+    read twice more here, by the anti-join and by the concatenation. Left lazy, those
+    scans would be re-executed. The frames are a few tens of thousands of
+    single-column rows, so holding them costs nothing.
+
+    Null codes are dropped entering the chain but kept in the inventory. Their events
+    are real and belong in any denominator; they simply carry nothing to map, and
+    counting them as a mapping failure would overstate the gap.
+
+    Args:
+        inventory: code_inventory's output, i.e. code (String) and count (UInt32)
+        vocab: the extracted MOTOR vocabulary
+        code_metadata: the MEDS sidecar, metadata/codes.parquet
+        concept: Athena CONCEPT.csv, opened with scan_athena
+        relationship: Athena CONCEPT_RELATIONSHIP.csv, opened with scan_athena
+        manual_map: MEDS code to OMOP concept, e.g. MANUAL_CONCEPT_MAP
+
+    Returns:
+        pl.LazyFrame: one row per code that reaches a token, sorted by code::
+
+            code       (String)  the code as it appears in the MEDS events
+            count      (UInt32)  how many events carry it
+            target     (String)  the OMOP concept a resolver produced
+            method     (String)  which layer resolved it
+            vocab_code (String)  the token the target climbs to
+            hops       (UInt32)  layers climbed, 0 when the target is a token
+            weights    (Float64) the token's weight, i.e. its negative entropy
+    """
+    remaining = inventory.drop_nulls("code").select(pl.col("code")).collect().lazy()
+
+    direct = resolve_direct(remaining, vocab).collect().lazy()
+    remaining = remaining.join(direct, on="code", how="anti").collect().lazy()
+
+    sssom = resolve_sssom(remaining, code_metadata).collect().lazy()
+    remaining = remaining.join(sssom, on="code", how="anti").collect().lazy()
+
+    maps_to = resolve_maps_to(remaining, concept, relationship).collect().lazy()
+    remaining = remaining.join(maps_to, on="code", how="anti").collect().lazy()
+
+    manual = resolve_manual(remaining, manual_map).collect().lazy()
+
+    resolved = pl.concat([direct, sssom, maps_to, manual])
+    climbed = climb_to_vocab(resolved, vocab)
+
+    return (
+        resolved.join(climbed, on="target", how="inner")
+        .sort(pl.col("hops"), pl.col("weights"), pl.col("vocab_code"))
+        .unique(subset=["code"], keep="first", maintain_order=True)
+        .join(inventory, on="code", how="left")
+        .select(
+            pl.col("code"),
+            pl.col("count"),
+            pl.col("target"),
+            pl.col("method"),
+            pl.col("vocab_code"),
+            pl.col("hops"),
+            pl.col("weights"),
+        )
+        .sort(pl.col("code"))
+    )
