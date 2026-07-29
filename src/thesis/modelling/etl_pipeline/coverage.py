@@ -362,8 +362,8 @@ def _best_ancestor(
     code: str,
     vocab: MotorVocab,
     parents: dict[str, tuple[str, ...]],
-    best: dict[str, tuple[str, int] | None],
-) -> tuple[str, int] | None:
+    best: dict[str, tuple[str, int, float] | None],
+) -> tuple[str, int, float] | None:
     """Finds the token nearest to a code, climbing one ontology layer at a time.
 
     The algorithm is agnostic to whether the code refers to a token already in the
@@ -386,7 +386,7 @@ def _best_ancestor(
     if code in best:
         return best[code]
     if code in vocab.tokens:
-        best[code] = (code, 0)
+        best[code] = (code, 0, vocab.weights[code])
         return best[code]
 
     best[code] = None
@@ -400,12 +400,12 @@ def _best_ancestor(
         climbed = _best_ancestor(parent, vocab, parents, best)
         if climbed is None:
             continue
-        token, hops = climbed
+        token, hops, _ = climbed
         candidates.append((hops + 1, vocab.weights[token], token))
 
     if candidates:
-        hops, _, token = min(candidates)
-        best[code] = (token, hops)
+        hops, weight, token = min(candidates)
+        best[code] = (token, hops, weight)
 
     return best[code]
 
@@ -441,7 +441,7 @@ def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     """
     # discovered OMOP->vocab mappings, including how many levels away they are,
     # and the immediate parents behind them. Both are shared across targets
-    memo: dict[str, tuple[str, int] | None] = {}
+    memo: dict[str, tuple[str, int, float] | None] = {}
     parents: dict[str, tuple[str, ...]] = {}
 
     distinct_targets = (
@@ -455,20 +455,23 @@ def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     climbed: list[str] = []
     vocab_codes: list[str] = []
     distances: list[int] = []
+    weights: list[float] = []
 
     for target in distinct_targets:
         answer = _best_ancestor(target, vocab, parents, memo)
         if answer is None:
             continue
-        vocab_code, hops = answer
+        vocab_code, hops, weight = answer
         climbed.append(target)
         vocab_codes.append(vocab_code)
         distances.append(hops)
+        weights.append(weight)
 
     return pl.LazyFrame(
         {
             "target": pl.Series(climbed, dtype=pl.String),
             "vocab_code": pl.Series(vocab_codes, dtype=pl.String),
             "hops": pl.Series(distances, dtype=pl.UInt32),
+            "weights": pl.Series(weights, dtype=pl.Float64),
         }
     ).sort(pl.col("target"))
