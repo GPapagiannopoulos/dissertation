@@ -326,6 +326,38 @@ def resolve_manual(codes: pl.LazyFrame, mapping: Mapping[str, str]) -> pl.LazyFr
     )
 
 
+def _immediate_parents(
+    code: str, all_parents: Mapping[str, tuple[str, ...]]
+) -> tuple[str, ...]:
+    """Extracts the immediate ontology parents of a code.
+
+    The all_parents property of the vocabulary contains a flat transitive
+    list of all ancestors. In order to compute the closest ancestor we
+    need to determine the immediate parents. We use a reduction to determine
+    the immediate parents of a target, given that an ancestor is an immediate
+    parent iff it is not an ancestor to any of the other target ancestors.
+
+    Args:
+        code (str): the code whose immediate parents we want to extract
+        all_parents (Mapping[str, tuple[str, ...]]): the map containing
+            all transitive ancestors.
+
+    Returns:
+        tuple[str, ...]: a tuple containing all immediate parents to the
+            target code. A sorted tuple is used because it is immutable,
+            and because we want to guarantee the order of the parents.
+    """
+    immediate_parents: list[str] = []
+    transitive_ancestors = [x for x in all_parents.get(code, ()) if x != code]
+    for anc in transitive_ancestors:
+        if not any(
+            anc in all_parents[other] for other in transitive_ancestors if other != anc
+        ):
+            immediate_parents.append(anc)
+
+    return tuple(sorted(immediate_parents))
+
+
 def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     """Converts valid OMOP codes to valid MOTOR vocab codes.
 
