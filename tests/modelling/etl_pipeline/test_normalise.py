@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -58,13 +59,16 @@ def test_rewrite_codes_swaps_the_code_and_keeps_the_original(
 ) -> None:
     """The token replaces code in place; the MIMIC code survives as source_code."""
     lookup = build_lookup(make_concept_map(), structural=())
-    events = pl.LazyFrame({"subject_id": [1], "code": ["ICD10CM/A"]})
+    events = pl.LazyFrame(
+        {"subject_id": [1], "time": [datetime(2020, 1, 1)], "code": ["ICD10CM/A"]}
+    )
 
     assert_frame_equal(
         rewrite_codes(events, lookup.lazy()).collect(),
         pl.DataFrame(
             {
                 "subject_id": [1],
+                "time": [datetime(2020, 1, 1)],
                 "code": ["SNOMED/1"],
                 "source_code": ["ICD10CM/A"],
             }
@@ -86,7 +90,10 @@ def test_rewrite_codes_applies_the_drop_policy(
 ) -> None:
     """Only codes reaching a token, plus the structural exemptions, survive."""
     lookup = build_lookup(make_concept_map())
-    events = pl.LazyFrame({"code": [code]}, schema={"code": pl.String})
+    events = pl.LazyFrame(
+        {"subject_id": [1], "time": [datetime(2020, 1, 1)], "code": [code]},
+        schema={"subject_id": pl.Int64, "time": pl.Datetime, "code": pl.String},
+    )
 
     assert (rewrite_codes(events, lookup.lazy()).collect().height == 1) is kept
 
@@ -94,12 +101,61 @@ def test_rewrite_codes_applies_the_drop_policy(
 def test_rewrite_codes_keeps_duplicates(make_concept_map: Callable) -> None:
     """Two source codes climbing to one token stay two events: recording is signal."""
     lookup = build_lookup(make_concept_map())
-    events = pl.LazyFrame({"code": ["ICD10CM/A", "ICD10CM/B"]})
+    events = pl.LazyFrame(
+        {
+            "subject_id": [1, 1],
+            "time": [datetime(2020, 1, 1)] * 2,
+            "code": ["ICD10CM/A", "ICD10CM/B"],
+        }
+    )
 
     result = rewrite_codes(events, lookup.lazy()).collect()
 
     assert result.height == 2
     assert result["code"].to_list() == ["SNOMED/1", "SNOMED/1"]
+
+
+def test_rewrite_codes_restores_the_meds_ordering(make_concept_map: Callable) -> None:
+    """The join returns hash order; convert aborts on "Times are not in order"."""
+    lookup = build_lookup(make_concept_map())
+    events = pl.LazyFrame(
+        {
+            "subject_id": [2, 1, 2, 1],
+            "time": [
+                datetime(2020, 1, 2),
+                datetime(2020, 1, 2),
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 1),
+            ],
+            "code": ["ICD10CM/A", "ICD10CM/B", "ICD10CM/B", "ICD10CM/A"],
+        }
+    )
+
+    result = rewrite_codes(events, lookup.lazy()).collect()
+
+    assert result["subject_id"].to_list() == [1, 1, 2, 2]
+    assert result["time"].to_list() == [
+        datetime(2020, 1, 1),
+        datetime(2020, 1, 2),
+        datetime(2020, 1, 1),
+        datetime(2020, 1, 2),
+    ]
+
+
+def test_rewrite_codes_keeps_the_birth_event_first(make_concept_map: Callable) -> None:
+    """MEDS_BIRTH shares its timestamp with demographics and is the subject's origin."""
+    lookup = build_lookup(make_concept_map())
+    events = pl.LazyFrame(
+        {
+            "subject_id": [1, 1],
+            "time": [datetime(2020, 1, 1), datetime(2020, 1, 1)],
+            "code": ["ICD10CM/A", "MEDS_BIRTH"],
+        }
+    )
+
+    result = rewrite_codes(events, lookup.lazy()).collect()
+
+    assert result["code"].to_list() == ["MEDS_BIRTH", "SNOMED/1"]
 
 
 def test_build_code_metadata_describes_the_surviving_codes(

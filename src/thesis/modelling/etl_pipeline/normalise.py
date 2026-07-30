@@ -28,6 +28,8 @@ from thesis.modelling.etl_pipeline.coverage import scan_athena
 
 STRUCTURAL_CODES: tuple[str, ...] = ("MEDS_BIRTH", "MEDS_DEATH")
 
+_BIRTH_CODE = "MEDS_BIRTH"
+
 _DATA_SUBDIR = "data"
 _METADATA_SUBDIR = "metadata"
 _DATASET_NAME = "MIMIC-IV"
@@ -83,12 +85,17 @@ def rewrite_codes(events: pl.LazyFrame, lookup: pl.LazyFrame) -> pl.LazyFrame:
     self-auditing: any token can be traced back to the MIMIC code it came from.
     The join is responsible for dropping codes that do not map to tokens.
 
+    meds_reader_convert expects the timestamps in each shard to be in order. Polars
+    joins on a hash table and returns rows in which order the probe side yields them.
+    The sort at the end enforces the necessary ordering.
+
     Args:
-        events: one stage 1 shard, needing a code column
+        events: one stage 1 shard, needing subject_id, time and code columns
         lookup: build_lookup's output, as a LazyFrame
 
     Returns:
-        pl.LazyFrame: the shard's schema, plus source_code (String)
+        pl.LazyFrame: the shard's schema plus source_code (String), sorted by
+            subject_id then time, with MEDS_BIRTH first within its timestamp
     """
     return (
         events.join(lookup, on="code", how="inner")
@@ -97,6 +104,7 @@ def rewrite_codes(events: pl.LazyFrame, lookup: pl.LazyFrame) -> pl.LazyFrame:
             pl.col("vocab_code").alias("code"),
         )
         .drop("vocab_code")
+        .sort("subject_id", "time", pl.col("code") != _BIRTH_CODE)
     )
 
 
