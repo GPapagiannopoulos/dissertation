@@ -2,6 +2,7 @@
 
 import subprocess
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import msgpack
@@ -176,7 +177,13 @@ def make_shard(tmp_path: Path) -> Callable:
     def _make(name: str = "0.parquet", **columns: list) -> Path:
         defaults = {
             "subject_id": [1, 1, 2, 2],
-            "code": ["ICD10CM/A", "MEDS_BIRTH", "MIMIC_IV_ITEM/9", None],
+            "time": [
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 2),
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 2),
+            ],
+            "code": ["MEDS_BIRTH", "ICD10CM/A", "MIMIC_IV_ITEM/9", None],
             "numeric_value": [None, None, 1.5, 2.5],
         }
         path = tmp_path / "events" / name

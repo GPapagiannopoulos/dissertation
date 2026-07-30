@@ -22,7 +22,7 @@ from pathlib import Path
 from thesis.modelling.etl_pipeline.meds_reader_db import run_meds_reader_convert
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "meds_output" / "base"
+SRC = ROOT / "meds_output" / "normalized"
 DEST = ROOT / "meds_output" / "reader_db"
 
 

@@ -5,9 +5,7 @@ Run from the repo root with the modelling environment's interpreter:
     .venv-modelling/bin/python scripts/apply_concept_map.py
 
 Reads the stage 1 shards and concept_map.parquet, and writes a fresh MEDS dataset root
-holding the rewritten shards plus its own metadata. An existing dest is refused: the
-output is what stage 3 builds the database from, so a silent mix of stale and new
-shards is the one failure that would go unnoticed.
+holding the rewritten shards plus its own metadata. An existing dest is refused.
 """
 
 import argparse
