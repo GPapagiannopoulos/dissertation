@@ -19,8 +19,13 @@ def main() -> None:
         print(f"{DEST} not found - making directory.")
         DEST.mkdir(parents=True)
 
+    print("Standardizing diagnosis fields...")
+    diagnosis_labels_standardized = diagnosis_labels.cast(
+        {"hadm_id": pl.Int64, "patient_id": pl.Int64}
+    ).rename({"hadm_id": "visit_id", "patient_id": "subject_id"})
+
     print(f"Sinking parquet at {file_path}")
-    diagnosis_labels.sink_parquet(file_path)
+    diagnosis_labels_standardized.sink_parquet(file_path)
     print(pl.scan_parquet(file_path).collect(engine="streaming").describe())
 
 
