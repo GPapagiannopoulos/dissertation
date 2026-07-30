@@ -2,9 +2,11 @@
 
 import subprocess
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import msgpack
+import polars as pl
 import pytest
 
 from thesis.modelling.etl_pipeline import base_meds
@@ -150,6 +152,62 @@ def make_vocab() -> Callable:
         )
 
         return MotorVocab(**fields)
+
+    return _make
+
+
+@pytest.fixture
+def make_concept_map() -> Callable:
+    """Returns a factory for concept maps, overriding only the columns a case uses."""
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "code": ["ICD10CM/A", "ICD10CM/B", "MIMIC_IV_LABITEM/1"],
+            "vocab_code": ["SNOMED/1", "SNOMED/1", "LOINC/2"],
+        }
+        return pl.LazyFrame(defaults | columns)
+
+    return _make
+
+
+@pytest.fixture
+def make_shard(tmp_path: Path) -> Callable:
+    """Returns a factory writing one MEDS-shaped shard to a temp parquet."""
+
+    def _make(name: str = "0.parquet", **columns: list) -> Path:
+        defaults = {
+            "subject_id": [1, 1, 2, 2],
+            "time": [
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 2),
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 2),
+            ],
+            "code": ["MEDS_BIRTH", "ICD10CM/A", "MIMIC_IV_ITEM/9", None],
+            "numeric_value": [None, None, 1.5, 2.5],
+        }
+        path = tmp_path / "events" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame(defaults | columns).write_parquet(path)
+        return path
+
+    return _make
+
+
+@pytest.fixture
+def make_athena_concept(tmp_path: Path) -> Callable:
+    """Returns a factory writing an Athena-shaped CONCEPT export to a temp TSV."""
+
+    def _make(**columns: list) -> Path:
+        defaults = {
+            "concept_code": ["1", "2"],
+            "vocabulary_id": ["SNOMED", "LOINC"],
+            "concept_name": ["Sepsis", "Creatinine"],
+        }
+        path = tmp_path / "athena" / "CONCEPT.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame(defaults | columns).write_csv(path, separator="\t")
+        return path
 
     return _make
 
