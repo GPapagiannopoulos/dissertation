@@ -125,7 +125,7 @@ def assign_folds(
     """Assigns individuals of each stratum to a cohort.
 
     The function uses hashing to assign subjects to their respective
-    cohorts.Hshing is used because unlike random.shuffle it isn't
+    cohorts. Hashing is used because unlike random.shuffle it isn't
     dependent on the original order, it is computable per subject,
     and it offers decorrelation from the id structure. We are not using
     the native polars pl.col().hash() method because it is not guaranteed
@@ -135,9 +135,11 @@ def assign_folds(
     featurizes an admission from the patient's entire prior timeline.
     Including a patient in numerous cohorts is data leakage.
     """
+    if any(fraction < 0 for fraction in fractions.values()):
+        raise ValueError("Negative fraction detected in dictionary.")
     if not math.isclose(1.0, sum(fractions.values())):
         raise ValueError(
-            f"Fractions sum to {sum(fractions.values())}.Must sum to 1.0 instead."
+            f"Fractions sum to {sum(fractions.values())}. Must sum to 1.0 instead."
         )
 
     breaks = list(accumulate(fractions.values()))[:-1]
@@ -171,4 +173,5 @@ def assign_folds(
         )
         .select("subject_id", "stratum", "fold")
         .sort("subject_id")
+        .cast({"fold": pl.String})
     )
