@@ -18,6 +18,13 @@ def diagnose_aki(source: pl.LazyFrame, uo_data: pl.LazyFrame) -> pl.LazyFrame:
         pl.LazyFrame: LazyFrame containing a "diagnosis_made" event_type
             where "diagnosis_made/diagnosis" is "Acute Kidney Injury"
     """
+    gate = (
+        source.filter(pl.col("event_type") == "admissions")
+        .group_by(pl.col("hadm_id"))
+        .agg(pl.col("timestamp").min().alias("admittime"))
+        .with_columns((pl.col("admittime") + pl.duration(hours=24)).alias("gate"))
+    )
+
     sorted_labevents = (
         source.filter(pl.col("labevents/label") == "Creatinine")
         .select(
@@ -36,17 +43,24 @@ def diagnose_aki(source: pl.LazyFrame, uo_data: pl.LazyFrame) -> pl.LazyFrame:
         .over("hadm_id")
     )
 
-    rolling_7d_min = (
-        pl.col("labevents/valuenum")
-        .rolling_min_by("timestamp", window_size="7d")
-        .over("hadm_id")
+    admission_creatinine = (
+        sorted_labevents.join(gate, on="hadm_id", how="inner")
+        .filter(pl.col("timestamp") <= pl.col("gate"))
+        .group_by("hadm_id")
+        .agg(
+            pl.col("labevents/valuenum")
+            .sort_by("timestamp")
+            .first()
+            .alias("baseline_creatinine")
+        )
     )
 
     creatinine_arm = (
-        sorted_labevents.filter(
+        sorted_labevents.join(admission_creatinine, on="hadm_id", how="left")
+        .filter(
             pl.any_horizontal(
                 pl.col("labevents/valuenum") - rolling_48h_min >= 0.3,
-                pl.col("labevents/valuenum") >= rolling_7d_min * 1.5,
+                pl.col("labevents/valuenum") >= pl.col("baseline_creatinine") * 1.5,
             )
         )
         .group_by(["patient_id", "hadm_id"], maintain_order=True)
@@ -83,7 +97,7 @@ def diagnose_hospital_acquired_aki(
         The definition includes changes to baseline creatinine.
             In the absence of outpatient data for the cohort indicating
             the last healthy kidney function, we follow industry standard
-            and set this as the min of the last seven days.
+            and set this as the first measurement within 24h.
 
     Args:
         source (pl.LazyFrame):source dataset containing the labevents

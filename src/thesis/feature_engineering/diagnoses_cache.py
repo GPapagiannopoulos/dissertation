@@ -11,7 +11,7 @@ from thesis.eda.cache import ensure_event_cache, sink_atomic
 from thesis.feature_engineering.driver import diagnose_all
 
 # Bump when diagnosis logic changes
-ENRICH_VERSION: Final[int] = 2
+ENRICH_VERSION: Final[int] = 3
 
 
 def _fingerprint(base_sidecar_path: Path, uo_sources: list[Path]) -> dict:
