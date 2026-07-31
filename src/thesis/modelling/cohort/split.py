@@ -15,12 +15,12 @@ import polars as pl
 _POSITIVE_LABEL: Final[str] = "positive"
 _NEGATIVE_LABEL: Final[str] = "negative"
 _STRATUM_SEPARATOR: Final[str] = "_"
-_FRACTIONS: Final[dict[str, float]] = {
+FRACTIONS: Final[dict[str, float]] = {
     "training": 0.70,
     "validation": 0.15,
     "testing": 0.15,
 }
-_FOLD_SEED: Final[int] = 42
+FOLD_SEED: Final[int] = 42
 _MEDS_READER_CONVERT_SENTINELS: Final[list[str]] = [
     "meds_reader.version",
     "meds_reader.properties",
@@ -199,8 +199,8 @@ def run_build_subject_split(
     dest: Path,
     admissions: Path,
     labels: Path,
-    fractions: dict[str, float] = _FRACTIONS,
-    seed: int = _FOLD_SEED,
+    fractions: dict[str, float] = FRACTIONS,
+    seed: int = FOLD_SEED,
     db_opener: Callable[[str], AbstractContextManager] = meds_reader.SubjectDatabase,
 ) -> Path:
     """Reads all subject_ids from the meds_reader database and folds it.
