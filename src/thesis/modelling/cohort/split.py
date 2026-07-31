@@ -1,15 +1,32 @@
 """Module for handling the splitting of the cohort into training/validation/testing."""
 
 import math
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from hashlib import sha256
 from itertools import accumulate
+from pathlib import Path
 from struct import pack
+from typing import Final
 
+import meds_reader
 import polars as pl
 
-_POSITIVE_LABEL = "positive"
-_NEGATIVE_LABEL = "negative"
-_STRATUM_SEPARATOR = "_"
+_POSITIVE_LABEL: Final[str] = "positive"
+_NEGATIVE_LABEL: Final[str] = "negative"
+_STRATUM_SEPARATOR: Final[str] = "_"
+_FRACTIONS: Final[dict[str, float]] = {
+    "training": 0.70,
+    "validation": 0.15,
+    "testing": 0.15,
+}
+_FOLD_SEED: Final[int] = 42
+_MEDS_READER_CONVERT_SENTINELS: Final[list[str]] = [
+    "meds_reader.version",
+    "meds_reader.properties",
+    "meds_reader.length",
+    "subject_id",
+]
 
 
 def _admission_bucket() -> pl.Expr:
@@ -175,3 +192,78 @@ def assign_folds(
         .sort("subject_id")
         .cast({"fold": pl.String})
     )
+
+
+def run_build_subject_split(
+    db_path: Path,
+    dest: Path,
+    admissions: Path,
+    labels: Path,
+    fractions: dict[str, float] = _FRACTIONS,
+    seed: int = _FOLD_SEED,
+    db_opener: Callable[[str], AbstractContextManager] = meds_reader.SubjectDatabase,
+) -> Path:
+    """Reads all subject_ids from the meds_reader database and folds it.
+
+    A subject holding no surviving admission is unlabellable but still
+    needs an unambiguous fold.
+
+    Args:
+        db_path: Path to a meds_reader_convert output directory
+        dest: Path to the parquet to write
+        admissions: Path to the normalised shard folder
+        labels: Path to the positive diagnosis labels parquet
+        fractions: fold name -> the share of each stratum it takes
+        seed: seed for the subject hash
+        db_opener: SubjectDatabase constructor, injected by the tests
+
+    Returns:
+        Path: dest, holding subject_id, stratum and fold
+
+    Raises:
+        FileExistsError: if dest already exists
+        FileNotFoundError: if db_path is not a meds_reader database, labels is
+            missing, or admissions holds no parquet
+    """
+    if dest.exists():
+        raise FileExistsError(
+            f"Destination {dest} already exists; refusing to overwrite. "
+            f"Remove it or choose a new path."
+        )
+
+    if not labels.is_file():
+        raise FileNotFoundError(f"Expected file at {labels}.")
+    labels_lf = pl.scan_parquet(labels)
+
+    shards = sorted(admissions.glob("*.parquet"))
+    if not shards:
+        raise FileNotFoundError(
+            f"Found no parquet shards in {admissions}. Point events at stage 1's "
+            f"data/ folder."
+        )
+    admissions_lf = pl.scan_parquet(shards).select(
+        pl.col("subject_id"), pl.col("visit_id")
+    )
+
+    if not db_path.is_dir():
+        raise FileNotFoundError(
+            f"{db_path} does not point to a directory. Please make sure that 'db_path' "
+            f"points to a valid output directory of the 'meds_reader_convert' command."
+        )
+    for sentinel in _MEDS_READER_CONVERT_SENTINELS:
+        if not (db_path / sentinel).exists():
+            raise FileNotFoundError(
+                f"Expected db directory to contain '{sentinel}'. Please make sure that "
+                f"'db_path' points to a valid output directory of the "
+                f"'meds_reader_convert' command."
+            )
+    with db_opener(str(db_path)) as db:
+        subject_ids = sorted(db)
+
+    stratified_subjects_lf = build_subject_strata(subject_ids, admissions_lf, labels_lf)
+    stratified_subjects_df = stratified_subjects_lf.collect(engine="streaming")
+    subject_folds = assign_folds(stratified_subjects_df, fractions=fractions, seed=seed)
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    subject_folds.write_parquet(dest)
+    return dest

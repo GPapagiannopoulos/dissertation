@@ -1,9 +1,50 @@
 """Shared fixtures for the cohort splitting test suite."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from pathlib import Path
+from typing import Self
 
 import polars as pl
 import pytest
+
+SENTINELS = (
+    "meds_reader.version",
+    "meds_reader.properties",
+    "meds_reader.length",
+    "subject_id",
+)
+
+
+class FakeSubjectDatabase:
+    """Stands in for meds_reader.SubjectDatabase, which needs a real 1.4 GB store.
+
+    It is its own opener: calling it records the path and returns itself, so a
+    test can assert both what was opened and that it was closed again.
+    """
+
+    def __init__(self, subject_ids: list[int]) -> None:
+        """Holds the ids this database will hand out."""
+        self.subject_ids = subject_ids
+        self.paths: list[str] = []
+        self.closed = False
+
+    def __call__(self, path: str) -> Self:
+        """Stands in for the constructor, recording what was opened."""
+        self.paths.append(path)
+        return self
+
+    def __enter__(self) -> Self:
+        """Enters the context the real database is used through."""
+        return self
+
+    def __exit__(self, *exc_info: object) -> bool:
+        """Records the close and never suppresses an exception."""
+        self.closed = True
+        return False
+
+    def __iter__(self) -> Iterator[int]:
+        """Yields the subject ids, as SubjectDatabase does over its keys."""
+        return iter(self.subject_ids)
 
 
 @pytest.fixture
@@ -50,3 +91,93 @@ def fold_counts() -> Callable:
         }
 
     return _count
+
+
+@pytest.fixture
+def make_database(tmp_path: Path) -> Callable:
+    """Factory for a directory shaped like a meds_reader_convert output.
+
+    Only the sentinel files the guard looks for are written; the events live in
+    the parquet shards, never in here, so empty files are enough. ``omit`` drops
+    one sentinel, which is how the rejection cases are driven.
+    """
+
+    def _build(omit: str | None = None, name: str = "reader_db") -> Path:
+        db_path = tmp_path / name
+        db_path.mkdir()
+        for sentinel in SENTINELS:
+            if sentinel != omit:
+                (db_path / sentinel).touch()
+        return db_path
+
+    return _build
+
+
+@pytest.fixture
+def make_events(tmp_path: Path) -> Callable:
+    """Factory writing normalised-shard-shaped parquet, returning the folder.
+
+    Takes ``{subject_id: [visit_id, ...]}``, where a None visit stands for the
+    events attributable to no admission. The code column is filler: it is one of
+    the twenty columns the function must not read.
+    """
+
+    def _build(
+        admissions: dict[int, list[int | None]] | None = None,
+        n_shards: int = 1,
+        name: str = "data",
+    ) -> Path:
+        admissions = {1: [10]} if admissions is None else admissions
+        rows = [
+            (subject_id, visit_id)
+            for subject_id, visits in admissions.items()
+            for visit_id in visits
+        ]
+        events = pl.DataFrame(
+            {
+                "subject_id": pl.Series([row[0] for row in rows], dtype=pl.Int64),
+                "visit_id": pl.Series([row[1] for row in rows], dtype=pl.Int64),
+                "code": pl.Series(["SNOMED/1"] * len(rows), dtype=pl.String),
+            }
+        )
+        data_dir = tmp_path / name
+        data_dir.mkdir()
+        for shard, frame in enumerate(_chunk(events, n_shards)):
+            frame.write_parquet(data_dir / f"{shard}.parquet")
+        return data_dir
+
+    return _build
+
+
+def _chunk(frame: pl.DataFrame, n_shards: int) -> list[pl.DataFrame]:
+    """Splits a frame into n_shards near-equal parts, dropping empty ones."""
+    size = -(-frame.height // n_shards)
+    return [part for part in frame.iter_slices(size) if part.height]
+
+
+@pytest.fixture
+def make_labels(tmp_path: Path) -> Callable:
+    """Factory writing a positive-diagnosis-labels parquet, returning the path."""
+
+    def _build(visit_ids: list[int] | None = None, name: str = "labels") -> Path:
+        visit_ids = [10] if visit_ids is None else visit_ids
+        labels = pl.DataFrame(
+            {
+                "subject_id": pl.Series([0] * len(visit_ids), dtype=pl.Int64),
+                "visit_id": pl.Series(visit_ids, dtype=pl.Int64),
+                "diagnosis_made/diagnosis": pl.Series(
+                    ["aki"] * len(visit_ids), dtype=pl.String
+                ),
+            }
+        )
+        path = tmp_path / f"{name}.parquet"
+        labels.write_parquet(path)
+        return path
+
+    return _build
+
+
+@pytest.fixture
+def dest(tmp_path: Path) -> Path:
+    """The path to write to, whose parent deliberately does not exist yet."""
+    return tmp_path / "splits" / "subject_folds.parquet"
