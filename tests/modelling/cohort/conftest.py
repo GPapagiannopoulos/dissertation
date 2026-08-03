@@ -1,6 +1,7 @@
 """Shared fixtures for the cohort splitting test suite."""
 
 from collections.abc import Callable, Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import Self
 
@@ -181,3 +182,62 @@ def make_labels(tmp_path: Path) -> Callable:
 def dest(tmp_path: Path) -> Path:
     """The path to write to, whose parent deliberately does not exist yet."""
     return tmp_path / "splits" / "subject_folds.parquet"
+
+
+@pytest.fixture
+def make_normalised_events() -> Callable:
+    """Returns a factory for a normalised-shard-shaped frame, one row per event.
+
+    The default holds one event of each of the four visit types MIMIC-IV
+    produces, plus one non-visit event that carries a non-null ``end``. That
+    last row is the point of the fixture: ``end`` is populated on 2.1M
+    inputevents and procedureevents rows, so a window filter written against
+    ``end`` rather than ``code`` would pick it up. It shares visit 10 with the
+    Visit/IP row, so such a filter also trips the duplicate guard.
+
+    ``numeric_value`` and ``source_code`` stand in for the sixteen columns the
+    function must project away.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1, 1, 2, 3, 4],
+            "time": [
+                datetime(2020, 1, 1, 8),
+                datetime(2020, 1, 2, 9),
+                datetime(2020, 2, 1, 7),
+                datetime(2020, 3, 1, 6),
+                datetime(2020, 4, 1, 5),
+            ],
+            "code": [
+                "Visit/IP",
+                "MIMIC_IV_INPUT/1",
+                "Visit/ERIP",
+                "Visit/ER",
+                "Visit/OP",
+            ],
+            "end": [
+                datetime(2020, 1, 6, 12),
+                datetime(2020, 1, 2, 11),
+                datetime(2020, 2, 4, 10),
+                datetime(2020, 3, 1, 20),
+                datetime(2020, 4, 2, 5),
+            ],
+            "visit_id": [10, 10, 20, 30, 40],
+            "numeric_value": [None, 2.5, None, None, None],
+            "source_code": ["EW EMER.", "221749", "EW EMER.", "URGENT", "AMB OBS"],
+        }
+        return pl.LazyFrame(
+            defaults | columns,
+            schema_overrides={
+                "subject_id": pl.Int64,
+                "time": pl.Datetime("us"),
+                "code": pl.String,
+                "end": pl.Datetime("us"),
+                "visit_id": pl.Int64,
+                "numeric_value": pl.Float32,
+                "source_code": pl.String,
+            },
+        )
+
+    return _make
