@@ -104,3 +104,44 @@ def build_landmark_grid(
         .filter(pl.col("prediction_times").list.len() > 0)
         .explode("prediction_times")
     )
+
+
+def apply_time_horizons(grid: pl.LazyFrame, horizon: str = "48h") -> pl.LazyFrame:
+    """Applies the time horizon to the grid.
+
+    Creates a new boolean column indicating whether a target diagnosis was
+    made within the designated time horizon.
+    """
+    horizon_unit = horizon[-1]
+    horizon_value = int(horizon[:-1])
+    match horizon_unit:
+        case "w":
+            horizon_duration = pl.duration(weeks=horizon_value)
+        case "d":
+            horizon_duration = pl.duration(days=horizon_value)
+        case "h":
+            horizon_duration = pl.duration(hours=horizon_value)
+        case _:
+            raise ValueError(
+                f"Unrecognized time horizon unit: {horizon_unit}\n"
+                f"Valid units are: 'w', 'd', 'h'"
+            )
+
+    grid_with_horizon = grid.with_columns(
+        pl.min_horizontal(
+            pl.col("prediction_times") + horizon_duration,
+            (pl.col("dischtime")),
+        ).alias("horizon_time")
+    ).with_columns(
+        horizon_hours=(
+            pl.col("horizon_time") - pl.col("prediction_times")
+        ).dt.total_seconds()
+        / 36000
+    )
+
+    boolean_value = pl.col("diagtime").is_not_null() & (
+        pl.col("diagtime") <= pl.col("horizon_time")
+    )
+    return grid_with_horizon.with_columns(
+        label=boolean_value,
+    )

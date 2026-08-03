@@ -331,6 +331,37 @@ def onset_window_schema(
 
 
 @pytest.fixture
+def grid_schema(onset_window_schema: dict[str, pl.DataType]) -> dict[str, pl.DataType]:
+    """A window frame once build_landmark_grid has exploded it into landmarks."""
+    return onset_window_schema | {"prediction_times": pl.Datetime("us")}
+
+
+@pytest.fixture
+def make_landmark_grid(grid_schema: dict[str, pl.DataType]) -> Callable:
+    """Returns a factory for a single exploded landmark.
+
+    Discharge sits a month out so the default landmark keeps its full horizon
+    whatever unit a case asks for; a case that is about truncation pulls
+    dischtime in deliberately. The landmark is 2020-01-03, so a 48h horizon
+    ends on 2020-01-05 and every expectation stays a round date.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1],
+            "visit_id": [10],
+            "visit_code": ["Visit/IP"],
+            "admittime": [datetime(2020, 1, 1)],
+            "dischtime": [datetime(2020, 2, 1)],
+            "diagtime": [None],
+            "prediction_times": [datetime(2020, 1, 3)],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=grid_schema)
+
+    return _make
+
+
+@pytest.fixture
 def make_windows_with_onset(
     onset_window_schema: dict[str, pl.DataType],
 ) -> Callable:
