@@ -19,7 +19,7 @@ from thesis.modelling.cohort.labeller import build_landmark_grid
 
 def _landmarks(grid: pl.LazyFrame) -> list[datetime]:
     """Reduces a grid to the landmarks it holds, which is what cases assert on."""
-    return grid.collect()["prediction_times"].to_list()
+    return grid.collect()["prediction_time"].to_list()
 
 
 def test_build_landmark_grid_starts_48h_after_admission(
@@ -146,7 +146,7 @@ def test_build_landmark_grid_emits_no_row_for_an_empty_grid(
     ).collect()
 
     assert grid.height == 0
-    assert grid.schema["prediction_times"] == pl.Datetime("us")
+    assert grid.schema["prediction_time"] == pl.Datetime("us")
 
 
 def test_build_landmark_grid_honours_a_custom_delta(

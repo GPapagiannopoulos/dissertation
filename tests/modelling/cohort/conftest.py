@@ -331,9 +331,46 @@ def onset_window_schema(
 
 
 @pytest.fixture
+def make_event_shards(tmp_path: Path, make_normalised_events: Callable) -> Callable:
+    """Factory writing make_normalised_events to parquet shards, returning the folder.
+
+    The default frame yields two inpatient admissions: visit 10 runs
+    2020-01-01 08:00 to 2020-01-06 12:00 and visit 20 runs 2020-02-01 07:00 to
+    2020-02-04 10:00. Visits 30 and 40 are ED-only and outpatient, so the
+    cohort filter removes them before any landmark is laid.
+    """
+
+    def _build(n_shards: int = 1, name: str = "data", **columns: list) -> Path:
+        events = make_normalised_events(**columns).collect()
+        data_dir = tmp_path / name
+        data_dir.mkdir()
+        for shard, frame in enumerate(_chunk(events, n_shards)):
+            frame.write_parquet(data_dir / f"{shard}.parquet")
+        return data_dir
+
+    return _build
+
+
+@pytest.fixture
+def make_surviving_labels(tmp_path: Path, make_diagnosis_labels: Callable) -> Callable:
+    """Factory writing surviving_aki_admissions-shaped parquet, returning the path.
+
+    The default diagnoses visit 10 at 2020-01-04, which censors that admission's
+    grid there and leaves visit 20 an unlabelled negative.
+    """
+
+    def _build(name: str = "labels", **columns: list) -> Path:
+        path = tmp_path / f"{name}.parquet"
+        make_diagnosis_labels(**columns).collect().write_parquet(path)
+        return path
+
+    return _build
+
+
+@pytest.fixture
 def grid_schema(onset_window_schema: dict[str, pl.DataType]) -> dict[str, pl.DataType]:
     """A window frame once build_landmark_grid has exploded it into landmarks."""
-    return onset_window_schema | {"prediction_times": pl.Datetime("us")}
+    return onset_window_schema | {"prediction_time": pl.Datetime("us")}
 
 
 @pytest.fixture
@@ -354,7 +391,7 @@ def make_landmark_grid(grid_schema: dict[str, pl.DataType]) -> Callable:
             "admittime": [datetime(2020, 1, 1)],
             "dischtime": [datetime(2020, 2, 1)],
             "diagtime": [None],
-            "prediction_times": [datetime(2020, 1, 3)],
+            "prediction_time": [datetime(2020, 1, 3)],
         }
         return pl.LazyFrame(defaults | columns, schema_overrides=grid_schema)
 
