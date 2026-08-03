@@ -1,6 +1,7 @@
 """Shared fixtures for the cohort splitting test suite."""
 
 from collections.abc import Callable, Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import Self
 
@@ -181,3 +182,245 @@ def make_labels(tmp_path: Path) -> Callable:
 def dest(tmp_path: Path) -> Path:
     """The path to write to, whose parent deliberately does not exist yet."""
     return tmp_path / "splits" / "subject_folds.parquet"
+
+
+@pytest.fixture
+def make_normalised_events() -> Callable:
+    """Returns a factory for a normalised-shard-shaped frame, one row per event.
+
+    The default holds one event of each of the four visit types MIMIC-IV
+    produces, plus one non-visit event that carries a non-null ``end``. That
+    last row is the point of the fixture: ``end`` is populated on 2.1M
+    inputevents and procedureevents rows, so a window filter written against
+    ``end`` rather than ``code`` would pick it up. It shares visit 10 with the
+    Visit/IP row, so such a filter also trips the duplicate guard.
+
+    ``numeric_value`` and ``source_code`` stand in for the sixteen columns the
+    function must project away.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1, 1, 2, 3, 4],
+            "time": [
+                datetime(2020, 1, 1, 8),
+                datetime(2020, 1, 2, 9),
+                datetime(2020, 2, 1, 7),
+                datetime(2020, 3, 1, 6),
+                datetime(2020, 4, 1, 5),
+            ],
+            "code": [
+                "Visit/IP",
+                "MIMIC_IV_INPUT/1",
+                "Visit/ERIP",
+                "Visit/ER",
+                "Visit/OP",
+            ],
+            "end": [
+                datetime(2020, 1, 6, 12),
+                datetime(2020, 1, 2, 11),
+                datetime(2020, 2, 4, 10),
+                datetime(2020, 3, 1, 20),
+                datetime(2020, 4, 2, 5),
+            ],
+            "visit_id": [10, 10, 20, 30, 40],
+            "numeric_value": [None, 2.5, None, None, None],
+            "source_code": ["EW EMER.", "221749", "EW EMER.", "URGENT", "AMB OBS"],
+        }
+        return pl.LazyFrame(
+            defaults | columns,
+            schema_overrides={
+                "subject_id": pl.Int64,
+                "time": pl.Datetime("us"),
+                "code": pl.String,
+                "end": pl.Datetime("us"),
+                "visit_id": pl.Int64,
+                "numeric_value": pl.Float32,
+                "source_code": pl.String,
+            },
+        )
+
+    return _make
+
+
+@pytest.fixture
+def window_schema() -> dict[str, pl.DataType]:
+    """The schema build_admission_windows emits and both filters must preserve."""
+    return {
+        "subject_id": pl.Int64,
+        "visit_id": pl.Int64,
+        "visit_code": pl.String,
+        "admittime": pl.Datetime("us"),
+        "dischtime": pl.Datetime("us"),
+    }
+
+
+@pytest.fixture
+def make_admission_windows(window_schema: dict[str, pl.DataType]) -> Callable:
+    """Returns a factory for a build_admission_windows-shaped frame.
+
+    The default is what build_admission_windows emits from the default
+    make_normalised_events frame: one admission of each visit type, all four
+    with a positive length of stay, so a case overrides only the one column it
+    is about.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1, 2, 3, 4],
+            "visit_id": [10, 20, 30, 40],
+            "visit_code": ["Visit/IP", "Visit/ERIP", "Visit/ER", "Visit/OP"],
+            "admittime": [
+                datetime(2020, 1, 1, 8),
+                datetime(2020, 2, 1, 7),
+                datetime(2020, 3, 1, 6),
+                datetime(2020, 4, 1, 5),
+            ],
+            "dischtime": [
+                datetime(2020, 1, 6, 12),
+                datetime(2020, 2, 4, 10),
+                datetime(2020, 3, 1, 20),
+                datetime(2020, 4, 2, 5),
+            ],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=window_schema)
+
+    return _make
+
+
+@pytest.fixture
+def make_diagnosis_labels() -> Callable:
+    """Returns a factory shaped like surviving_aki_admissions.parquet.
+
+    The timestamp is Datetime('ns') because that is what the label pipeline
+    writes, against the Datetime('us') the MEDS events carry. event_type,
+    diagnosis_made/diagnosis and n_surviving_events are the three columns the
+    join must leave behind rather than carry into the grid explosion.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "event_type": ["diagnosis_made"],
+            "subject_id": [1],
+            "visit_id": [10],
+            "timestamp": [datetime(2020, 1, 4)],
+            "diagnosis_made/diagnosis": ["Acute Kidney Injury"],
+            "n_surviving_events": [615.0],
+        }
+        return pl.LazyFrame(
+            defaults | columns,
+            schema_overrides={
+                "event_type": pl.String,
+                "subject_id": pl.Int64,
+                "visit_id": pl.Int64,
+                "timestamp": pl.Datetime("ns"),
+                "diagnosis_made/diagnosis": pl.String,
+                "n_surviving_events": pl.Float64,
+            },
+        )
+
+    return _make
+
+
+@pytest.fixture
+def onset_window_schema(
+    window_schema: dict[str, pl.DataType],
+) -> dict[str, pl.DataType]:
+    """A window frame once the AKI onset has been joined onto it."""
+    return window_schema | {"diagtime": pl.Datetime("us")}
+
+
+@pytest.fixture
+def make_event_shards(tmp_path: Path, make_normalised_events: Callable) -> Callable:
+    """Factory writing make_normalised_events to parquet shards, returning the folder.
+
+    The default frame yields two inpatient admissions: visit 10 runs
+    2020-01-01 08:00 to 2020-01-06 12:00 and visit 20 runs 2020-02-01 07:00 to
+    2020-02-04 10:00. Visits 30 and 40 are ED-only and outpatient, so the
+    cohort filter removes them before any landmark is laid.
+    """
+
+    def _build(n_shards: int = 1, name: str = "data", **columns: list) -> Path:
+        events = make_normalised_events(**columns).collect()
+        data_dir = tmp_path / name
+        data_dir.mkdir()
+        for shard, frame in enumerate(_chunk(events, n_shards)):
+            frame.write_parquet(data_dir / f"{shard}.parquet")
+        return data_dir
+
+    return _build
+
+
+@pytest.fixture
+def make_surviving_labels(tmp_path: Path, make_diagnosis_labels: Callable) -> Callable:
+    """Factory writing surviving_aki_admissions-shaped parquet, returning the path.
+
+    The default diagnoses visit 10 at 2020-01-04, which censors that admission's
+    grid there and leaves visit 20 an unlabelled negative.
+    """
+
+    def _build(name: str = "labels", **columns: list) -> Path:
+        path = tmp_path / f"{name}.parquet"
+        make_diagnosis_labels(**columns).collect().write_parquet(path)
+        return path
+
+    return _build
+
+
+@pytest.fixture
+def grid_schema(onset_window_schema: dict[str, pl.DataType]) -> dict[str, pl.DataType]:
+    """A window frame once build_landmark_grid has exploded it into landmarks."""
+    return onset_window_schema | {"prediction_time": pl.Datetime("us")}
+
+
+@pytest.fixture
+def make_landmark_grid(grid_schema: dict[str, pl.DataType]) -> Callable:
+    """Returns a factory for a single exploded landmark.
+
+    Discharge sits a month out so the default landmark keeps its full horizon
+    whatever unit a case asks for; a case that is about truncation pulls
+    dischtime in deliberately. The landmark is 2020-01-03, so a 48h horizon
+    ends on 2020-01-05 and every expectation stays a round date.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1],
+            "visit_id": [10],
+            "visit_code": ["Visit/IP"],
+            "admittime": [datetime(2020, 1, 1)],
+            "dischtime": [datetime(2020, 2, 1)],
+            "diagtime": [None],
+            "prediction_time": [datetime(2020, 1, 3)],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=grid_schema)
+
+    return _make
+
+
+@pytest.fixture
+def make_windows_with_onset(
+    onset_window_schema: dict[str, pl.DataType],
+) -> Callable:
+    """Returns a factory for one admission carrying an onset column.
+
+    The default is a single negative admission on round hours: admitted
+    2020-01-01 00:00, discharged five days later, no diagnosis. The grid then
+    starts at 2020-01-03 00:00 and every landmark falls on a whole or half day,
+    so a case can state its expectation as a literal list rather than compute
+    one. ``diagtime`` defaults to null, which is what every negative admission
+    carries after the label join.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1],
+            "visit_id": [10],
+            "visit_code": ["Visit/IP"],
+            "admittime": [datetime(2020, 1, 1)],
+            "dischtime": [datetime(2020, 1, 6)],
+            "diagtime": [None],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=onset_window_schema)
+
+    return _make
