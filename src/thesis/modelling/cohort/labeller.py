@@ -47,3 +47,34 @@ def filter_inpatient_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
 def filter_false_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
     """Filters out admissions where the LOS is non-positive."""
     return windows.filter(pl.col("admittime") < pl.col("dischtime"))
+
+
+def build_landmark_grid(
+    windows_with_onset: pl.LazyFrame, delta_hours: str = "12h"
+) -> pl.LazyFrame:
+    """Generates the prediction landmark grid for each visit.
+
+    Args:
+        windows_with_onset (pl.LazyFrame): a LazyFrame containing the admission windows
+            for each visit_id and the time of diagnosis
+        delta_hours (str): a string representing the number of hours
+            between prediction times.
+
+    Returns:
+        pl.LazyFrame: a LazyFrame containing one record for each prediction
+            landmark, starting 48h post admission, and ending at discharge or
+            diagnosis confirmation exclusive, whichever comes first. Drops visits
+            without any admission landmarks in the generated window.
+    """
+    return (
+        windows_with_onset.with_columns(
+            pl.datetime_ranges(
+                pl.col("admittime") + pl.duration(hours=48),
+                pl.min_horizontal(pl.col("dischtime"), pl.col("diagtime")),
+                interval=delta_hours,
+                closed="left",
+            ).alias("prediction_times")
+        )
+        .filter(pl.col("prediction_times").list.len() > 0)
+        .explode("prediction_times")
+    )
