@@ -49,6 +49,32 @@ def filter_false_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
     return windows.filter(pl.col("admittime") < pl.col("dischtime"))
 
 
+def join_diagnosis_time(windows: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
+    """Joins the labels with the time of diagnosis to the admission window.
+
+    Not all visits have a timestamp for a diagnosis of interest. Uses a left
+    join to preserve this information as a null value for diagtime.
+
+    Args:
+        windows (pl.LazyFrame): a LazyFrame containing the admission windows
+        labels (pl.LazyFrame): a LazyFrame containing the output of the
+            'identify_surviving_admissions.py' script
+
+    Returns:
+        pl.LazyFrame: a LazyFrame containing a timestamp in pl.Datetime['us']
+            with the moment of diagnosis for a specific visit, null otherwise.
+    """
+    return windows.join(
+        labels.select(
+            "subject_id",
+            "visit_id",
+            pl.col("timestamp").cast(pl.Datetime("us")).alias("diagtime"),
+        ),
+        on=["subject_id", "visit_id"],
+        how="left",
+    )
+
+
 def build_landmark_grid(
     windows_with_onset: pl.LazyFrame, delta_hours: str = "12h"
 ) -> pl.LazyFrame:

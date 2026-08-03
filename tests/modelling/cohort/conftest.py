@@ -289,6 +289,40 @@ def make_admission_windows(window_schema: dict[str, pl.DataType]) -> Callable:
 
 
 @pytest.fixture
+def make_diagnosis_labels() -> Callable:
+    """Returns a factory shaped like surviving_aki_admissions.parquet.
+
+    The timestamp is Datetime('ns') because that is what the label pipeline
+    writes, against the Datetime('us') the MEDS events carry. event_type,
+    diagnosis_made/diagnosis and n_surviving_events are the three columns the
+    join must leave behind rather than carry into the grid explosion.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "event_type": ["diagnosis_made"],
+            "subject_id": [1],
+            "visit_id": [10],
+            "timestamp": [datetime(2020, 1, 4)],
+            "diagnosis_made/diagnosis": ["Acute Kidney Injury"],
+            "n_surviving_events": [615.0],
+        }
+        return pl.LazyFrame(
+            defaults | columns,
+            schema_overrides={
+                "event_type": pl.String,
+                "subject_id": pl.Int64,
+                "visit_id": pl.Int64,
+                "timestamp": pl.Datetime("ns"),
+                "diagnosis_made/diagnosis": pl.String,
+                "n_surviving_events": pl.Float64,
+            },
+        )
+
+    return _make
+
+
+@pytest.fixture
 def onset_window_schema(
     window_schema: dict[str, pl.DataType],
 ) -> dict[str, pl.DataType]:
