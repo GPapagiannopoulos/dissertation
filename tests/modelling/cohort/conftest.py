@@ -286,3 +286,39 @@ def make_admission_windows(window_schema: dict[str, pl.DataType]) -> Callable:
         return pl.LazyFrame(defaults | columns, schema_overrides=window_schema)
 
     return _make
+
+
+@pytest.fixture
+def onset_window_schema(
+    window_schema: dict[str, pl.DataType],
+) -> dict[str, pl.DataType]:
+    """A window frame once the AKI onset has been joined onto it."""
+    return window_schema | {"diagtime": pl.Datetime("us")}
+
+
+@pytest.fixture
+def make_windows_with_onset(
+    onset_window_schema: dict[str, pl.DataType],
+) -> Callable:
+    """Returns a factory for one admission carrying an onset column.
+
+    The default is a single negative admission on round hours: admitted
+    2020-01-01 00:00, discharged five days later, no diagnosis. The grid then
+    starts at 2020-01-03 00:00 and every landmark falls on a whole or half day,
+    so a case can state its expectation as a literal list rather than compute
+    one. ``diagtime`` defaults to null, which is what every negative admission
+    carries after the label join.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1],
+            "visit_id": [10],
+            "visit_code": ["Visit/IP"],
+            "admittime": [datetime(2020, 1, 1)],
+            "dischtime": [datetime(2020, 1, 6)],
+            "diagtime": [None],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=onset_window_schema)
+
+    return _make
