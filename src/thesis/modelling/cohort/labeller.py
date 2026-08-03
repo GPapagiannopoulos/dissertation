@@ -136,12 +136,12 @@ def apply_time_horizons(grid: pl.LazyFrame, horizon: str = "48h") -> pl.LazyFram
         horizon_hours=(
             pl.col("horizon_time") - pl.col("prediction_times")
         ).dt.total_seconds()
-        / 36000
+        / 3600
     )
 
     boolean_value = pl.col("diagtime").is_not_null() & (
         pl.col("diagtime") <= pl.col("horizon_time")
     )
     return grid_with_horizon.with_columns(
-        label=boolean_value,
+        boolean_value=boolean_value,
     )

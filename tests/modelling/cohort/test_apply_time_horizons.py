@@ -24,34 +24,34 @@ from thesis.modelling.cohort.labeller import apply_time_horizons
         pytest.param(None, False, id="no_diagnosis_at_all"),
     ],
 )
-def test_apply_time_horizons_labels_against_the_horizon(
+def test_apply_time_horizons_boolean_values_against_the_horizon(
     make_landmark_grid: Callable, diagtime: datetime | None, expected: bool
 ) -> None:
-    """The label is whether the onset lands in (landmark, landmark + horizon].
+    """The boolean_value is whether the onset lands in (landmark, landmark + horizon].
 
     The grid stops strictly before the onset, so a landmark never sits on its
     own diagnosis; the end of the horizon is inclusive, which is why an onset
     exactly 48h out is a positive.
     """
-    labelled = apply_time_horizons(
+    boolean_valueled = apply_time_horizons(
         make_landmark_grid(diagtime=[diagtime]), "48h"
     ).collect()
 
-    assert labelled["label"].to_list() == [expected]
+    assert boolean_valueled["boolean_value"].to_list() == [expected]
 
 
-def test_apply_time_horizons_never_emits_a_null_label(
+def test_apply_time_horizons_never_emits_a_null_boolean_value(
     make_landmark_grid: Callable,
 ) -> None:
-    """A null onset must read as False, not propagate into a null label.
+    """A null onset must read as False, not propagate into a null boolean_value.
 
     Kleene logic makes ``False & null`` False, so the is_not_null guard has to
-    come first in the conjunction. A null reaching femr is not a usable label.
+    come first in the conjunction. A null reaching femr is not a usable boolean_value.
     """
-    labelled = apply_time_horizons(make_landmark_grid(), "48h").collect()
+    boolean_valueled = apply_time_horizons(make_landmark_grid(), "48h").collect()
 
-    assert labelled["label"].null_count() == 0
-    assert labelled.schema["label"] == pl.Boolean
+    assert boolean_valueled["boolean_value"].null_count() == 0
+    assert boolean_valueled.schema["boolean_value"] == pl.Boolean
 
 
 @pytest.mark.parametrize(
@@ -78,27 +78,29 @@ def test_apply_time_horizons_truncates_the_horizon_at_discharge(
     955,891 landmarks, 32.2% of the grid, end early this way, with a median
     effective horizon of 21h against the nominal 48h.
     """
-    labelled = apply_time_horizons(
+    boolean_valueled = apply_time_horizons(
         make_landmark_grid(dischtime=[dischtime]), "48h"
     ).collect()
 
-    assert labelled["horizon_time"].to_list() == [expected_end]
-    assert labelled.schema["horizon_time"] == pl.Datetime("us")
+    assert boolean_valueled["horizon_time"].to_list() == [expected_end]
+    assert boolean_valueled.schema["horizon_time"] == pl.Datetime("us")
 
 
-def test_apply_time_horizons_truncation_can_flip_a_label(
+def test_apply_time_horizons_truncation_can_flip_a_boolean_value(
     make_landmark_grid: Callable,
 ) -> None:
     """An onset recorded after discharge falls outside the truncated horizon.
 
     34 MIMIC-IV admissions carry an onset later than their own discharge; those
-    are the only admissions whose labels a truncated horizon changes.
+    are the only admissions whose boolean_values a truncated horizon changes.
     """
     grid = make_landmark_grid(
         dischtime=[datetime(2020, 1, 4)], diagtime=[datetime(2020, 1, 4, 12)]
     )
 
-    assert apply_time_horizons(grid, "48h").collect()["label"].to_list() == [False]
+    assert apply_time_horizons(grid, "48h").collect()["boolean_value"].to_list() == [
+        False
+    ]
 
 
 @pytest.mark.parametrize(
@@ -117,9 +119,9 @@ def test_apply_time_horizons_parses_every_supported_unit(
     pl.duration reads a string argument as a column name, so passing "48"
     straight through raises ColumnNotFoundError rather than building 48 hours.
     """
-    labelled = apply_time_horizons(make_landmark_grid(), horizon).collect()
+    boolean_valueled = apply_time_horizons(make_landmark_grid(), horizon).collect()
 
-    assert labelled["horizon_time"].to_list() == [expected_end]
+    assert boolean_valueled["horizon_time"].to_list() == [expected_end]
 
 
 @pytest.mark.parametrize(
@@ -141,9 +143,9 @@ def test_apply_time_horizons_keeps_the_grid_columns(
     make_landmark_grid: Callable, grid_schema: dict[str, pl.DataType]
 ) -> None:
     """Every landmark keeps its admission so the side table can be cut from it."""
-    labelled = apply_time_horizons(make_landmark_grid(), "48h")
+    boolean_valueled = apply_time_horizons(make_landmark_grid(), "48h")
 
-    assert set(grid_schema).issubset(labelled.collect_schema().names())
+    assert set(grid_schema).issubset(boolean_valueled.collect_schema().names())
 
 
 def test_apply_time_horizons_stays_lazy(make_landmark_grid: Callable) -> None:
