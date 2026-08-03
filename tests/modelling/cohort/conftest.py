@@ -241,3 +241,48 @@ def make_normalised_events() -> Callable:
         )
 
     return _make
+
+
+@pytest.fixture
+def window_schema() -> dict[str, pl.DataType]:
+    """The schema build_admission_windows emits and both filters must preserve."""
+    return {
+        "subject_id": pl.Int64,
+        "visit_id": pl.Int64,
+        "visit_code": pl.String,
+        "admittime": pl.Datetime("us"),
+        "dischtime": pl.Datetime("us"),
+    }
+
+
+@pytest.fixture
+def make_admission_windows(window_schema: dict[str, pl.DataType]) -> Callable:
+    """Returns a factory for a build_admission_windows-shaped frame.
+
+    The default is what build_admission_windows emits from the default
+    make_normalised_events frame: one admission of each visit type, all four
+    with a positive length of stay, so a case overrides only the one column it
+    is about.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        defaults = {
+            "subject_id": [1, 2, 3, 4],
+            "visit_id": [10, 20, 30, 40],
+            "visit_code": ["Visit/IP", "Visit/ERIP", "Visit/ER", "Visit/OP"],
+            "admittime": [
+                datetime(2020, 1, 1, 8),
+                datetime(2020, 2, 1, 7),
+                datetime(2020, 3, 1, 6),
+                datetime(2020, 4, 1, 5),
+            ],
+            "dischtime": [
+                datetime(2020, 1, 6, 12),
+                datetime(2020, 2, 4, 10),
+                datetime(2020, 3, 1, 20),
+                datetime(2020, 4, 2, 5),
+            ],
+        }
+        return pl.LazyFrame(defaults | columns, schema_overrides=window_schema)
+
+    return _make
