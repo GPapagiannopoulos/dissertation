@@ -17,6 +17,7 @@ _INPATIENT_VISIT_CODES: Final[list[str]] = ["Visit/IP", "Visit/ERIP"]
 _COMMUNITY_ACQUIRED_CUTOFF_HOURS: Final[int] = 48
 _PREDICTION_GRID_DELTA_HOURS: Final[str] = "12h"
 _PREDICTION_HORIZON_HOURS: Final[str] = "48h"
+_DEATH_CODE: Final[str] = "MEDS_DEATH"
 
 
 def build_admission_windows(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -51,6 +52,48 @@ def filter_inpatient_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
 def filter_false_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
     """Filters out admissions where the LOS is non-positive."""
     return windows.filter(pl.col("admittime") < pl.col("dischtime"))
+
+
+def flag_in_hospital_death(windows: pl.LazyFrame, events: pl.LazyFrame) -> pl.LazyFrame:
+    """Marks the admissions the patient did not leave alive.
+
+    Discharge truncates the horizon rather than censoring the landmark, which
+    reads an admission ending without AKI as an observed negative. That reading
+    fails when the admission ended in death: 8,500 admissions and 99,035
+    landmarks are negative only because the patient died first, a competing risk
+    rather than a benign outcome. The flag does not change any label; it exists
+    so those landmarks can be excluded in a sensitivity analysis.
+
+    MEDS_DEATH carries the date of death only: all 38,301 events sit at
+    00:00:00, because stage 1 sources them from patients.dod rather than the
+    admissions deathtime. The comparison is therefore between dates. Measured
+    against hospital_expire_flag over the 394,712 inpatient admissions, the date
+    rule finds all 11,559 flagged deaths with 346 extra; a timestamp comparison
+    misses 573 of them, since a death at midnight predates the same day's
+    discharge.
+
+    Args:
+        windows: admission windows holding admittime and dischtime
+        events: the normalised events, which is where MEDS_DEATH lives
+
+    Returns:
+        pl.LazyFrame: windows plus died_in_hospital (Boolean, never null)
+    """
+    deaths = (
+        events.filter(pl.col("code") == _DEATH_CODE)
+        .select("subject_id", pl.col("time").dt.date().alias("death_date"))
+        .unique("subject_id")
+    )
+
+    return (
+        windows.join(deaths, on="subject_id", how="left")
+        .with_columns(
+            died_in_hospital=pl.col("death_date").is_not_null()
+            & (pl.col("death_date") >= pl.col("admittime").dt.date())
+            & (pl.col("death_date") <= pl.col("dischtime").dt.date())
+        )
+        .drop("death_date")
+    )
 
 
 def join_diagnosis_time(windows: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
@@ -213,7 +256,8 @@ def run_build_labels(
     windows = build_admission_windows(events_lf)
     inpatient_admission_windows = filter_inpatient_admissions(windows)
     valid_admission_windows = filter_false_admissions(inpatient_admission_windows)
-    window_w_diagnosis_time = join_diagnosis_time(valid_admission_windows, labels_lf)
+    windows_w_death = flag_in_hospital_death(valid_admission_windows, events_lf)
+    window_w_diagnosis_time = join_diagnosis_time(windows_w_death, labels_lf)
     prediction_grid = build_landmark_grid(window_w_diagnosis_time, delta_hours)
     time_horizons = apply_time_horizons(prediction_grid, prediction_horizon)
 
@@ -228,6 +272,7 @@ def run_build_labels(
         n_positive=pl.col("boolean_value").sum(),
         n_admissions=pl.col("visit_id").n_unique(),
         n_subjects=pl.col("subject_id").n_unique(),
+        n_died=pl.col("died_in_hospital").sum(),
     )
     summary = written.collect().row(0, named=True)
     rate = (
@@ -239,6 +284,10 @@ def run_build_labels(
         f"{summary['n_landmarks']} landmarks over {summary['n_admissions']} admissions "
         f"and {summary['n_subjects']} subjects, of which "
         f"{summary['n_positive']} positive ({rate:.2f}%)"
+    )
+    print(
+        f"{summary['n_died']} landmarks sit in an admission the patient did not "
+        f"survive, for the competing-risk sensitivity analysis"
     )
 
     return dest
