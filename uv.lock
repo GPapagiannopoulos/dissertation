@@ -2200,12 +2200,14 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda'" },
     { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda'" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
     { name = "tqdm" },
     { name = "transformers" },
 ]
@@ -3291,6 +3293,8 @@ modelling = [
     { name = "meds" },
     { name = "meds-etl", extra = ["cpp"], marker = "extra == 'extra-6-thesis-modelling'" },
     { name = "meds-reader" },
+    { name = "peft" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" } },
 ]
 
 [package.dev-dependencies]
@@ -3307,6 +3311,7 @@ requires-dist = [
     { name = "meds", marker = "extra == 'modelling'", specifier = "==0.3.3" },
     { name = "meds-etl", extras = ["cpp"], marker = "extra == 'modelling'", specifier = "==0.3.11" },
     { name = "meds-reader", marker = "extra == 'modelling'", specifier = ">=0.1.16" },
+    { name = "peft", marker = "extra == 'modelling'", specifier = ">=0.19.1" },
     { name = "plotly", marker = "extra == 'eda'", specifier = ">=6.9.0" },
     { name = "polars", specifier = ">=1.35.2" },
     { name = "pre-commit", specifier = ">=4.6.0" },
@@ -3317,6 +3322,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "streamlit", marker = "extra == 'eda'", specifier = ">=1.58.0" },
+    { name = "torch", marker = "extra == 'modelling'", specifier = ">=2.4" },
 ]
 provides-extras = ["eda", "modelling"]
 
