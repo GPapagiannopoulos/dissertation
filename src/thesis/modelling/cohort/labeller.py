@@ -8,7 +8,11 @@ that vectorizes grid generation per-admission, and let MOTOR handle the
 mapping of subjects to labels.
 """
 
+from typing import Final
+
 import polars as pl
+
+_INPATIENT_VISIT_CODES: Final[list[str]] = ["Visit/IP", "Visit/ERIP"]
 
 
 def build_admission_windows(events: pl.LazyFrame) -> pl.LazyFrame:
@@ -33,3 +37,13 @@ def build_admission_windows(events: pl.LazyFrame) -> pl.LazyFrame:
         pl.col("time").alias("admittime"),
         pl.col("end").alias("dischtime"),
     )
+
+
+def filter_inpatient_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
+    """Filters the admission window only for inpatient admissions."""
+    return windows.filter(pl.col("visit_code").is_in(_INPATIENT_VISIT_CODES))
+
+
+def filter_false_admissions(windows: pl.LazyFrame) -> pl.LazyFrame:
+    """Filters out admissions where the LOS is non-positive."""
+    return windows.filter(pl.col("admittime") < pl.col("dischtime"))
