@@ -21,9 +21,14 @@ def rotary_tables(
     Returns:
         tuple[torch.Tensor, torch.Tensor]: two tensors containing the
             sine and cosine values. Each has shape (seq_len, dim)
+
+    Raises:
+        ValueError: If ages is not a one dimensional float32 tensor.
     """
-    assert ages.dtype == torch.float32
-    assert ages.ndim == 1
+    if ages.dtype != torch.float32:
+        raise ValueError(f"Ages must be float32, got {ages.dtype}.")
+    if ages.ndim != 1:
+        raise ValueError(f"Ages must be one dimensional, got {ages.ndim} dimensions.")
 
     # Generate 32 angular frequency values from 1.0 to 1e-8 radians per minute of age
     # We use different "clocks" to account for variable time differences between events
@@ -33,3 +38,28 @@ def rotary_tables(
     sin = angles.sin().repeat_interleave(2, dim=-1).to(dtype)
     cos = angles.cos().repeat_interleave(2, dim=-1).to(dtype)
     return sin, cos
+
+
+def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
+    """Rotates each adjacent channel pair of x by the angle for its event.
+
+    Args:
+        x (torch.Tensor): Queries/ keys shaped (..., seq_len, dim)
+        sin: Sine table output from 'rotary_tables' shaped (seq_len, dim)
+        cos: Cosine table output from 'rotary_tables' shaped (seq_len, dim)
+
+    Returns:
+        torch.Tensor: x rotated shaped (..., seq_len, dim)
+
+    Raises:
+        ValueError: If any of the parameters have different dtypes, or
+            if the inputs last two dimensions do not match with the tables'
+            dimensions.
+    """
+    if not x.dtype == sin.dtype == cos.dtype:
+        raise ValueError("The dtypes of the tables or the input do not match.")
+    if not x.shape[-2:] == sin.shape == cos.shape:
+        raise ValueError("The shapes of the tables or the input do not match.")
+
+    rotated = torch.stack((-x[..., 1::2], x[..., 0::2]), dim=-1).flatten(-2)
+    return x * cos + rotated * sin

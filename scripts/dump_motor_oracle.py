@@ -37,6 +37,7 @@ import numpy as np
 from femr.models.transformer import (
     EHRTransformer,
     TransformerBlock,
+    apply_rotary_pos_emb,
     convert_params,
     fixed_pos_embedding,
 )
@@ -200,11 +201,21 @@ def main() -> None:
     x = x.astype(compute_dtype)
     normed_ages = batch["normalized_ages"].astype(x.dtype)
 
-    pos_embed = fixed_pos_embedding(
-        batch["ages"], tconfig["hidden_size"] // tconfig["n_heads"], x.dtype
-    )
+    head_size = tconfig["hidden_size"] // tconfig["n_heads"]
+    pos_embed = fixed_pos_embedding(batch["ages"], head_size, x.dtype)
     out["rotary_sin"] = np.asarray(pos_embed[0])
     out["rotary_cos"] = np.asarray(pos_embed[1])
+
+    # --- a rotary probe -------------------------------------------------------
+    # q and k never surface from inside TransformerBlock, so apply_rotary would
+    # otherwise only be testable at block level, where a layout error is one
+    # contribution to a delta among many. Rotating a fixed random tensor of
+    # exactly q's post-`move_to_batch` shape gives the port a direct target.
+    probe = jax.random.normal(
+        jax.random.PRNGKey(SEED + 1), (tconfig["n_heads"], SEQ_LEN, head_size)
+    ).astype(x.dtype)
+    out["rotary_probe"] = np.asarray(probe)
+    out["rotary_probe_rotated"] = np.asarray(apply_rotary_pos_emb(probe, pos_embed))
 
     # --- the 12 blocks --------------------------------------------------------
     block = hk.transform(lambda *a: TransformerBlock(tconfig)(*a))
