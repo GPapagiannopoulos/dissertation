@@ -217,6 +217,40 @@ def main() -> None:
     out["rotary_probe"] = np.asarray(probe)
     out["rotary_probe_rotated"] = np.asarray(apply_rotary_pos_emb(probe, pos_embed))
 
+    # --- an input-projection probe, layer 0 -----------------------------------
+    # `middle` is internal to TransformerBlock, so the port's projection is
+    # otherwise testable only through a whole-block delta, where a wrong split
+    # boundary is one contribution among many. The block's front half is
+    # recomputed here: its own norm, the age concat, the one fused matmul, and
+    # the head reshape that decides q's layout.
+    block_0 = layer_params(params, 0)
+
+    # `rms_norm` above is proven against in_norm only; the block's norm is
+    # haiku's own module, so check the two agree before trusting the probe.
+    scale = block_0["TransformerBlock/~/rms_norm"]["scale"]
+    normed = rms_norm(x, scale)
+    hk_normed = hk.transform(lambda v: hk.RMSNorm(-1)(v)).apply(
+        {"rms_norm": {"scale": scale}}, jax.random.PRNGKey(SEED), x
+    )
+    assert np.array_equal(np.asarray(hk_normed), np.asarray(normed))
+
+    x_with_ages = jnp.concatenate(
+        (normed, normed_ages[:, None], (normed_ages**2)[:, None]), axis=-1
+    )
+    linear = block_0["TransformerBlock/~/linear"]
+    middle = x_with_ages @ linear["w"] + linear["b"]
+
+    hidden = tconfig["hidden_size"]
+    q = middle[:, :hidden]
+    out["layer_00_normed"] = np.asarray(normed)
+    out["layer_00_x_with_ages"] = np.asarray(x_with_ages)
+    out["layer_00_middle"] = np.asarray(middle)
+    # move_to_batch: (seq, 768) -> (seq, 12, 64) -> (12, seq, 64). Splitting the
+    # channels head-major instead would also produce (12, seq, 64), silently.
+    out["layer_00_q_heads"] = np.asarray(
+        q.reshape((SEQ_LEN, tconfig["n_heads"], head_size)).transpose((1, 0, 2))
+    )
+
     # --- the 12 blocks --------------------------------------------------------
     block = hk.transform(lambda *a: TransformerBlock(tconfig)(*a))
     rng = jax.random.PRNGKey(SEED)
