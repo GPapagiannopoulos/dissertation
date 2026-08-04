@@ -2,6 +2,8 @@
 
 import torch
 
+from thesis.modelling.motor.constants import MOTOR_AGE_FEATURES, MOTOR_RMS_EPS
+
 
 def rotary_tables(
     ages: torch.Tensor, dim: int, dtype: torch.dtype = torch.float32
@@ -137,6 +139,57 @@ def split_heads(x: torch.Tensor, n_heads: int) -> torch.Tensor:
         )
 
     return x.unflatten(-1, (n_heads, -1)).transpose(-3, -2)
+
+
+def merge_heads(x: torch.Tensor) -> torch.Tensor:
+    """Lays the heads back out as channels, undoing split_heads.
+
+    Args:
+        x (torch.Tensor): Attended values shaped (..., n_heads, seq_len, head_dim).
+
+    Returns:
+        torch.Tensor: The same values shaped (..., seq_len, n_heads * head_dim).
+
+    Raises:
+        ValueError: If there are not enough dimensions to hold heads.
+    """
+    if x.ndim < 3:
+        raise ValueError(f"Expected at least three dimensions, got {x.ndim}.")
+
+    return x.transpose(-3, -2).flatten(-2)
+
+
+def load_haiku_linear(
+    module: torch.nn.Linear, weight: torch.Tensor, bias: torch.Tensor
+) -> None:
+    """Copies haiku linear's parameters into a torch one.
+
+    haiku stores (in_features, out_features) and computes x @ w + b.
+    torch stores (out_features, in_features) and computes x @ w.T + b.
+
+    Args:
+        module (torch.nn.Linear): The destination
+        weight (torch.Tensor): The checkpoint weight, in haiku's (in, out) layout.
+        bias (torch.Tensor): The checkpoint bias.
+
+    Raises:
+        ValueError: If either parameter does not fit the module.
+    """
+    expected = (module.in_features, module.out_features)
+    if tuple(weight.shape) != expected:
+        raise ValueError(
+            f"Expected a weight shaped {expected} in haiku's layout, "
+            f"got {tuple(weight.shape)}."
+        )
+    if bias.shape != module.bias.shape:
+        raise ValueError(
+            f"Expected a bias shaped {tuple(module.bias.shape)}, "
+            f"got {tuple(bias.shape)}."
+        )
+
+    with torch.no_grad():
+        module.weight.copy_(weight.T)
+        module.bias.copy_(bias)
 
 
 def local_attention_mask(
@@ -288,3 +341,132 @@ class InputProjection(torch.nn.Module):
                 (..., seq_len, intermediate_size).
         """
         return self.q_proj(x), self.k_proj(x), self.v_proj(x), self.ff_proj(x)
+
+
+class MotorBlock(torch.nn.Module):
+    """One MOTOR transformer block.
+
+    The attention and feed-forward branches run in parallel, both reading the one
+    normed input rather than the feed-forward reading attention's output. That is why
+    a block holds a single norm, and why its output projection is fed the two branches
+    concatenated.
+
+    The rotary tables and the attention mask are passed as arguments because
+    they are the same for all twelve blocks.
+
+    Attributes:
+        norm (torch.nn.RMSNorm): The block's normalisation.
+        input_proj (InputProjection): q, k, v and the feed-forward expansion.
+        o_proj (torch.nn.Linear): Projects the two branches back to the model width.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        n_heads: int,
+        eps: float = MOTOR_RMS_EPS,
+    ) -> None:
+        """Builds a block at the released model's widths.
+
+        Args:
+            hidden_size (int): The model width.
+            intermediate_size (int): The feed-forward expansion's width.
+            n_heads (int): How many attention heads share the channels.
+            eps (float): The norm's epsilon, inside the square root.
+        """
+        super().__init__()
+        self.n_heads = n_heads
+        self.norm = torch.nn.RMSNorm(hidden_size, eps=eps)
+        self.input_proj = InputProjection(
+            hidden_size + MOTOR_AGE_FEATURES, hidden_size, intermediate_size
+        )
+        self.o_proj = torch.nn.Linear(hidden_size + intermediate_size, hidden_size)
+
+    def load_haiku(
+        self,
+        norm_scale: torch.Tensor,
+        fused_weight: torch.Tensor,
+        fused_bias: torch.Tensor,
+        output_weight: torch.Tensor,
+        output_bias: torch.Tensor,
+    ) -> None:
+        """Copies one checkpoint block's five parameters in.
+
+        Args:
+            norm_scale (torch.Tensor): The RMSNorm scale, shaped (hidden_size,).
+            fused_weight (torch.Tensor): The fused input projection, haiku's `linear`.
+            fused_bias (torch.Tensor): Its bias.
+            output_weight (torch.Tensor): The output projection, haiku's `linear_1`.
+            output_bias (torch.Tensor): Its bias.
+
+        Raises:
+            ValueError: If any parameter does not fit its module.
+        """
+        if norm_scale.shape != self.norm.weight.shape:
+            raise ValueError(
+                f"Expected a scale shaped {tuple(self.norm.weight.shape)}, "
+                f"got {tuple(norm_scale.shape)}."
+            )
+
+        with torch.no_grad():
+            self.norm.weight.copy_(norm_scale)
+        self.input_proj.load_fused(fused_weight, fused_bias)
+        load_haiku_linear(self.o_proj, output_weight, output_bias)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        normed_ages: torch.Tensor,
+        sin: torch.Tensor,
+        cos: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """Runs the block and adds its residual.
+
+        Args:
+            x (torch.Tensor): The residual stream, shaped (..., seq_len, hidden_size).
+            normed_ages (torch.Tensor): The z-scored age per position, shaped
+                (..., seq_len). Concatenated with its square onto every block's input.
+            sin (torch.Tensor): The rotary sine table, shaped (seq_len, head_dim).
+            cos (torch.Tensor): The rotary cosine table, the same shape.
+            mask (torch.Tensor): The boolean attention mask, shaped
+                (seq_len, seq_len).
+
+        Returns:
+            torch.Tensor: The updated residual stream, shaped like x.
+
+        Raises:
+            ValueError: If the ages do not match the stream's dtype. torch would
+                promote silently, widening every tensor below this point.
+        """
+        if normed_ages.dtype != x.dtype:
+            raise ValueError(
+                f"The ages must match the stream's dtype, {x.dtype}, "
+                f"got {normed_ages.dtype}."
+            )
+
+        normed = self.norm(x)
+        with_ages = torch.cat(
+            (normed, normed_ages.unsqueeze(-1), (normed_ages**2).unsqueeze(-1)), dim=-1
+        )
+
+        queries, keys, values, feed_forward = self.input_proj(with_ages)
+        queries, keys, values = (
+            split_heads(projected, self.n_heads)
+            for projected in (queries, keys, values)
+        )
+        attention = merge_heads(
+            local_attention(
+                apply_rotary(queries, sin, cos),
+                apply_rotary(keys, sin, cos),
+                values,
+                mask,
+            )
+        )
+
+        # jax.nn.gelu defaults to the tanh approximation, torch's to the exact erf.
+        # They differ by ~1e-4, which compounds over twelve blocks.
+        feed_forward = torch.nn.functional.gelu(feed_forward, approximate="tanh")
+
+        return x + self.o_proj(torch.cat((attention, feed_forward), dim=-1))
