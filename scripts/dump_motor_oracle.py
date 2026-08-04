@@ -53,6 +53,16 @@ PREFIX = "EHRTransformer/~/TransformerFeaturizer/~/Transformer/~/"
 SEQ_LEN = 64
 SEED = 0
 
+# The model's own attention_width (496) exceeds SEQ_LEN and its length covers the whole
+# buffer, so in the block dump both the sliding window and the segment mask degenerate
+# to plain causal. The attention probe picks values where each condition binds and the
+# other cannot hide it: two segments of 32, and a window narrower than one segment, so
+# the last query of a segment is cut off by the window rather than by the boundary.
+# Width must be a multiple of 16 for local_attention's abstract eval, and the segment
+# length a power of two for the bitmask.
+PROBE_ATTENTION_WIDTH = 16
+PROBE_SEGMENT_LENGTH = 32
+
 DTYPES = {"fp16": jnp.float16, "fp32": jnp.float32}
 
 
@@ -249,6 +259,38 @@ def main() -> None:
     # channels head-major instead would also produce (12, seq, 64), silently.
     out["layer_00_q_heads"] = np.asarray(
         q.reshape((SEQ_LEN, tconfig["n_heads"], head_size)).transpose((1, 0, 2))
+    )
+
+    # --- an attention probe ---------------------------------------------------
+    # On CPU, XLA compiles `local_attention_fallback`, so this is the real semantics
+    # and not a reference path. q, k and v are drawn independently: reusing one tensor
+    # would make the logits symmetric and hide a transposed mask.
+    attention_keys = jax.random.split(jax.random.PRNGKey(SEED + 2), 3)
+    q_a, k_a, v_a = (
+        jax.random.normal(key, (tconfig["n_heads"], SEQ_LEN, head_size)).astype(x.dtype)
+        for key in attention_keys
+    )
+    length_mask = ~(jnp.uint32(PROBE_SEGMENT_LENGTH) - jnp.uint32(1))
+    out["attention_probe_q"] = np.asarray(q_a)
+    out["attention_probe_k"] = np.asarray(k_a)
+    out["attention_probe_v"] = np.asarray(v_a)
+    out["attention_probe_out"] = np.asarray(
+        femr.jax.local_attention(q_a, k_a, v_a, length_mask, PROBE_ATTENTION_WIDTH)
+    )
+    out["attention_probe_width"] = np.asarray(PROBE_ATTENTION_WIDTH, dtype=np.uint32)
+    out["attention_probe_length_mask"] = np.asarray(length_mask)
+
+    # the mask itself, read off directly: with q = k = 0 every allowed key gets equal
+    # weight, so v = I makes each output row the attention pattern of that query.
+    zeros = jnp.zeros_like(q_a[:1])
+    out["attention_probe_pattern"] = np.asarray(
+        femr.jax.local_attention(
+            zeros,
+            zeros,
+            jnp.eye(SEQ_LEN, dtype=x.dtype)[None],
+            length_mask,
+            PROBE_ATTENTION_WIDTH,
+        )
     )
 
     # --- the 12 blocks --------------------------------------------------------

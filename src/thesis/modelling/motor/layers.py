@@ -139,6 +139,85 @@ def split_heads(x: torch.Tensor, n_heads: int) -> torch.Tensor:
     return x.unflatten(-1, (n_heads, -1)).transpose(-3, -2)
 
 
+def local_attention_mask(
+    segment_ids: torch.Tensor, width: int, device: torch.device | None = None
+) -> torch.Tensor:
+    """Builds the boolean mask MOTOR's attention runs under.
+
+    Three conditions, all of which must hold for query i to see key j:
+
+    - causal, j <= i;
+    - local, i - j <= width, inclusive, so a query sees width + 1 keys;
+    - same segment, because MOTOR packs several subjects into one flat buffer and
+      they must not attend across each other.
+
+    Args:
+        segment_ids (torch.Tensor): Which packed sequence each position belongs to,
+            shaped (seq_len,). A single sequence is all zeros.
+        width (int): How many positions back a query may reach.
+        device (torch.device | None): Where to build the mask. Defaults to the
+            segment ids' device.
+
+    Returns:
+        torch.Tensor: A (seq_len, seq_len) boolean mask, True where attention is
+            allowed, in the sense torch's attn_mask takes.
+
+    Raises:
+        ValueError: If the segment ids are not one dimensional, or the width negative.
+    """
+    if segment_ids.ndim != 1:
+        raise ValueError(
+            f"The segment ids must be one dimensional, got {segment_ids.ndim}."
+        )
+    if width < 0:
+        raise ValueError(f"The width must not be negative, got {width}.")
+
+    device = device or segment_ids.device
+    positions = torch.arange(segment_ids.shape[0], device=device)
+    offsets = positions.unsqueeze(1) - positions.unsqueeze(0)
+
+    within_window = (offsets >= 0) & (offsets <= width)
+    same_segment = segment_ids.to(device).unsqueeze(1) == segment_ids.to(
+        device
+    ).unsqueeze(0)
+    return within_window & same_segment
+
+
+def local_attention(
+    queries: torch.Tensor,
+    keys: torch.Tensor,
+    values: torch.Tensor,
+    mask: torch.Tensor,
+) -> torch.Tensor:
+    """Runs masked attention over one head's queries, keys and values.
+
+    No row can be entirely masked, because j = i satisfies all three conditions, so
+    there is no all-infinite softmax to guard against.
+
+    Args:
+        queries (torch.Tensor): Shaped (..., n_heads, seq_len, head_dim).
+        keys (torch.Tensor): The same shape as the queries.
+        values (torch.Tensor): The same shape as the queries.
+        mask (torch.Tensor): A boolean (seq_len, seq_len) mask from
+            `local_attention_mask`, broadcast over the heads.
+
+    Returns:
+        torch.Tensor: The attended values, shaped like the queries.
+
+    Raises:
+        ValueError: If the mask is not boolean, or the three inputs disagree on shape.
+    """
+    if mask.dtype != torch.bool:
+        raise ValueError(f"The mask must be boolean, got {mask.dtype}.")
+    if not queries.shape == keys.shape == values.shape:
+        raise ValueError("The queries, keys and values must share one shape.")
+
+    # equivalent to femr's implementation
+    return torch.nn.functional.scaled_dot_product_attention(
+        queries, keys, values, attn_mask=mask
+    )
+
+
 class InputProjection(torch.nn.Module):
     """The four projections at the front of a MOTOR block.
 
