@@ -100,7 +100,7 @@ def test_rejects_malformed_ages(ages: torch.Tensor) -> None:
     fp16's largest value is 65,504, so every age past 45 days overflows to inf
     and the tables come back as nan.
     """
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         rotary_tables(ages, HEAD_DIM)
 
 
