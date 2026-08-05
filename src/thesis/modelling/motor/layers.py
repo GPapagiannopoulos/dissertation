@@ -271,6 +271,33 @@ def local_attention(
     )
 
 
+class HaikuRMSNorm(torch.nn.RMSNorm):
+    """torch's RMSNorm with haiku's dtype rule.
+
+    haiku casts the scale to the input's dtype and normalises there. torch instead
+    computes in the weight's dtype. Released inference stores every parameter in
+    float16 but leaves the embedding table in float32, so `in_norm` reads a float32
+    input under a float16 scale. Letting torch choose introduces a delta of 8.4e-04
+    which the whole stack then inherits.
+
+    Everywhere else the input and the scale already agree and this is torch's own
+    layer, unchanged.
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Normalises x in its own dtype, whatever the scale is stored as.
+
+        Args:
+            x (torch.Tensor): The stream, normalised over its last dimension.
+
+        Returns:
+            torch.Tensor: The normalised stream, in x's dtype.
+        """
+        return torch.nn.functional.rms_norm(
+            x, self.normalized_shape, self.weight.to(x.dtype), self.eps
+        )
+
+
 class HierarchicalEmbedding(torch.nn.Module):
     """MOTOR's input embedding: one event is the sum of its ancestors' rows.
 
@@ -450,7 +477,7 @@ class MotorBlock(torch.nn.Module):
     they are the same for all twelve blocks.
 
     Attributes:
-        norm (torch.nn.RMSNorm): The block's normalisation.
+        norm (HaikuRMSNorm): The block's normalisation.
         input_proj (InputProjection): q, k, v and the feed-forward expansion.
         o_proj (torch.nn.Linear): Projects the two branches back to the model width.
     """
@@ -472,7 +499,7 @@ class MotorBlock(torch.nn.Module):
         """
         super().__init__()
         self.n_heads = n_heads
-        self.norm = torch.nn.RMSNorm(hidden_size, eps=eps)
+        self.norm = HaikuRMSNorm(hidden_size, eps=eps)
         self.input_proj = InputProjection(
             hidden_size + MOTOR_AGE_FEATURES, hidden_size, intermediate_size
         )
