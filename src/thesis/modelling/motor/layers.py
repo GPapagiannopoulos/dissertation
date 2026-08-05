@@ -271,6 +271,101 @@ def local_attention(
     )
 
 
+class HierarchicalEmbedding(torch.nn.Module):
+    """MOTOR's input embedding: one event is the sum of its ancestors' rows.
+
+    A code owns a set of rows, one per ontology ancestor, and its vector is their sum,
+    so an unseen code still lands near its parents. The tokeniser therefore emits a
+    variable number of rows per position, flattened into (read, write) pairs rather
+    than a padded matrix.
+
+    This ports femr's `gather_scatter_add`. That operator tolerates out-of-range
+    indices (it fills reads with zero and drops writes), which is an XLA static-shape
+    workaround rather than intended semantics. Here they raise instead.
+
+    Attributes:
+        embeddings (torch.nn.Embedding): The table, shaped (vocab_size, hidden_size).
+    """
+
+    def __init__(self, vocab_size: int, hidden_size: int) -> None:
+        """Builds the embedding table.
+
+        Args:
+            vocab_size (int): How many ontology tokens the dictionary holds.
+            hidden_size (int): The model width.
+        """
+        super().__init__()
+        self.embeddings = torch.nn.Embedding(vocab_size, hidden_size)
+
+    def load_haiku(self, embeddings: torch.Tensor) -> None:
+        """Copies the checkpoint's table in.
+
+        haiku and torch agree on the layout here, (vocab_size, hidden_size), so
+        unlike every linear layer in this module nothing is transposed.
+
+        Args:
+            embeddings (torch.Tensor): The checkpoint table.
+
+        Raises:
+            ValueError: If the table does not fit.
+        """
+        if embeddings.shape != self.embeddings.weight.shape:
+            raise ValueError(
+                f"Expected a table shaped {tuple(self.embeddings.weight.shape)}, "
+                f"got {tuple(embeddings.shape)}."
+            )
+
+        with torch.no_grad():
+            self.embeddings.weight.copy_(embeddings)
+
+    def forward(self, indices: torch.Tensor, seq_len: int) -> torch.Tensor:
+        """Sums each position's ancestor rows.
+
+        Args:
+            indices (torch.Tensor): The sparse pairs shaped (n_pairs, 2). Column 0
+                reads from the table, column 1 writes to a sequence position. femr
+                emits them sorted by the write index, but the sum is an accumulation,
+                so this does not depend on that.
+            seq_len (int): How many positions the output holds. Passed rather than
+                inferred, because a trailing position with no tokens is legitimate
+                and would otherwise silently shorten the sequence.
+
+        Returns:
+            torch.Tensor: The embedded sequence, shaped (seq_len, hidden_size).
+                Positions named by no pair come back as zero.
+
+        Raises:
+            ValueError: If the pairs are misshapen, not integers, or point outside
+                either the table or the sequence.
+        """
+        if indices.ndim != 2 or indices.shape[1] != 2:
+            raise ValueError(
+                f"Expected pairs shaped (n_pairs, 2), got {tuple(indices.shape)}."
+            )
+        if indices.is_floating_point():
+            raise ValueError(f"The pairs must be integers, got {indices.dtype}.")
+
+        # uint32 is what the tokeniser emits and torch cannot index with it
+        read, write = indices[:, 0].long(), indices[:, 1].long()
+        vocab_size = self.embeddings.num_embeddings
+        if read.numel() and not (0 <= read.min() and read.max() < vocab_size):
+            raise ValueError(
+                f"A token index falls outside the table's {vocab_size} rows."
+            )
+        if write.numel() and not (0 <= write.min() and write.max() < seq_len):
+            raise ValueError(
+                f"A position index falls outside the {seq_len} positions requested."
+            )
+
+        embedded = torch.zeros(
+            seq_len,
+            self.embeddings.embedding_dim,
+            dtype=self.embeddings.weight.dtype,
+            device=self.embeddings.weight.device,
+        )
+        return embedded.index_add_(0, write, self.embeddings(read))
+
+
 class InputProjection(torch.nn.Module):
     """The four projections at the front of a MOTOR block.
 

@@ -10,3 +10,4 @@ CLAUDE.md
 athena/
 motor_model/
 motor_output/
+scripts/build_flashcards.py
