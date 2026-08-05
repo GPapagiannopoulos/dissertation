@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 from numpy.lib.npyio import NpzFile
 
 _ROOT: Path = Path(__file__).resolve().parents[3]
@@ -42,3 +43,19 @@ def oracle_param(jax_oracle: NpzFile) -> Callable[[str], np.ndarray]:
         return jax_oracle[f"param::{_PREFIX}{name}"]
 
     return _get
+
+
+@pytest.fixture(scope="session")
+def haiku_params(jax_oracle: NpzFile) -> dict[str, torch.Tensor]:
+    """Every encoder parameter as a torch tensor, keyed below the haiku scope.
+
+    Session scoped because the embedding table alone is 200 MB. The task head's
+    parameters hang off a sibling scope and so are excluded, which is what the
+    encoder expects.
+    """
+    prefix = f"param::{_PREFIX}"
+    return {
+        key.removeprefix(prefix): torch.from_numpy(jax_oracle[key])
+        for key in jax_oracle.files
+        if key.startswith(prefix)
+    }
