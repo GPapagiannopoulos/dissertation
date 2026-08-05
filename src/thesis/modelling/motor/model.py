@@ -11,6 +11,7 @@ import torch
 
 from thesis.modelling.motor.constants import MOTOR_RMS_EPS
 from thesis.modelling.motor.layers import (
+    HaikuRMSNorm,
     HierarchicalEmbedding,
     MotorBlock,
     local_attention_mask,
@@ -27,9 +28,9 @@ class MotorEncoder(torch.nn.Module):
 
     Attributes:
         embedding (HierarchicalEmbedding): The ancestor-sum input embedding.
-        in_norm (torch.nn.RMSNorm): Normalises the embedded sequence.
+        in_norm (HaikuRMSNorm): Normalises the embedded sequence.
         blocks (torch.nn.ModuleList): The twelve blocks, in checkpoint order.
-        out_norm (torch.nn.RMSNorm): Normalises the features the encoder returns.
+        out_norm (HaikuRMSNorm): Normalises the features the encoder returns.
     """
 
     def __init__(
@@ -65,22 +66,31 @@ class MotorEncoder(torch.nn.Module):
         self.head_size = hidden_size // n_heads
         self.attention_width = attention_width
         self.embedding = HierarchicalEmbedding(vocab_size, hidden_size)
-        self.in_norm = torch.nn.RMSNorm(hidden_size, eps=eps)
+        self.in_norm = HaikuRMSNorm(hidden_size, eps=eps)
         self.blocks = torch.nn.ModuleList(
             MotorBlock(hidden_size, intermediate_size, n_heads, eps=eps)
             for _ in range(n_layers)
         )
-        self.out_norm = torch.nn.RMSNorm(hidden_size, eps=eps)
+        self.out_norm = HaikuRMSNorm(hidden_size, eps=eps)
 
     @property
     def compute_dtype(self) -> torch.dtype:
-        """The dtype the stack runs in, which the embedding table does not share.
-
-        Released inference casts every parameter to float16 except the embedding
-        table, so `encoder.half()` followed by `encoder.embedding.float()` reproduces
-        it and this property then reports float16.
-        """
+        """The dtype the stack runs in, which the embedding table does not share."""
         return self.out_norm.weight.dtype
+
+    def half_stack(self) -> "MotorEncoder":
+        """Casts everything other than the embedding table to float16.
+
+        An embedding row is a sum of ontology ancestors, so rounding the table first
+        rounds every summand.
+
+        Returns:
+            MotorEncoder: This encoder, cast in place, for chaining.
+        """
+        self.in_norm.half()
+        self.blocks.half()
+        self.out_norm.half()
+        return self
 
     def load_haiku(self, params: Mapping[str, torch.Tensor]) -> None:
         """Copies a whole checkpoint in, keyed by haiku's names.
