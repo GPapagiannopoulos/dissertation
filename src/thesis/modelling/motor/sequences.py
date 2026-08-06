@@ -18,8 +18,17 @@ SEQUENCE_SCHEMA: dict[str, pl.DataType] = {
     "position": pl.UInt32,
     "subject_position": pl.UInt32,
     "index": pl.UInt32,
+    "time": pl.Datetime("us"),
     "age": pl.Float32,
     "normed_age": pl.Float32,
+}
+
+LABEL_SCHEMA: dict[str, pl.DataType] = {
+    "subject_id": pl.Int64,
+    "sequence_id": pl.UInt32,
+    "position": pl.UInt32,
+    "prediction_time": pl.Datetime("us"),
+    "boolean_value": pl.Boolean,
 }
 
 
@@ -61,6 +70,8 @@ def build_sequences(
         pl.LazyFrame: One row per (sequence, position), sorted by both. `position` is
             the place in the sequence the encoder sees; `subject_position` is the
             place in the subject's whole timeline, which is what labels join on.
+            `time` is carried through so a landmark can be placed against it and so
+            an age in the written artifact can be audited against its timestamp.
 
     Raises:
         ValueError: If the length or stride are not positive, if the stride exceeds
@@ -93,8 +104,10 @@ def build_sequences(
 
     # the chunks a subject needs, and then the ones each position falls inside: a
     # position belongs to every chunk that starts at or before it and has not yet
-    # ended, which is at most two while the stride is at least half the length
-    n_chunks = ((pl.col("n_events") - length + stride - 1) // stride).clip(0) + 1
+    # ended
+    n_chunks = (
+        (pl.col("n_events").cast(pl.Int64) - length + stride - 1) // stride
+    ).clip(0) + 1
     first = ((pl.col("subject_position").cast(pl.Int64) - length) // stride + 1).clip(0)
     last = pl.min_horizontal(pl.col("subject_position") // stride, n_chunks - 1)
 
@@ -120,4 +133,62 @@ def build_sequences(
         )
         .select(*SEQUENCE_SCHEMA)
         .sort("sequence_id", "position")
+    )
+
+
+def place_labels(sequences: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
+    """Attaches each landmark to the position whose features it must be read from.
+
+    An event in a chunk overlap sits in two sequences at two positions. The landmark
+    takes the larger position, which is the chunk holding more of the subject's
+    history before it.
+
+
+    Notes:
+        A landmark earlier than the subject's first tokenised event is dropped. It
+            has no position to read, and there is nothing to predict from.
+        Landmarks that pin to the same position are both kept. A 12-hour
+            grid outruns the record whenever no event is charted in between, so two
+            predictions sharing one history may disagree on the outcome.
+
+    Args:
+        sequences (pl.LazyFrame): The frame `build_sequences` returns.
+        labels (pl.LazyFrame): One row per landmark, carrying `subject_id`,
+            `prediction_time` and `boolean_value`.
+
+    Returns:
+        pl.LazyFrame: One row per placed landmark, sorted by sequence and position.
+    """
+    timeline = (
+        sequences.select("subject_id", "subject_position", "time")
+        .unique(subset=["subject_id", "subject_position"])
+        .sort("subject_id", "time")
+    )
+
+    placed = (
+        labels.select("subject_id", "prediction_time", "boolean_value")
+        .with_row_index("landmark")
+        .sort("subject_id", "prediction_time")
+        .join_asof(
+            timeline,
+            by="subject_id",
+            left_on="prediction_time",
+            right_on="time",
+            strategy="backward",
+        )
+        # a landmark before the subject's first event matches no position
+        .join(
+            sequences.select(
+                "subject_id", "subject_position", "sequence_id", "position"
+            ),
+            on=["subject_id", "subject_position"],
+            how="inner",
+        )
+    )
+
+    return (
+        placed.group_by("landmark")
+        .agg(pl.all().sort_by("position").last())
+        .select(*LABEL_SCHEMA)
+        .sort("sequence_id", "position", "prediction_time")
     )

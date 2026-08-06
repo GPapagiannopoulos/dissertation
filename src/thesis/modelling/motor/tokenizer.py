@@ -6,25 +6,12 @@ codes using embedding that have been pre-computed, and subsequently
 be fine-tuned.
 """
 
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import msgpack
 import polars as pl
-
-# The asof join below declines to verify its inputs are ordered once `by` groups are
-# given, and says so once per shard. `assign_leaf_tokens` sorts both sides itself --
-# the left frame explicitly, the right at load time -- and `_validate_bin_contiguity`
-# covers the bins the search runs over. The warning is raised from the Rust core when
-# the plan executes, not when it is built, so it surfaces in the caller's collect and
-# cannot be scoped to a context manager here.
-warnings.filterwarnings(
-    "ignore",
-    message="Sortedness of columns cannot be checked when 'by' groups provided",
-    category=UserWarning,
-)
 
 
 @dataclass(frozen=True)
