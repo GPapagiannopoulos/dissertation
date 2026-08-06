@@ -6,12 +6,25 @@ codes using embedding that have been pre-computed, and subsequently
 be fine-tuned.
 """
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import msgpack
 import polars as pl
+
+# The asof join below declines to verify its inputs are ordered once `by` groups are
+# given, and says so once per shard. `assign_leaf_tokens` sorts both sides itself --
+# the left frame explicitly, the right at load time -- and `_validate_bin_contiguity`
+# covers the bins the search runs over. The warning is raised from the Rust core when
+# the plan executes, not when it is built, so it surfaces in the caller's collect and
+# cannot be scoped to a context manager here.
+warnings.filterwarnings(
+    "ignore",
+    message="Sortedness of columns cannot be checked when 'by' groups provided",
+    category=UserWarning,
+)
 
 
 @dataclass(frozen=True)
@@ -161,6 +174,25 @@ def assign_leaf_tokens(events: pl.LazyFrame, table: TokenTable) -> pl.LazyFrame:
     need the embedding learned from pretraining. This function assigns
     the index of the code in the vocabulary so that the embedding is
     recoverable.
+
+    The bin wins over the recorded text, which wins over the bare code, because
+    that is the order of specificity. femr instead switches on the event's value
+    type and never falls back, so we are **deliberately more generous in two
+    places**: an event carrying a numeric value on a code holding no bins takes
+    that code's token here and no token at all in femr, and a value femr's linear
+    bin scan would miss lands in the bin below it here. Both hand the model a
+    token in a context pretraining never produced. Kept on purpose pending the
+    first fine-tuning trials; revisit if the results look off.
+
+    Args:
+        events (pl.LazyFrame): MEDS events carrying `code`, `numeric_value` and
+            `text_value`.
+        table (TokenTable): The loaded vocabulary.
+
+    Returns:
+        pl.LazyFrame: The events in their original order, with an `index` column
+            naming each one's leaf token. Events the vocabulary cannot name are
+            dropped.
     """
     numeric_tokens = table.numeric_tokens.lazy()
     text_tokens = table.text_tokens.lazy()
@@ -201,4 +233,81 @@ def assign_leaf_tokens(events: pl.LazyFrame, table: TokenTable) -> pl.LazyFrame:
             "text_indices",
             "code_indices",
         ]
+    )
+
+
+def build_ancestor_expansion(table: TokenTable) -> pl.LazyFrame:
+    """Constructs an ancestor expansion table based on the vocabulary.
+
+    In MOTOR an event's vector is the sum of several embedding rows, and which
+    rows depends on the kind of token it resolved to. Because that set is a
+    property of the token and not of the event, it is precomputed here once and
+    joined per batch.
+
+    A bare code contributes its own row plus one for every ancestor the
+    vocabulary holds. A value bin or a recorded text value contributes its
+    own row only.
+
+    Ancestors outside the vocabulary are dropped rather than climbed.
+
+    Args:
+        table (TokenTable): Custom object holding the representation of
+            each token in the vocabulary.
+
+    Returns:
+        pl.LazyFrame: One row per (leaf token, contributing token) pair, columns
+            index and token, sorted by both so the artifact is reproducible.
+            index matches the column assign_leaf_tokens emits.
+    """
+    leaves: list[int] = []
+    tokens: list[int] = []
+
+    for code, index in table.code_tokens.items():
+        # all_parents carries the code itself, but not every code is in it
+        chain = {
+            table.code_tokens[ancestor]
+            for ancestor in table.all_parents.get(code, ())
+            if ancestor in table.code_tokens
+        }
+        chain.add(index)
+        leaves.extend([index] * len(chain))
+        tokens.extend(sorted(chain))
+
+    valued = [
+        *table.numeric_tokens["numeric_indices"].to_list(),
+        *table.text_tokens["text_indices"].to_list(),
+    ]
+    leaves.extend(valued)
+    tokens.extend(valued)
+
+    return (
+        pl.DataFrame(
+            {
+                "index": pl.Series(leaves, dtype=pl.UInt32),
+                "token": pl.Series(tokens, dtype=pl.UInt32),
+            }
+        )
+        .lazy()
+        .sort("index", "token")
+    )
+
+
+def expand_leaf_tokens(events: pl.LazyFrame, expansion: pl.LazyFrame) -> pl.LazyFrame:
+    """Fans each event out into the embedding rows that make up its vector.
+
+    Args:
+        events (pl.LazyFrame): Events carrying the index column that
+            assign_leaf_tokens emits, in sequence order.
+        expansion (pl.LazyFrame): The table build_ancestor_expansion returns.
+
+    Returns:
+        pl.LazyFrame: One row per pair, columns token then position so the
+            collected frame is already in the (read, write) column order
+            HierarchicalEmbedding, sorted by position.
+    """
+    return (
+        events.with_row_index("position")
+        .join(expansion, on="index", how="inner")
+        .sort("position", "token")
+        .select("token", "position")
     )
