@@ -1,4 +1,10 @@
-"""Module implementing the tokenizer and helper functions."""
+"""Module implementing the tokenizer and helper functions.
+
+This module converts the valid OMOP concept codes to the embeddings
+shipped with the pre-trained model. This allows MOTOR to parse the
+codes using embedding that have been pre-computed, and subsequently
+be fine-tuned.
+"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,7 +20,7 @@ class TokenTable:
 
     code_tokens: dict[str, int]
     numeric_tokens: pl.DataFrame
-    text_tokens: dict[tuple[str, str], int]
+    text_tokens: pl.DataFrame
     all_parents: Mapping[str, tuple]
     age_mean: float
     age_std: float
@@ -60,7 +66,9 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
     val_start: list[float] = []
     val_end: list[float] = []
     numeric_indices: list[int] = []
-    text_tokens: dict[tuple[str, str], int] = {}
+    text_codes: list[str] = []
+    text_strings: list[str] = []
+    text_indices: list[int] = []
 
     for index, vocab_entry in enumerate(vocab):
         code = vocab_entry["code_string"]
@@ -74,7 +82,9 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
                 val_end.append(vocab_entry["val_end"])
                 numeric_indices.append(index)
             case 2:
-                text_tokens[(code, text_string)] = index
+                text_codes.append(code)
+                text_strings.append(text_string)
+                text_indices.append(index)
             case _:
                 continue
 
@@ -85,11 +95,67 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
                 "code": pl.Series(numeric_code, dtype=pl.String),
                 "val_start": pl.Series(val_start, dtype=pl.Float64),
                 "val_end": pl.Series(val_end, dtype=pl.Float64),
-                "indices": pl.Series(numeric_indices, dtype=pl.UInt32),
+                "numeric_indices": pl.Series(numeric_indices, dtype=pl.UInt32),
             }
         ),
-        text_tokens=text_tokens,
+        text_tokens=pl.DataFrame(
+            data={
+                "code": pl.Series(text_codes, dtype=pl.String),
+                "text_string": pl.Series(text_strings, dtype=pl.String),
+                "text_indices": pl.Series(text_indices, dtype=pl.UInt32),
+            }
+        ),
         all_parents=all_parents,
         age_mean=age_mean,
         age_std=age_std,
+    )
+
+
+def assign_leaf_tokens(events: pl.LazyFrame, table: TokenTable) -> pl.LazyFrame:
+    """Assigns a vocabulary index to each event depending on code.
+
+    The codes have been standardized into OMOP concepts but they still
+    need the embedding learned from pretraining. This function assigns
+    the index of the code in the vocabulary so that the embedding is
+    recoverable.
+    """
+    numeric_tokens = table.numeric_tokens.lazy()
+    text_tokens = table.text_tokens.lazy()
+
+    events_with_leaves = (
+        events.with_row_index("row_index")
+        .sort(["code", "numeric_value"])
+        .join_asof(
+            numeric_tokens,
+            by="code",
+            left_on="numeric_value",
+            right_on="val_start",
+            strategy="backward",
+        )
+        .join(
+            text_tokens,
+            left_on=["code", "text_value"],
+            right_on=["code", "text_string"],
+            how="left",
+        )
+        .with_columns(
+            code_indices=pl.col("code").replace_strict(
+                table.code_tokens, default=None, return_dtype=pl.UInt32
+            )
+        )
+        .with_columns(
+            index=pl.coalesce("numeric_indices", "text_indices", "code_indices")
+        )
+        .drop_nulls("index")
+    )
+
+    return events_with_leaves.sort("row_index").drop(
+        [
+            "row_index",
+            "val_start",
+            "val_end",
+            "numeric_indices",
+            "text_indices",
+            "code_indices",
+        ]
     )
