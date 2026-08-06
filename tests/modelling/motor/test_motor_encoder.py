@@ -373,3 +373,145 @@ def test_probe_arrays_are_what_the_oracle_dumped(jax_oracle: NpzFile) -> None:
     assert jax_oracle["after_in_norm"].shape == (SEQ_LEN, HIDDEN)
     assert jax_oracle["layer_11_output"].shape == (SEQ_LEN, HIDDEN)
     assert bool(jax_oracle["batch_valid_tokens"].all())
+
+
+# A stack small enough to build without the checkpoint. The batch dimension is a
+# structural property, so these need weights, not the RIGHT weights, and they run
+# whether or not the oracle has been generated locally.
+SMALL = {
+    "vocab_size": 32,
+    "hidden_size": 8,
+    "intermediate_size": 16,
+    "n_heads": 2,
+    "n_layers": 2,
+    "attention_width": 3,
+}
+SMALL_SEQ = 6
+
+# A batched matmul accumulates in a different order from a 2-D one, which moves the
+# features by ~2.4e-07 over two blocks -- the same class of difference as the JAX
+# comparisons above. Every failure these tests exist for (a table read from the wrong
+# row, a mask aligned against the heads, a mis-flattened write index) substitutes one
+# subject's data for another's and moves the output by orders of magnitude more.
+BATCH_ATOL = 1e-06
+
+
+@pytest.fixture
+def small_encoder() -> MotorEncoder:
+    """A randomly initialised encoder at toy widths."""
+    torch.manual_seed(0)
+    return MotorEncoder(**SMALL).eval()
+
+
+def _one_sequence(seed: int) -> dict[str, torch.Tensor]:
+    """Builds the forward arguments for a single sequence."""
+    generator = torch.Generator().manual_seed(seed)
+    tokens = torch.randint(
+        SMALL["vocab_size"], (SMALL_SEQ,), generator=generator, dtype=torch.int64
+    )
+    ages = torch.sort(
+        torch.rand(SMALL_SEQ, generator=generator) * 30_000
+    ).values.float()
+    valid = torch.ones(SMALL_SEQ, dtype=torch.bool)
+    valid[-1] = False  # a padded tail, which every real batch carries
+    return {
+        "indices": torch.stack((tokens, torch.arange(SMALL_SEQ))).T,
+        "seq_len": SMALL_SEQ,
+        "ages": ages,
+        "normed_ages": (ages - ages.mean()) / ages.std(),
+        "valid_tokens": valid,
+        "segment_ids": torch.zeros(SMALL_SEQ, dtype=torch.long),
+    }
+
+
+def _as_batch(sequences: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
+    """Stacks single sequences into one batched call, offsetting the write indices."""
+    pairs = torch.cat(
+        [
+            torch.stack(
+                (one["indices"][:, 0], one["indices"][:, 1] + row * SMALL_SEQ)
+            ).T
+            for row, one in enumerate(sequences)
+        ]
+    )
+    return {
+        "indices": pairs,
+        "seq_len": SMALL_SEQ,
+        **{
+            name: torch.stack([one[name] for one in sequences])
+            for name in ("ages", "normed_ages", "valid_tokens", "segment_ids")
+        },
+    }
+
+
+def test_a_batch_matches_running_the_sequences_alone(
+    small_encoder: MotorEncoder,
+) -> None:
+    """The whole contract of the batch dimension, and it is exact.
+
+    Every per-position tensor gains a leading axis and the write indices become flat
+    over the batch, so an off-by-one in that flattening, a table taken from the wrong
+    row, or a norm reducing over the wrong axis all show up here.
+    """
+    sequences = [_one_sequence(seed) for seed in (1, 2, 3)]
+
+    batched = small_encoder(**_as_batch(sequences))
+
+    assert batched.shape == (len(sequences), SMALL_SEQ, SMALL["hidden_size"])
+    for row, one in enumerate(sequences):
+        torch.testing.assert_close(
+            batched[row], small_encoder(**one), rtol=0, atol=BATCH_ATOL
+        )
+
+
+def test_one_sequence_cannot_reach_another(small_encoder: MotorEncoder) -> None:
+    """The failure the batch dimension introduces, and the one nothing else catches.
+
+    A mask that broadcasts against the head axis instead of the batch, or an
+    embedding reshaped in the wrong order, mixes subjects together while returning
+    finite features of the right shape.
+    """
+    sequences = [_one_sequence(1), _one_sequence(2)]
+    before = small_encoder(**_as_batch(sequences))
+
+    disturbed = small_encoder(**_as_batch([sequences[0], _one_sequence(99)]))
+
+    torch.testing.assert_close(disturbed[0], before[0], rtol=0, atol=0)
+    assert not torch.equal(disturbed[1], before[1])
+
+
+def test_a_batch_of_one_matches_the_unbatched_call(
+    small_encoder: MotorEncoder,
+) -> None:
+    """The oracle tests run unbatched, so the two paths must not have diverged."""
+    one = _one_sequence(7)
+
+    torch.testing.assert_close(
+        small_encoder(**_as_batch([one]))[0],
+        small_encoder(**one),
+        rtol=0,
+        atol=BATCH_ATOL,
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        pytest.param("ages", torch.ones(1, 1, SMALL_SEQ), "shaped", id="three_dims"),
+        pytest.param("ages", torch.ones(2, SMALL_SEQ + 1), "positions", id="wrong_len"),
+        pytest.param(
+            "valid_tokens",
+            torch.ones(SMALL_SEQ, dtype=torch.bool),
+            "like the ages",
+            id="unbatched_companion",
+        ),
+    ],
+)
+def test_rejects_per_position_tensors_that_disagree(
+    small_encoder: MotorEncoder, field: str, value: torch.Tensor, match: str
+) -> None:
+    """A companion left unbatched would broadcast rather than fail."""
+    arguments = _as_batch([_one_sequence(1), _one_sequence(2)]) | {field: value}
+
+    with pytest.raises(ValueError, match=match):
+        small_encoder(**arguments)

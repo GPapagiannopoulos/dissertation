@@ -252,3 +252,49 @@ def test_probe_arrays_are_what_the_oracle_dumped(jax_oracle: NpzFile) -> None:
     assert jax_oracle["rotary_probe"].dtype == np.float32
     assert jax_oracle["rotary_probe"].shape == (N_HEADS, 64, HEAD_DIM)
     assert jax_oracle["rotary_probe_rotated"].shape == (N_HEADS, 64, HEAD_DIM)
+
+
+def test_a_batch_rotates_each_sequence_by_its_own_table() -> None:
+    """Batched queries meet batched tables, one clock per subject.
+
+    Queries arrive at (batch, heads, seq, dim) and the tables at
+    (batch, 1, seq, dim): the heads share a clock, the subjects do not.
+    """
+    batch, seq = 2, 5
+    ages = torch.stack((torch.arange(seq).float(), torch.arange(seq).float() * 3))
+    sin, cos = rotary_tables(ages, HEAD_DIM)
+    x = torch.randn(batch, N_HEADS, seq, HEAD_DIM)
+
+    rotated = apply_rotary(x, sin.unsqueeze(-3), cos.unsqueeze(-3))
+
+    for row in range(batch):
+        alone = apply_rotary(x[row], sin[row], cos[row])
+        torch.testing.assert_close(rotated[row], alone, rtol=0, atol=0)
+
+
+def test_a_batched_table_must_carry_its_head_axis() -> None:
+    """The trap this guard exists for, and the only shape where it bites.
+
+    A (batch, seq, dim) table against (batch, heads, seq, dim) queries aligns from
+    the right, so it broadcasts silently whenever batch happens to equal the head
+    count -- rotating every head by a different subject's clock while returning a
+    correctly shaped, finite tensor.
+    """
+    sin, cos = rotary_tables(torch.ones(N_HEADS, 5), HEAD_DIM)
+    x = torch.randn(N_HEADS, N_HEADS, 5, HEAD_DIM)
+
+    with pytest.raises(ValueError, match="carry every axis"):
+        apply_rotary(x, sin, cos)
+
+
+def test_a_shared_table_still_broadcasts_over_a_batch() -> None:
+    """One sequence's tables may serve a whole batch, which is the B=1 case."""
+    sin, cos = rotary_tables(torch.arange(5).float(), HEAD_DIM)
+    x = torch.randn(3, N_HEADS, 5, HEAD_DIM)
+
+    rotated = apply_rotary(x, sin, cos)
+
+    for row in range(3):
+        torch.testing.assert_close(
+            rotated[row], apply_rotary(x[row], sin, cos), rtol=0, atol=0
+        )

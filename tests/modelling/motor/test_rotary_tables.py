@@ -49,8 +49,9 @@ def test_matches_float64_reference(small_ages: torch.Tensor) -> None:
 def test_frequency_schedule_spans_zero_to_two(small_ages: torch.Tensor) -> None:
     """Pins the exponent range: the endpoints are 10000**0 and 10000**2.
 
-    The first channel pair therefore turns once per 6.3 minutes and the last once per
-    1,195 years. Standard RoPE floors at 1e-4 -- a 6-week period -- and would fail here.
+    Ages reach the model in days, so the first channel pair turns once per 6.3 days
+    and the last once per 172 years -- a lifetime without wraparound. Standard RoPE
+    floors at 1e-4, whose slowest clock wraps every 172 days, and would fail here.
     """
     sin, cos = rotary_tables(small_ages, HEAD_DIM)
 
@@ -91,11 +92,11 @@ def test_shape_and_dtype(
     [
         pytest.param(torch.tensor([1.0, 2.0], dtype=torch.float16), id="fp16"),
         pytest.param(torch.tensor([1.0, 2.0], dtype=torch.float64), id="fp64"),
-        pytest.param(torch.ones(2, 3), id="two_dimensional"),
+        pytest.param(torch.ones(2, 3, 4), id="three_dimensional"),
     ],
 )
 def test_rejects_malformed_ages(ages: torch.Tensor) -> None:
-    """Refuses anything but a 1-D fp32 tensor.
+    """Refuses anything but a float32 tensor of one or two dimensions.
 
     fp16's largest value is 65,504, so every age past 45 days overflows to inf
     and the tables come back as nan.
@@ -142,3 +143,31 @@ def test_reference_arrays_are_what_the_oracle_dumped(jax_oracle: NpzFile) -> Non
     assert jax_oracle["batch_ages"].dtype == np.float32
     assert jax_oracle["rotary_sin"].shape == (64, HEAD_DIM)
     assert jax_oracle["rotary_cos"].shape == (64, HEAD_DIM)
+
+
+def test_a_batch_builds_one_table_per_sequence() -> None:
+    """Every sequence carries its own ages, so the tables cannot be shared.
+
+    A table computed from the batch as a whole -- flattened, or taken from row zero
+    -- still has the right shape and finite values, and rotates most positions by
+    another subject's clock.
+    """
+    first = torch.tensor([0.0, 10.0, 100.0])
+    second = torch.tensor([5.0, 50.0, 5000.0])
+
+    sin, cos = rotary_tables(torch.stack((first, second)), HEAD_DIM)
+
+    for row, ages in enumerate((first, second)):
+        alone = rotary_tables(ages, HEAD_DIM)
+        torch.testing.assert_close(sin[row], alone[0], rtol=0, atol=0)
+        torch.testing.assert_close(cos[row], alone[1], rtol=0, atol=0)
+
+
+def test_a_batch_keeps_the_sequence_and_head_axes_in_order() -> None:
+    """The batch axis is prepended, not folded into the sequence.
+
+    Both layouts hold the same numbers, so only the shape distinguishes them.
+    """
+    sin, cos = rotary_tables(torch.ones(4, 7), HEAD_DIM)
+
+    assert sin.shape == cos.shape == (4, 7, HEAD_DIM)
