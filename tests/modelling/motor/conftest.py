@@ -11,9 +11,28 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
+import polars as pl
 import pytest
 import torch
 from numpy.lib.npyio import NpzFile
+
+from thesis.modelling.motor.tokenizer import TokenTable
+
+# the open ends of a code's bins, C's DBL_MAX, as the dictionary stores them
+LOWEST: float = -1.7976931348623157e308
+HIGHEST: float = 1.7976931348623157e308
+
+NUMERIC_SCHEMA: dict[str, pl.DataType] = {
+    "code": pl.String,
+    "val_start": pl.Float64,
+    "val_end": pl.Float64,
+    "numeric_indices": pl.UInt32,
+}
+TEXT_SCHEMA: dict[str, pl.DataType] = {
+    "code": pl.String,
+    "text_string": pl.String,
+    "text_indices": pl.UInt32,
+}
 
 _ROOT: Path = Path(__file__).resolve().parents[3]
 _ORACLE_PATH: Path = _ROOT / "motor_output" / "oracle_fp32.npz"
@@ -87,3 +106,96 @@ def haiku_params_fp16(jax_oracle_fp16: NpzFile) -> dict[str, torch.Tensor]:
     table, so the table here is bit-identical to the float32 dump's.
     """
     return _encoder_params(jax_oracle_fp16)
+
+
+@pytest.fixture
+def make_bins() -> Callable:
+    """Returns a factory for one code's numeric bins, from its cut points.
+
+    The bins a code owns partition the whole line, so n cut points give n + 1 bins
+    running from -DBL_MAX to +DBL_MAX. Rows are numbered from `first_index`.
+    """
+
+    def _make(code: str, cuts: list[float], first_index: int = 0) -> pl.DataFrame:
+        edges = [LOWEST, *cuts, HIGHEST]
+        return pl.DataFrame(
+            {
+                "code": [code] * (len(edges) - 1),
+                "val_start": edges[:-1],
+                "val_end": edges[1:],
+                "numeric_indices": range(first_index, first_index + len(edges) - 1),
+            },
+            schema=NUMERIC_SCHEMA,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_texts() -> Callable:
+    """Returns a factory for text tokens, from (code, value, row) triples."""
+
+    def _make(*rows: tuple[str, str, int]) -> pl.DataFrame:
+        codes, values, indices = zip(*rows, strict=False) if rows else ((), (), ())
+        return pl.DataFrame(
+            {
+                "code": list(codes),
+                "text_string": list(values),
+                "text_indices": list(indices),
+            },
+            schema=TEXT_SCHEMA,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_token_table(make_bins: Callable, make_texts: Callable) -> Callable:
+    """Returns a factory for TokenTable objects, one token of each kind seeded."""
+
+    def _make(**overrides) -> TokenTable:
+        fields = {
+            "code_tokens": {"SNOMED/plain": 0},
+            "numeric_tokens": make_bins("LOINC/numeric", [1.0], first_index=1),
+            "text_tokens": make_texts(("SNOMED/text", "N", 3)),
+            "all_parents": {},
+            "age_mean": 0.0,
+            "age_std": 1.0,
+        }
+        return TokenTable(**(fields | overrides))
+
+    return _make
+
+
+@pytest.fixture
+def make_events() -> Callable:
+    """Returns a factory for MEDS-shaped events, overriding only what a case needs.
+
+    Columns beyond these exist in the real shards and are irrelevant here: the
+    tokeniser reads the code and its two value columns and nothing else.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        height = max((len(values) for values in columns.values()), default=1)
+        defaults = {
+            "subject_id": [1],
+            "code": ["SNOMED/plain"],
+            "numeric_value": [None],
+            "text_value": [None],
+        }
+        merged = {
+            name: values * height if len(values) == 1 else values
+            for name, values in (defaults | columns).items()
+        }
+        frame = pl.DataFrame(
+            merged,
+            schema_overrides={
+                "subject_id": pl.Int64,
+                "code": pl.String,
+                "numeric_value": pl.Float32,
+                "text_value": pl.String,
+            },
+        )
+        return frame.lazy()
+
+    return _make

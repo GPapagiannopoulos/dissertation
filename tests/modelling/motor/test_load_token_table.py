@@ -24,7 +24,12 @@ NUMERIC_SCHEMA = {
     "code": pl.String,
     "val_start": pl.Float64,
     "val_end": pl.Float64,
-    "indices": pl.UInt32,
+    "numeric_indices": pl.UInt32,
+}
+TEXT_SCHEMA = {
+    "code": pl.String,
+    "text_string": pl.String,
+    "text_indices": pl.UInt32,
 }
 
 
@@ -42,12 +47,23 @@ def test_partitions_entries_by_type(
     table = load_token_table(path, vocab_size=len(rollup))
 
     assert table.code_tokens == {"SNOMED/1": 0}
-    assert table.text_tokens == {("SNOMED/3", "N"): 2}
     assert_frame_equal(
         table.numeric_tokens,
         pl.DataFrame(
-            {"code": ["LOINC/2"], "val_start": [0.0], "val_end": [1.0], "indices": [1]},
+            {
+                "code": ["LOINC/2"],
+                "val_start": [0.0],
+                "val_end": [1.0],
+                "numeric_indices": [1],
+            },
             schema=NUMERIC_SCHEMA,
+        ),
+    )
+    assert_frame_equal(
+        table.text_tokens,
+        pl.DataFrame(
+            {"code": ["SNOMED/3"], "text_string": ["N"], "text_indices": [2]},
+            schema=TEXT_SCHEMA,
         ),
     )
 
@@ -74,7 +90,7 @@ def test_skips_entries_that_bear_no_token(
     table = load_token_table(path, vocab_size=len(rollup))
 
     assert table.code_tokens == {"SNOMED/1": 0}
-    assert table.text_tokens == {}
+    assert table.text_tokens.height == 0
     assert table.numeric_tokens.height == 0
 
 
@@ -98,7 +114,7 @@ def test_indices_count_skipped_entries(
     table = load_token_table(path, vocab_size=len(rollup))
 
     assert table.code_tokens == {"SNOMED/1": 0, "SNOMED/3": 2}
-    assert table.text_tokens == {("SNOMED/4", "Y"): 3}
+    assert table.text_tokens["text_indices"].to_list() == [3]
 
 
 def test_keeps_one_numeric_row_per_bin(
@@ -121,23 +137,25 @@ def test_keeps_one_numeric_row_per_bin(
                 "code": ["LOINC/2160-0"] * 3,
                 "val_start": [LOWEST, 0.6, 1.03],
                 "val_end": [0.6, 1.03, HIGHEST],
-                "indices": [0, 1, 2],
+                "numeric_indices": [0, 1, 2],
             },
             schema=NUMERIC_SCHEMA,
         ),
     )
 
 
-def test_numeric_frame_is_typed_even_when_empty(
+def test_frames_are_typed_even_when_empty(
     make_dictionary: Callable, rollup_entry: Callable
 ) -> None:
-    """The bin assignment joins on this frame, and a Null column would not match."""
+    """Leaf assignment joins on these, and a Null column would match nothing."""
     path = make_dictionary(ontology_rollup=[rollup_entry("SNOMED/1", CODE)])
 
     table = load_token_table(path, vocab_size=1)
 
     assert table.numeric_tokens.height == 0
+    assert table.text_tokens.height == 0
     assert dict(table.numeric_tokens.schema) == NUMERIC_SCHEMA
+    assert dict(table.text_tokens.schema) == TEXT_SCHEMA
 
 
 def test_text_tokens_are_keyed_by_code_and_value(
@@ -152,10 +170,17 @@ def test_text_tokens_are_keyed_by_code_and_value(
 
     table = load_token_table(path, vocab_size=len(rollup))
 
-    assert table.text_tokens == {
-        ("SNOMED/228490006", "N"): 0,
-        ("SNOMED/228490006", "Y"): 1,
-    }
+    assert_frame_equal(
+        table.text_tokens,
+        pl.DataFrame(
+            {
+                "code": ["SNOMED/228490006"] * 2,
+                "text_string": ["N", "Y"],
+                "text_indices": [0, 1],
+            },
+            schema=TEXT_SCHEMA,
+        ),
+    )
 
 
 def test_a_code_may_hold_tokens_of_several_types(
@@ -192,7 +217,7 @@ def test_truncates_at_vocab_size(
     table = load_token_table(path, vocab_size=1)
 
     assert table.code_tokens == {"SNOMED/kept": 0}
-    assert table.text_tokens == {}
+    assert table.text_tokens.height == 0
     assert table.numeric_tokens.height == 0
 
 
