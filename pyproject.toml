@@ -26,6 +26,8 @@ modelling = [
     "meds==0.3.3",
     "meds-etl[cpp]==0.3.11",
     "meds-reader>=0.1.16",
+    "peft>=0.19.1",
+    "torch>=2.4",
 ]
 
 [tool.uv]
