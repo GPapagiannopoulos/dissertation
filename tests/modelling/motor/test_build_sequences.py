@@ -105,6 +105,23 @@ def test_chunks_cover_the_timeline_with_the_right_overlap(
     assert actual == expected
 
 
+@pytest.mark.parametrize("length", [8, 16, 64])
+def test_a_short_subject_is_one_sequence_at_any_length(
+    make_events: Callable, make_births: Callable, length: int
+) -> None:
+    """A timeline well inside the length must never be cut.
+
+    Regression: the chunk count subtracted the length from a UInt32 `pl.len()`, so a
+    subject shorter than it wrapped to 4.29e9 chunks rather than clipping to one. The
+    surplus chunks were then capped by the position, which hid the wrap at short
+    lengths and produced spurious half-length sequences at long ones.
+    """
+    result = _build(make_events(n=4), make_births(), length=length, stride=length // 2)
+
+    assert result["sequence_id"].n_unique() == 1
+    assert result["position"].to_list() == [0, 1, 2, 3]
+
+
 def test_a_chunk_restarts_its_positions_from_zero(
     make_events: Callable, make_births: Callable
 ) -> None:
