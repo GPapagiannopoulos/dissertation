@@ -230,6 +230,7 @@ def local_attention_mask(
     - same segment, because MOTOR packs several subjects into one flat buffer and
       they must not attend across each other.
 
+
     Args:
         segment_ids (torch.Tensor): Which packed sequence each position belongs to,
             shaped (seq_len,) or (batch, seq_len). A single sequence is all zeros.
