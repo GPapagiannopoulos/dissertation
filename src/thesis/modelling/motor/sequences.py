@@ -5,12 +5,20 @@ place in a sequence: an age, a position, and the sequence it belongs to. Everyth
 here is a pure LazyFrame transform, so the caller decides whether to materialise.
 """
 
+from pathlib import Path
+
 import polars as pl
+
+from thesis.modelling.motor.tokenizer import assign_leaf_tokens, load_token_table
 
 # femr's batch creator stores an integer age in minutes and divides by this to get the
 # days the model actually sees. Reproduced exactly rather than computed from the
 # timestamps directly, so the truncation happens in the same place.
 MINUTES_PER_DAY = 1440
+
+# The MEDS code marking a subject's time origin. It carries no OMOP concept and so
+# survives normalisation but never tokenisation.
+BIRTH_CODE = "MEDS_BIRTH"
 
 SEQUENCE_SCHEMA: dict[str, pl.DataType] = {
     "subject_id": pl.Int64,
@@ -192,3 +200,145 @@ def place_labels(sequences: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
         .select(*LABEL_SCHEMA)
         .sort("sequence_id", "position", "prediction_time")
     )
+
+
+def subject_birth_times(events: pl.LazyFrame) -> pl.LazyFrame:
+    """Lifts each subject's time origin out of the raw event stream.
+
+    This has to run before tokenisation. `MEDS_BIRTH` carries no OMOP concept, so
+    it is in no MOTOR vocabulary and `assign_leaf_tokens` drops it.
+
+    A subject holds exactly one birth in a well-formed MEDS dataset. The minimum is
+    taken anyway, so a duplicated origin gives one deterministic answer rather than
+    multiplying every one of that subject's events through the join.
+
+    Args:
+        events (pl.LazyFrame): Raw MEDS events, before tokenisation.
+
+    Returns:
+        pl.LazyFrame: One row per subject, `subject_id` and `birth`.
+    """
+    return (
+        events.filter(pl.col("code") == BIRTH_CODE)
+        .group_by("subject_id")
+        .agg(birth=pl.col("time").min())
+    )
+
+
+def restrict_to_labelled(events: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
+    """Keeps only the events a prediction could ever be made from.
+
+    Events after a subject's last landmark are dropped because attention is causal.
+    No position can influence a prediction made before it, so they would
+    be encoded and never read.
+
+    Subjects carrying no landmark are also dropped. An unmatched subject has no
+    landmark to compare against, and the comparison decides it either way.
+
+    Args:
+        events (pl.LazyFrame): Raw MEDS events.
+        labels (pl.LazyFrame): The landmark labels, carrying `subject_id` and
+            `prediction_time`.
+
+    Returns:
+        pl.LazyFrame: The events worth tokenising.
+    """
+    horizon = labels.group_by("subject_id").agg(
+        last_landmark=pl.col("prediction_time").max()
+    )
+    return (
+        events.join(horizon, on="subject_id", how="inner")
+        .filter(pl.col("time") <= pl.col("last_landmark"))
+        .drop("last_landmark")
+    )
+
+
+def run_build_sequences(
+    events: Path,
+    labels: Path,
+    dest: Path,
+    *,
+    dictionary: Path,
+    vocab_size: int,
+    length: int,
+    stride: int,
+) -> Path:
+    """Materialises the tokenised sequences and their placed labels, shard by shard.
+
+    Shards are processed one at a time, as in stage 2.6: peak memory stays at one
+    shard, and a crash at shard 137 leaves 137 readable outputs.
+
+    `sequence_id` is dense within a call to `build_sequences`, so every shard would
+    otherwise restart at zero and two subjects in different shards would share an id.
+    A running offset makes it unique across the dataset, which is why the shards
+    cannot be processed in parallel without reworking this.
+
+    Args:
+        events (Path): Stage 2.6's shard folder, i.e. <normalized>/data.
+        labels (Path): The landmark labels parquet.
+        dest (Path): The folder to create, which must not already exist.
+        dictionary (Path): MOTOR's msgpack dictionary.
+        vocab_size (int): The token count the checkpoint's config declares.
+        length (int): The longest sequence to emit.
+        stride (int): How far apart consecutive chunks start.
+
+    Returns:
+        Path: The folder written, holding `sequences/` and `labels/`.
+
+    Raises:
+        FileExistsError: If dest already exists.
+        FileNotFoundError: If events holds no parquet, or an input file is missing.
+    """
+    if dest.exists():
+        raise FileExistsError(
+            f"Destination {dest} already exists; refusing to overwrite. "
+            f"Remove it or choose a new path."
+        )
+    shards = sorted(events.glob("*.parquet"))
+    if not shards:
+        raise FileNotFoundError(
+            f"Found no parquet shards in {events}. Point events at stage 2.6's "
+            f"data/ folder."
+        )
+    for path in (labels, dictionary):
+        if not path.is_file():
+            raise FileNotFoundError(f"Expected a file at {path}.")
+
+    table = load_token_table(dictionary, vocab_size=vocab_size)
+    print(f"vocabulary holds {len(table.code_tokens)} code tokens")
+
+    label_frame = pl.scan_parquet(labels)
+    sequence_dir = dest / "sequences"
+    label_dir = dest / "labels"
+    sequence_dir.mkdir(parents=True)
+    label_dir.mkdir(parents=True)
+
+    offset = 0
+    for position, shard in enumerate(shards, start=1):
+        wanted = restrict_to_labelled(pl.scan_parquet(shard), label_frame)
+        built = build_sequences(
+            assign_leaf_tokens(wanted, table),
+            subject_birth_times(wanted),
+            length=length,
+            stride=stride,
+            age_mean=table.age_mean,
+            age_std=table.age_std,
+        ).collect()
+
+        if built.height:
+            built = built.with_columns(sequence_id=pl.col("sequence_id") + offset)
+            offset = int(built["sequence_id"].max()) + 1
+            placed = place_labels(built.lazy(), label_frame).collect()
+            built.write_parquet(sequence_dir / shard.name)
+            placed.write_parquet(label_dir / shard.name)
+        else:
+            placed = pl.DataFrame(schema=LABEL_SCHEMA)
+
+        print(
+            f"  [{position}/{len(shards)}] {shard.name}: "
+            f"{built.height} positions, {placed.height} labels",
+            flush=True,
+        )
+
+    print(f"{offset} sequences written")
+    return dest
