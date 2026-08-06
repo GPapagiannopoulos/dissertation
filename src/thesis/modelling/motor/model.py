@@ -152,40 +152,59 @@ class MotorEncoder(torch.nn.Module):
         valid_tokens: torch.Tensor,
         segment_ids: torch.Tensor,
     ) -> torch.Tensor:
-        """Runs the whole backbone over one packed buffer of events.
+        """Runs the whole backbone over one buffer of events, or a batch of them.
+
+        The per-position tensors are either one dimensional, describing a single
+        buffer, or two, describing a batch of equal-length sequences.
 
         Args:
             indices (torch.Tensor): The sparse (read, write) pairs, shaped
-                (n_pairs, 2). See HierarchicalEmbedding.
-            seq_len (int): How many positions the buffer holds.
-            ages (torch.Tensor): Each position's age in minutes, float32, shaped
-                (seq_len,). Drives the rotary tables, so it is a real quantity and
-                not an index.
-            normed_ages (torch.Tensor): The z-scored age per position, shaped
-                (seq_len,). Concatenated with its square onto every block's input.
+                (n_pairs, 2). See HierarchicalEmbedding. When batched, the write
+                index is flat over the whole batch, so position p of sequence b is
+                b * seq_len + p.
+            seq_len (int): How many positions each sequence holds.
+            ages (torch.Tensor): Each position's age in days, float32, shaped
+                (seq_len,) or (batch, seq_len). Drives the rotary tables, so it is a
+                real quantity and not an index.
+            normed_ages (torch.Tensor): The z-scored age per position, shaped like
+                the ages. Concatenated with its square onto every block's input.
             valid_tokens (torch.Tensor): Which positions hold a real event, shaped
-                (seq_len,).
-            segment_ids (torch.Tensor): Which packed subject each position belongs
-                to, shaped (seq_len,). A single subject is all zeros.
+                like the ages.
+            segment_ids (torch.Tensor): Which subject each position belongs to,
+                shaped like the ages. A batch of single-subject sequences is all
+                zeros.
 
         Returns:
-            torch.Tensor: The features, shaped (seq_len, hidden_size).
+            torch.Tensor: The features, shaped like the ages with (hidden_size,)
+                appended.
 
         Raises:
-            ValueError: If any per-position tensor disagrees with seq_len.
+            ValueError: If the ages are not one or two dimensional, if they disagree
+                with seq_len, or if any other per-position tensor disagrees with them.
         """
+        if ages.ndim not in (1, 2):
+            raise ValueError(
+                f"ages must be shaped (seq_len,) or (batch, seq_len), got "
+                f"{tuple(ages.shape)}."
+            )
+        if ages.shape[-1] != seq_len:
+            raise ValueError(
+                f"ages must hold {seq_len} positions, got {tuple(ages.shape)}."
+            )
         for name, tensor in (
-            ("ages", ages),
             ("normed_ages", normed_ages),
             ("valid_tokens", valid_tokens),
             ("segment_ids", segment_ids),
         ):
-            if tensor.shape != (seq_len,):
+            if tensor.shape != ages.shape:
                 raise ValueError(
-                    f"{name} must be shaped ({seq_len},), got {tuple(tensor.shape)}."
+                    f"{name} must be shaped {tuple(ages.shape)} like the ages, got "
+                    f"{tuple(tensor.shape)}."
                 )
 
-        x = self.embedding(indices, seq_len)
+        # the embedding sums into one flat buffer either way, and the batch is only
+        # separated out afterwards; the pairs already carry flat write indices
+        x = self.embedding(indices, ages.numel()).unflatten(0, ages.shape)
 
         # invalid positions are filled with ONES, not zeros: the norm below divides
         # by the row's own magnitude, so a zero row would give 0/0.
@@ -193,6 +212,10 @@ class MotorEncoder(torch.nn.Module):
         x = self.in_norm(x).to(self.compute_dtype)
 
         sin, cos = rotary_tables(ages, self.head_size, dtype=x.dtype)
+        if ages.ndim == 2:
+            # attention runs at (batch, heads, seq, dim) and every head shares one
+            # table, so the head axis is inserted here rather than in every block
+            sin, cos = sin.unsqueeze(-3), cos.unsqueeze(-3)
         mask = local_attention_mask(segment_ids, self.attention_width)
         normed_ages = normed_ages.to(x.dtype)
 

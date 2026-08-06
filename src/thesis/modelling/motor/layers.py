@@ -15,28 +15,32 @@ def rotary_tables(
     the subject's age.
 
     Args:
-        ages (torch.Tensor): Tensor shaped (seq_len,) containing the subject's
-            age at each event.
+        ages (torch.Tensor): Tensor shaped (seq_len,) or (batch, seq_len)
+            containing the subject's age at each event. Every sequence in a batch
+            carries its own ages, so the tables are built per sequence.
         dim (int): The width of one attention head.
         dtype (torch.dtype): The tensor dtype
 
     Returns:
         tuple[torch.Tensor, torch.Tensor]: two tensors containing the
-            sine and cosine values. Each has shape (seq_len, dim)
+            sine and cosine values, each shaped like the ages with (dim,) appended.
 
     Raises:
-        ValueError: If ages is not a one dimensional float32 tensor.
+        ValueError: If ages is not a float32 tensor of one or two dimensions.
     """
     if ages.dtype != torch.float32:
         raise ValueError(f"Ages must be float32, got {ages.dtype}.")
-    if ages.ndim != 1:
-        raise ValueError(f"Ages must be one dimensional, got {ages.ndim} dimensions.")
+    if ages.ndim not in (1, 2):
+        raise ValueError(
+            f"Ages must be shaped (seq_len,) or (batch, seq_len), got "
+            f"{ages.ndim} dimensions."
+        )
 
-    # Generate 32 angular frequency values from 1.0 to 1e-8 radians per minute of age
+    # Generate 32 angular frequency values from 1.0 to 1e-8 radians per day of age
     # We use different "clocks" to account for variable time differences between events
     # Fast clocks contribute resolution, slow clocks contribute range
     inv_freq = 1.0 / (10000 ** torch.linspace(0, 2, dim // 2, device=ages.device))
-    angles = ages.unsqueeze(1) * inv_freq.unsqueeze(0)
+    angles = ages.unsqueeze(-1) * inv_freq
     sin = angles.sin().repeat_interleave(2, dim=-1).to(dtype)
     cos = angles.cos().repeat_interleave(2, dim=-1).to(dtype)
     return sin, cos
@@ -45,23 +49,45 @@ def rotary_tables(
 def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
     """Rotates each adjacent channel pair of x by the angle for its event.
 
+    The tables are broadcast against x rather than required to match it, because
+    the heads share one table while a batch does not: queries arrive as
+    (batch, n_heads, seq_len, dim) and the tables as (batch, 1, seq_len, dim).
+
     Args:
         x (torch.Tensor): Queries/ keys shaped (..., seq_len, dim)
-        sin: Sine table output from 'rotary_tables' shaped (seq_len, dim)
-        cos: Cosine table output from 'rotary_tables' shaped (seq_len, dim)
+        sin: Sine table output from 'rotary_tables', shaped (seq_len, dim) or
+            broadcastable against x with the head axis already inserted.
+        cos: Cosine table output from 'rotary_tables', the same shape.
 
     Returns:
         torch.Tensor: x rotated shaped (..., seq_len, dim)
 
     Raises:
-        ValueError: If any of the parameters have different dtypes, or
-            if the inputs last two dimensions do not match with the tables'
-            dimensions.
+        ValueError: If any of the parameters have different dtypes, if the two
+            tables disagree, or if the tables do not broadcast against x.
     """
     if not x.dtype == sin.dtype == cos.dtype:
         raise ValueError("The dtypes of the tables or the input do not match.")
-    if not x.shape[-2:] == sin.shape == cos.shape:
+    if sin.shape != cos.shape:
+        raise ValueError("The sine and cosine tables must share one shape.")
+    if x.shape[-2:] != sin.shape[-2:]:
         raise ValueError("The shapes of the tables or the input do not match.")
+    # A batched table missing its head axis aligns from the right, so (batch, seq,
+    # dim) against (batch, heads, seq, dim) silently rotates by another sequence's
+    # angles whenever batch happens to equal heads. Ranks are therefore required to
+    # match exactly, rather than left to broadcasting to catch.
+    if sin.ndim not in (2, x.ndim):
+        raise ValueError(
+            f"Tables shaped {tuple(sin.shape)} must either be two dimensional or "
+            f"carry every axis of an input shaped {tuple(x.shape)}."
+        )
+    try:
+        torch.broadcast_shapes(x.shape, sin.shape)
+    except RuntimeError as error:
+        raise ValueError(
+            f"Tables shaped {tuple(sin.shape)} do not broadcast against an input "
+            f"shaped {tuple(x.shape)}."
+        ) from error
 
     rotated = torch.stack((-x[..., 1::2], x[..., 0::2]), dim=-1).flatten(-2)
     return x * cos + rotated * sin
@@ -206,34 +232,38 @@ def local_attention_mask(
 
     Args:
         segment_ids (torch.Tensor): Which packed sequence each position belongs to,
-            shaped (seq_len,). A single sequence is all zeros.
+            shaped (seq_len,) or (batch, seq_len). A single sequence is all zeros.
         width (int): How many positions back a query may reach.
         device (torch.device | None): Where to build the mask. Defaults to the
             segment ids' device.
 
     Returns:
-        torch.Tensor: A (seq_len, seq_len) boolean mask, True where attention is
-            allowed, in the sense torch's attn_mask takes.
+        torch.Tensor: A boolean mask, True where attention is allowed, in the sense
+            torch's attn_mask takes. Shaped (seq_len, seq_len) for one row of ids
+            and (batch, 1, seq_len, seq_len) for a batch of them.
 
     Raises:
-        ValueError: If the segment ids are not one dimensional, or the width negative.
+        ValueError: If the segment ids are not one or two dimensional, or the width
+            is negative.
     """
-    if segment_ids.ndim != 1:
+    if segment_ids.ndim not in (1, 2):
         raise ValueError(
-            f"The segment ids must be one dimensional, got {segment_ids.ndim}."
+            f"The segment ids must be shaped (seq_len,) or (batch, seq_len), got "
+            f"{segment_ids.ndim} dimensions."
         )
     if width < 0:
         raise ValueError(f"The width must not be negative, got {width}.")
 
     device = device or segment_ids.device
-    positions = torch.arange(segment_ids.shape[0], device=device)
-    offsets = positions.unsqueeze(1) - positions.unsqueeze(0)
+    positions = torch.arange(segment_ids.shape[-1], device=device)
+    offsets = positions.unsqueeze(-1) - positions.unsqueeze(-2)
 
     within_window = (offsets >= 0) & (offsets <= width)
-    same_segment = segment_ids.to(device).unsqueeze(1) == segment_ids.to(
-        device
-    ).unsqueeze(0)
-    return within_window & same_segment
+    segment_ids = segment_ids.to(device)
+    same_segment = segment_ids.unsqueeze(-1) == segment_ids.unsqueeze(-2)
+
+    mask = within_window & same_segment
+    return mask.unsqueeze(-3) if segment_ids.ndim == 2 else mask
 
 
 def local_attention(
@@ -550,10 +580,11 @@ class MotorBlock(torch.nn.Module):
             x (torch.Tensor): The residual stream, shaped (..., seq_len, hidden_size).
             normed_ages (torch.Tensor): The z-scored age per position, shaped
                 (..., seq_len). Concatenated with its square onto every block's input.
-            sin (torch.Tensor): The rotary sine table, shaped (seq_len, head_dim).
+            sin (torch.Tensor): The rotary sine table, shaped (seq_len, head_dim) or
+                (batch, 1, seq_len, head_dim) with the head axis already inserted.
             cos (torch.Tensor): The rotary cosine table, the same shape.
             mask (torch.Tensor): The boolean attention mask, shaped
-                (seq_len, seq_len).
+                (seq_len, seq_len) or (batch, 1, seq_len, seq_len).
 
         Returns:
             torch.Tensor: The updated residual stream, shaped like x.

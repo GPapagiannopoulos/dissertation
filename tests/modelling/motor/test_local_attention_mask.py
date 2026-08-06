@@ -85,7 +85,7 @@ def test_a_single_sequence_is_plain_causal_windowing() -> None:
 @pytest.mark.parametrize(
     ("segment_ids", "width", "match"),
     [
-        pytest.param(torch.zeros(2, 2), 4, "one dimensional", id="2d_segments"),
+        pytest.param(torch.zeros(2, 2, 2), 4, "dimensions", id="3d_segments"),
         pytest.param(torch.zeros(4), -1, "negative", id="negative_width"),
     ],
 )
@@ -123,3 +123,26 @@ def test_probe_arrays_are_what_the_oracle_dumped(jax_oracle: NpzFile) -> None:
         ~np.uint32(SEGMENT_LENGTH - 1)
     )
     assert jax_oracle["attention_probe_pattern"].shape == (1, SEQ_LEN, SEQ_LEN)
+
+
+def test_a_batch_yields_one_mask_per_sequence() -> None:
+    """Batched ids give a mask per sequence, with the head axis already inserted.
+
+    Attention runs at (batch, heads, seq, seq), so a (batch, seq, seq) mask would
+    align its batch axis against the heads and mask the wrong keys.
+    """
+    ids = torch.tensor([[0, 0, 0, 0], [0, 0, 1, 1]])
+
+    mask = local_attention_mask(ids, 4)
+
+    assert mask.shape == (2, 1, 4, 4)
+    for row in range(2):
+        alone = local_attention_mask(ids[row], 4)
+        assert torch.equal(mask[row, 0], alone)
+
+
+def test_one_row_of_ids_still_returns_a_shared_mask() -> None:
+    """A batch of single-segment sequences needs only one mask, broadcast."""
+    mask = local_attention_mask(torch.zeros(4, dtype=torch.long), 4)
+
+    assert mask.shape == (4, 4)
