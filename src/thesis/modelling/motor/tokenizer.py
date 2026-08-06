@@ -26,6 +26,44 @@ class TokenTable:
     age_std: float
 
 
+def _validate_bin_contiguity(numeric_tokens: pl.DataFrame) -> None:
+    """Asserts each code's value bins meet edge to edge, as the asof join assumes.
+
+    The algorithm fails over non-continuous bins.
+    The open ends are deliberately not checked. Bins lost to vocab_size are cut
+    from the top of a code's range, leaving a shorter but still contiguous run, and
+    values above it fall back to the code's own token.
+
+    Args:
+        numeric_tokens (pl.DataFrame): The bin lookup, one row per numeric token.
+
+    Raises:
+        ValueError: If any code's bins leave a gap, overlap, or repeat.
+    """
+    faults = (
+        numeric_tokens.lazy()
+        .sort("code", "val_start")
+        .with_columns(next_start=pl.col("val_start").shift(-1).over("code"))
+        .filter(
+            pl.col("next_start").is_not_null()
+            & pl.col("val_end").ne_missing(pl.col("next_start"))
+        )
+        .collect()
+    )
+    if faults.is_empty():
+        return
+
+    codes = faults["code"].unique(maintain_order=True).to_list()
+    first = faults.row(0, named=True)
+    raise ValueError(
+        f"{len(codes)} code(s) in the vocabulary hold value bins that do not meet "
+        f"edge to edge: {codes[:5]}. {first['code']} closes a bin at "
+        f"{first['val_end']} and opens the next at {first['next_start']}; leaf "
+        f"assignment reads val_start alone, so every value between the two would be "
+        f"tokenised as the bin below it."
+    )
+
+
 def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
     """Extracts the MOTOR vocabulary with each code's index in the rollup.
 
@@ -88,16 +126,21 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
             case _:
                 continue
 
+    # the asof join in leaf assignment binary-searches this frame within each code,
+    # so it is ordered here rather than trusted to arrive ordered
+    numeric_tokens = pl.DataFrame(
+        data={
+            "code": pl.Series(numeric_code, dtype=pl.String),
+            "val_start": pl.Series(val_start, dtype=pl.Float64),
+            "val_end": pl.Series(val_end, dtype=pl.Float64),
+            "numeric_indices": pl.Series(numeric_indices, dtype=pl.UInt32),
+        }
+    ).sort("code", "val_start")
+    _validate_bin_contiguity(numeric_tokens)
+
     return TokenTable(
         code_tokens=code_tokens,
-        numeric_tokens=pl.DataFrame(
-            data={
-                "code": pl.Series(numeric_code, dtype=pl.String),
-                "val_start": pl.Series(val_start, dtype=pl.Float64),
-                "val_end": pl.Series(val_end, dtype=pl.Float64),
-                "numeric_indices": pl.Series(numeric_indices, dtype=pl.UInt32),
-            }
-        ),
+        numeric_tokens=numeric_tokens,
         text_tokens=pl.DataFrame(
             data={
                 "code": pl.Series(text_codes, dtype=pl.String),

@@ -144,6 +144,42 @@ def test_keeps_one_numeric_row_per_bin(
     )
 
 
+def test_orders_the_bins_by_value(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """Leaf assignment binary-searches this frame within each code.
+
+    Rollup order is the checkpoint's own and happens to be ascending, but `join_asof`
+    does not verify what it is handed -- it returns a bin for every row regardless,
+    all of them plausible. The order is established here rather than assumed.
+    """
+    rollup = [
+        rollup_entry("LOINC/2160-0", NUMERIC, val_start=1.03, val_end=HIGHEST),
+        rollup_entry("LOINC/2160-0", NUMERIC, val_start=LOWEST, val_end=0.6),
+        rollup_entry("LOINC/2160-0", NUMERIC, val_start=0.6, val_end=1.03),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    table = load_token_table(path, vocab_size=len(rollup))
+
+    assert table.numeric_tokens["val_start"].to_list() == [LOWEST, 0.6, 1.03]
+    assert table.numeric_tokens["numeric_indices"].to_list() == [1, 2, 0]
+
+
+def test_rejects_bins_that_leave_a_gap(
+    make_dictionary: Callable, rollup_entry: Callable
+) -> None:
+    """A gap in the bins is unrecoverable downstream, so loading is where it stops."""
+    rollup = [
+        rollup_entry("LOINC/2160-0", NUMERIC, val_start=LOWEST, val_end=0.6),
+        rollup_entry("LOINC/2160-0", NUMERIC, val_start=1.03, val_end=HIGHEST),
+    ]
+    path = make_dictionary(ontology_rollup=rollup)
+
+    with pytest.raises(ValueError, match="do not meet edge to edge"):
+        load_token_table(path, vocab_size=len(rollup))
+
+
 def test_frames_are_typed_even_when_empty(
     make_dictionary: Callable, rollup_entry: Callable
 ) -> None:
