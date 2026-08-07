@@ -15,6 +15,7 @@ from thesis.modelling.motor.layers import (
     HierarchicalEmbedding,
     MotorBlock,
     local_attention_mask,
+    projected_dtype,
     rotary_tables,
 )
 
@@ -211,7 +212,9 @@ class MotorEncoder(torch.nn.Module):
         x = torch.where(valid_tokens.unsqueeze(-1), x, x.new_ones(()))
         x = self.in_norm(x).to(self.compute_dtype)
 
-        sin, cos = rotary_tables(ages, self.head_size, dtype=x.dtype)
+        # the tables meet the QUERIES, which under autocast are the autocast dtype
+        # rather than the stream's; outside autocast the two are the same thing
+        sin, cos = rotary_tables(ages, self.head_size, dtype=projected_dtype(x))
         if ages.ndim == 2:
             # attention runs at (batch, heads, seq, dim) and every head shares one
             # table, so the head axis is inserted here rather than in every block

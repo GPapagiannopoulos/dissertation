@@ -46,6 +46,27 @@ def rotary_tables(
     return sin, cos
 
 
+def projected_dtype(x: torch.Tensor) -> torch.dtype:
+    """The dtype a linear layer returns when handed this input.
+
+    Under `torch.autocast` a Linear casts its input and emits the autocast dtype, so
+    the queries a block rotates are not the dtype of the stream that entered it. The
+    rotary tables must be built to match the queries, not the stream, or
+    `apply_rotary`'s dtype guard refuses the pair. Outside autocast the two agree and
+    this returns the input's own dtype.
+
+    Args:
+        x (torch.Tensor): A tensor on the device whose autocast state is in question.
+
+    Returns:
+        torch.dtype: The dtype the projections below will produce.
+    """
+    device_type = x.device.type
+    if torch.is_autocast_enabled(device_type):
+        return torch.get_autocast_dtype(device_type)
+    return x.dtype
+
+
 def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
     """Rotates each adjacent channel pair of x by the angle for its event.
 
