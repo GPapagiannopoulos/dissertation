@@ -39,6 +39,9 @@ dev = [
     "ruff>=0.15.18",
     "pytest>=9.1.1",
 ]
+modelling = [
+    "xgboost>=3.4.0",
+]
 
 [tool.ruff]
 line-length = 88
