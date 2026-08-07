@@ -99,4 +99,7 @@ class MotorClassifier(torch.nn.Module):
 
         picked = flat.index_select(0, label_indices)
 
-        return self.head(picked.to(self.head.weight.dtype)).squeeze(-1)
+        # autocast would cast the head back down and hand the loss a low-precision
+        # logit, which is exactly what running the head separately is meant to avoid
+        with torch.autocast(picked.device.type, enabled=False):
+            return self.head(picked.to(self.head.weight.dtype)).squeeze(-1)
