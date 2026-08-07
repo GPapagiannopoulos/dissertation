@@ -56,6 +56,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-every", type=int, default=500)
     parser.add_argument("--eval-batches", type=int, default=150)
     parser.add_argument(
+        "--patience",
+        type=int,
+        default=4,
+        help="stop after this many EVALUATIONS with no AUPRC gain; 0 disables it",
+    )
+    parser.add_argument(
+        "--min-delta",
+        type=float,
+        default=0.002,
+        help="how much AUPRC must gain to reset patience, above the subsample's noise",
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=8,
@@ -139,6 +151,8 @@ def main() -> None:
         accumulate=args.accumulate,
         eval_every=args.eval_every,
         eval_batches=args.eval_batches,
+        patience=args.patience or None,
+        min_delta=args.min_delta,
         max_hours=args.max_hours,
     )
     print(f"best {best}")
