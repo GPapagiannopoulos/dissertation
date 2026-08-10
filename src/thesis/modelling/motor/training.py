@@ -395,6 +395,7 @@ def run_training(
     clip: float = 1.0,
     eval_every: int = 500,
     eval_batches: int = 150,
+    checkpoint_every: int = 4,
     patience: int | None = None,
     min_delta: float = 0.0,
     max_hours: float | None = None,
@@ -412,10 +413,15 @@ def run_training(
     evaluations, so a patience expressed in steps would either compare a metric to
     itself or wait for the next evaluation anyway.
 
-    `min_delta` exists because the evaluation subsample is small. At `eval_batches`
-    150 the sample holds ~11k labels and ~400 positives, where AUPRC's sampling noise
-    is roughly +/-0.02. Without a floor, a +0.001 fluctuation resets the counter and
-    patience never fires.
+    **Both selection and patience run on validation loss.** At `eval_batches` 150 the
+    subsample holds ~11k labels and ~400 positives, and AUPRC over that many
+    positives wobbles by roughly +/-0.02 -- so taking the best of forty evaluations
+    is optimistic by about twice that. It was: the previous run's `best.pt` read
+    0.2017 on the subsample and 0.1610 on the whole fold. Loss uses every label in
+    the subsample rather than the ranking of its positives, and on that run it went
+    on falling for another 6,000 steps past the checkpoint AUPRC selected.
+
+    `min_delta` is the floor a loss drop must clear to reset the patience counter.
 
     Args:
         model (torch.nn.Module): The classifier, already on `device`.
@@ -434,9 +440,13 @@ def run_training(
         clip (float): Global gradient-norm clip.
         eval_every (int): Optimizer steps between evaluations.
         eval_batches (int): Batches per evaluation.
+        checkpoint_every (int): Save `step_NNNNNN.pt` every this many evaluations,
+            whatever the score, so a selection made on the subsample can be revisited
+            against the full fold without paying for the run twice. Zero disables it.
         patience (int | None): Stop after this many consecutive evaluations without
-            an AUPRC improvement, or None to run the full budget.
-        min_delta (float): How much AUPRC must gain to count as an improvement.
+            a validation-loss improvement, or None to run the full budget.
+        min_delta (float): How far validation loss must DROP to count as an
+            improvement.
         max_hours (float | None): Wall-clock budget, or None for no limit.
         amp_dtype (torch.dtype): The autocast dtype.
         verbose (bool): Whether to mirror the log to stdout. On by default, because
@@ -447,11 +457,15 @@ def run_training(
 
     Raises:
         FileExistsError: If dest already exists, as elsewhere in the pipeline.
-        ValueError: If accumulate is not positive, if patience is not positive, or if
-            min_delta is negative.
+        ValueError: If accumulate is not positive, if patience is not positive, if
+            min_delta is negative, or if checkpoint_every is negative.
     """
     if accumulate < 1:
         raise ValueError(f"A step accumulates at least one batch, got {accumulate}.")
+    if checkpoint_every < 0:
+        raise ValueError(
+            f"A checkpoint interval counts evaluations, got {checkpoint_every}."
+        )
     if patience is not None and patience < 1:
         raise ValueError(f"Patience waits at least one evaluation, got {patience}.")
     if min_delta < 0.0:
@@ -487,7 +501,7 @@ def run_training(
     )
     loss_fn = torch.nn.BCEWithLogitsLoss(reduction="sum")
 
-    best = {"auprc": -1.0, "step": -1}
+    best = {"loss": float("inf"), "step": -1}
     started = time.perf_counter()
     step = 0
     window_loss = 0.0
@@ -585,9 +599,14 @@ def run_training(
             )
             model.train()
 
-            # NaN loses every comparison, so an all-one-class subsample counts as a
-            # stall rather than silently holding the counter open forever
-            improved = metrics["auprc"] > best["auprc"] + min_delta
+            # Selection is on validation LOSS, not AUPRC. AUPRC over the evaluation
+            # subsample rests on the ranking of a few hundred positives and wobbles
+            # by ~0.02; taking the maximum of forty such readings is optimistic by
+            # roughly twice that. Measured: the previous run's best.pt read 0.2017 on
+            # the subsample and 0.1610 on the full fold, and its validation loss said
+            # the model went on improving for another 6,000 steps. Loss uses every
+            # label in the subsample, so it is far steadier.
+            improved = metrics["loss"] < best["loss"] - min_delta
             stalled = 0 if improved else stalled + 1
 
             record = {
@@ -612,6 +631,17 @@ def run_training(
                     dest / "best.pt",
                 )
 
+            # Periodic saves regardless of score. Selecting on a subsample is a
+            # judgement made with partial information, and without these the only
+            # recourse when it turns out wrong is another full run -- which is what
+            # happened when the genuinely better model, around step 10,000, was never
+            # written to disk. These are cheap next to 8.8 hours of GPU time.
+            if checkpoint_every and (step // eval_every) % checkpoint_every == 0:
+                torch.save(
+                    {"model": model.state_dict(), "step": step, "metrics": metrics},
+                    dest / f"step_{step:06d}.pt",
+                )
+
             if patience is not None and stalled >= patience:
                 stop_reason = "patience"
                 _log(
@@ -620,8 +650,8 @@ def run_training(
                 )
                 if verbose:
                     print(
-                        f"stopping at step {step}: {stalled} evaluations without an "
-                        f"AUPRC gain of {min_delta:+.4f}; best was step {best['step']}",
+                        f"stopping at step {step}: {stalled} evaluations without a "
+                        f"loss drop of {min_delta:.4f}; best was step {best['step']}",
                         flush=True,
                     )
                 break

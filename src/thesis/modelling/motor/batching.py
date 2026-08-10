@@ -22,6 +22,30 @@ has to be taken out first -- `forward` names its arguments and an unexpected one
 `label_subjects` and `label_times` exist because a metric needs no provenance but a
 confidence interval does: the bootstrap resamples SUBJECTS, and pairing this model's
 predictions against another's needs a key both sides share.
+
+`label_clocks` is deliberately NOT here: it is a model input, so it stays in the dict
+and splats into `forward` alongside the encoder's own arguments.
+"""
+
+CLOCK_FEATURES: tuple[str, ...] = ("log1p_hours_since_event",)
+"""The per-label scalars handed to the head alongside the pooled features.
+
+MOTOR's head reads the hidden state at the last charted event at or before the
+landmark, and nothing in the encoder's input says how long ago that was. Measured on
+the validation fold, the gap runs to a **median 4.60 hours**, p90 21.9 and p99 94.
+The XGBoost baseline gets this as `hours_since`, per code, and an ablation that
+removed it cost the tree **0.0310 AUPRC [0.0261, 0.0359]** -- 79% of its margin over
+the fine-tuned encoder. This is that signal, in the weakest form that does not
+require touching the pretrained backbone.
+
+The value is `log1p(hours)` rather than hours. The raw gap spans 0 to 792, which
+alongside activations of order 1 would dominate the head's first gradient purely by
+scale; the log compresses it to roughly 0-6.7 while keeping the ordering intact and
+keeping zero at zero.
+
+Adding `hours_since_admission` would need the labeller's `admittime` carried into
+stage 5.2's label shards, which they do not currently hold -- a stage 5.2 change, not
+a head change.
 """
 
 
@@ -57,14 +81,16 @@ def collate(
     Returns:
         dict[str, torch.Tensor | int]: `indices`, `seq_len`, `ages`, `normed_ages`,
             `valid_tokens` and `segment_ids` are `MotorEncoder.forward`'s arguments
-            by name; `label_indices` and `labels` carry the supervision; and
-            `label_subjects` and `label_times` carry each label's provenance, in the
-            same order, so a caller can group predictions by patient or pair them
-            against another model's. See `LABEL_METADATA`.
+            by name; `label_indices` and `label_clocks` are `MotorClassifier`'s two
+            extra arguments; `labels` carries the supervision; and `label_subjects`
+            and `label_times` carry each label's provenance, in the same order, so a
+            caller can group predictions by patient or pair them against another
+            model's. See `LABEL_METADATA` and `CLOCK_FEATURES`.
 
     Raises:
-        ValueError: If the batch holds no sequence, or if a label names a sequence
-            the batch does not contain.
+        ValueError: If the batch holds no sequence, if a label names a sequence the
+            batch does not contain, or if a label names a position its sequence does
+            not hold.
     """
     if sequences.height == 0:
         raise ValueError("A batch holds at least one sequence, got an empty frame.")
@@ -106,11 +132,34 @@ def collate(
         .collect()
     )
 
-    placed = labels.with_columns(
-        flat=pl.col("sequence_id").replace_strict(row_of, return_dtype=pl.UInt32)
-        * seq_len
-        + pl.col("position")
-    ).sort("flat")
+    # the time of the position each label was pinned to, which is what the encoder's
+    # last visible event actually is; the difference against `prediction_time` is the
+    # staleness the head is otherwise blind to
+    pinned = ordered.select("sequence_id", "position", "time").unique(
+        subset=["sequence_id", "position"], maintain_order=False
+    )
+    placed = (
+        labels.join(pinned, on=["sequence_id", "position"], how="left")
+        .with_columns(
+            flat=pl.col("sequence_id").replace_strict(row_of, return_dtype=pl.UInt32)
+            * seq_len
+            + pl.col("position")
+        )
+        .sort("flat")
+    )
+
+    if placed["time"].null_count():
+        raise ValueError(
+            f"{placed['time'].null_count()} label(s) name a position their sequence "
+            f"does not hold, so no event time could be found for them."
+        )
+
+    # clipped at zero because the landmark is placed by a BACKWARD asof join and can
+    # never precede its own event; a negative here would mean that join had flipped
+    hours = (
+        (pl.col("prediction_time") - pl.col("time")).dt.total_seconds() / 3600.0
+    ).clip(lower_bound=0.0)
+    clocks = placed.select(hours.log1p().alias(CLOCK_FEATURES[0]))
 
     return {
         "indices": torch.from_numpy(pairs.to_numpy().astype(np.int64)),
@@ -120,6 +169,9 @@ def collate(
         "valid_tokens": torch.from_numpy(valid),
         "segment_ids": torch.zeros(batch_size, seq_len, dtype=torch.long),
         "label_indices": torch.from_numpy(placed["flat"].to_numpy().astype(np.int64)),
+        "label_clocks": torch.from_numpy(
+            clocks.to_numpy().astype(np.float32).reshape(placed.height, -1)
+        ),
         "labels": torch.from_numpy(
             placed["boolean_value"].to_numpy().astype(np.float32)
         ),
