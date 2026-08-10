@@ -3118,7 +3118,7 @@ name = "scipy"
 version = "1.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda' or extra != 'extra-6-thesis-modelling'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/25/c2700dfaf6442b4effaa91af24ebce5dc9d31bb4a69706313aae70d72cd0/scipy-1.18.0.tar.gz", hash = "sha256:67b2ad2ad54c72ca6d04975a9b2df8c3638c34ddd5b28738e94fc2b57929d378", size = 30774447, upload-time = "2026-06-19T15:01:43.456Z" }
 wheels = [
@@ -3295,6 +3295,7 @@ modelling = [
     { name = "meds-reader" },
     { name = "peft" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "xgboost" },
 ]
 
 [package.dev-dependencies]
@@ -3302,9 +3303,6 @@ dev = [
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "ruff" },
-]
-modelling = [
-    { name = "xgboost" },
 ]
 
 [package.metadata]
@@ -3326,6 +3324,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "streamlit", marker = "extra == 'eda'", specifier = ">=1.58.0" },
     { name = "torch", marker = "extra == 'modelling'", specifier = ">=2.4" },
+    { name = "xgboost", marker = "extra == 'modelling'", specifier = ">=3.4.0" },
 ]
 provides-extras = ["eda", "modelling"]
 
@@ -3335,7 +3334,6 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.15.18" },
 ]
-modelling = [{ name = "xgboost", specifier = ">=3.4.0" }]
 
 [[package]]
 name = "threadpoolctl"
@@ -3765,11 +3763,9 @@ name = "xgboost"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda' or extra != 'extra-6-thesis-modelling'" },
-    { name = "nvidia-nccl-cu13", marker = "sys_platform == 'linux' or (extra == 'extra-6-thesis-eda' and extra == 'extra-6-thesis-modelling')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda' or extra != 'extra-6-thesis-modelling'" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "nvidia-nccl-cu13", marker = "sys_platform == 'linux'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/11/2b1de4cb9b7eeb042ca49c7d3b3ed2b77e7645ee6c0f99cf616716f3e8d7/xgboost-3.4.0.tar.gz", hash = "sha256:a6b5d114e7186b5a68c5b08b42297fc76c8c5d7292294220cdb12a6efd59977e", size = 1231819, upload-time = "2026-08-04T11:14:57.216Z" }
 wheels = [

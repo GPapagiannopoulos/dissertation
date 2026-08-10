@@ -15,7 +15,7 @@ import polars as pl
 import pytest
 import torch
 
-from thesis.modelling.motor.batching import collate, padded_length
+from thesis.modelling.motor.batching import LABEL_METADATA, collate, padded_length
 from thesis.modelling.motor.sequences import LABEL_SCHEMA, SEQUENCE_SCHEMA
 
 BIRTH = datetime(2100, 1, 1)
@@ -224,10 +224,14 @@ def test_labels_are_floats_for_the_loss(
 def test_returns_the_encoder_arguments_by_name(
     make_sequences: Callable, make_labels: Callable, identity_expansion: pl.LazyFrame
 ) -> None:
-    """The batch is splatted into forward, so the keys are a contract."""
+    """The batch is splatted into forward, so the keys are a contract.
+
+    Two of them are not: `LABEL_METADATA` names the keys a caller must take out
+    first, and forgetting one is a TypeError at the splat rather than a wrong number.
+    """
     batch = collate(make_sequences((0, 3)), make_labels(), identity_expansion)
 
-    assert set(batch) == {
+    assert set(batch) - set(LABEL_METADATA) == {
         "indices",
         "seq_len",
         "ages",
@@ -235,8 +239,8 @@ def test_returns_the_encoder_arguments_by_name(
         "valid_tokens",
         "segment_ids",
         "label_indices",
-        "labels",
     }
+    assert set(LABEL_METADATA) <= set(batch)
     assert batch["segment_ids"].shape == (1, 4)
     assert not batch["segment_ids"].any()
 
