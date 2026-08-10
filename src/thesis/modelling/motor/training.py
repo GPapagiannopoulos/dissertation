@@ -24,12 +24,14 @@ import json
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import polars as pl
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
+from thesis.modelling.motor.batching import LABEL_METADATA
 from thesis.modelling.motor.data import batch_to
 
 
@@ -179,7 +181,93 @@ def learning_rate_at(
     return floor + (peak - floor) * 0.5 * (1.0 + np.cos(np.pi * min(progress, 1.0)))
 
 
+class Predictions(NamedTuple):
+    """One pass' predictions, with enough provenance to bootstrap or pair them.
+
+    Attributes:
+        scores (np.ndarray): Predicted probabilities, one per label.
+        targets (np.ndarray): The binary labels.
+        subjects (np.ndarray): The subject each label belongs to, which is the unit a
+            confidence interval on this task has to resample.
+        times (np.ndarray): Each label's prediction time, in microseconds since the
+            epoch. With `subjects` it identifies a landmark, so another model's
+            predictions can be aligned against these row for row.
+        loss (float): Mean BCE over the labels.
+    """
+
+    scores: np.ndarray
+    targets: np.ndarray
+    subjects: np.ndarray
+    times: np.ndarray
+    loss: float
+
+
 @torch.no_grad()
+def predict_stream(
+    model: torch.nn.Module,
+    batches: Iterable[dict[str, torch.Tensor | int]],
+    *,
+    device: torch.device,
+    amp_dtype: torch.dtype,
+    max_batches: int | None = None,
+) -> Predictions:
+    """Runs the model over a stream of batches, keeping every prediction.
+
+    Args:
+        model (torch.nn.Module): The classifier, which this puts in eval mode and
+            leaves there -- the caller re-arms training.
+        batches (Iterable): Batches as `collate` returns them.
+        device (torch.device): Where to run.
+        amp_dtype (torch.dtype): The autocast dtype, matching training.
+        max_batches (int | None): Stop after this many, or None to exhaust the
+            stream. A bounded subsample is what makes per-N-step evaluation
+            affordable; None is what makes a reported number comparable.
+
+    Returns:
+        Predictions: The scores, their labels, the provenance of each, and the loss.
+
+    Raises:
+        ValueError: If the stream yields no batch.
+    """
+    model.eval()
+    loss_fn = torch.nn.BCEWithLogitsLoss(reduction="sum")
+
+    scores: list[np.ndarray] = []
+    targets: list[np.ndarray] = []
+    subjects: list[np.ndarray] = []
+    times: list[np.ndarray] = []
+    total_loss = 0.0
+    total_labels = 0
+
+    for index, batch in enumerate(batches):
+        if max_batches is not None and index >= max_batches:
+            break
+        moved = batch_to(batch, device)
+        supervision = {key: moved.pop(key) for key in LABEL_METADATA}
+        labels = supervision["labels"]
+
+        with torch.autocast(device.type, dtype=amp_dtype):
+            logits = model(**moved)
+
+        total_loss += float(loss_fn(logits.float(), labels.float()))
+        total_labels += labels.numel()
+        scores.append(torch.sigmoid(logits.float()).cpu().numpy())
+        targets.append(labels.cpu().numpy())
+        subjects.append(supervision["label_subjects"].cpu().numpy())
+        times.append(supervision["label_times"].cpu().numpy())
+
+    if not scores:
+        raise ValueError("The evaluation stream yielded no batch.")
+
+    return Predictions(
+        scores=np.concatenate(scores),
+        targets=np.concatenate(targets),
+        subjects=np.concatenate(subjects),
+        times=np.concatenate(times),
+        loss=total_loss / total_labels,
+    )
+
+
 def evaluate(
     model: torch.nn.Module,
     batches: Iterable[dict[str, torch.Tensor | int]],
@@ -206,33 +294,11 @@ def evaluate(
     Raises:
         ValueError: If the stream yields no batch.
     """
-    model.eval()
-    loss_fn = torch.nn.BCEWithLogitsLoss(reduction="sum")
-
-    scores: list[np.ndarray] = []
-    targets: list[np.ndarray] = []
-    total_loss = 0.0
-    total_labels = 0
-
-    for index, batch in enumerate(batches):
-        if max_batches is not None and index >= max_batches:
-            break
-        moved = batch_to(batch, device)
-        labels = moved.pop("labels")
-
-        with torch.autocast(device.type, dtype=amp_dtype):
-            logits = model(**moved)
-
-        total_loss += float(loss_fn(logits.float(), labels.float()))
-        total_labels += labels.numel()
-        scores.append(torch.sigmoid(logits.float()).cpu().numpy())
-        targets.append(labels.cpu().numpy())
-
-    if not scores:
-        raise ValueError("The evaluation stream yielded no batch.")
-
-    metrics = binary_metrics(np.concatenate(scores), np.concatenate(targets))
-    metrics["loss"] = total_loss / total_labels
+    predictions = predict_stream(
+        model, batches, device=device, amp_dtype=amp_dtype, max_batches=max_batches
+    )
+    metrics = binary_metrics(predictions.scores, predictions.targets)
+    metrics["loss"] = predictions.loss
     return metrics
 
 
@@ -454,7 +520,9 @@ def run_training(
             break
 
         moved = batch_to(batch, device)
-        labels = moved.pop("labels")
+        # the provenance columns go out with the labels: training needs neither, and
+        # `forward` names its arguments, so leaving one in raises at the splat
+        labels = {key: moved.pop(key) for key in LABEL_METADATA}["labels"]
 
         with torch.autocast(device.type, dtype=amp_dtype):
             logits = model(**moved)

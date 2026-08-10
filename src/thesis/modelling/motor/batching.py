@@ -12,6 +12,18 @@ import torch
 # so the encoder sees a handful of distinct lengths instead of one per batch.
 PAD_VALUE: float = 0.0
 
+LABEL_METADATA: tuple[str, ...] = ("labels", "label_subjects", "label_times")
+"""Batch keys that are supervision or provenance, not `MotorClassifier.forward` args.
+
+Every other key in a collated batch is splatted into the model, so anything added here
+has to be taken out first -- `forward` names its arguments and an unexpected one is a
+`TypeError` at the top of the step. Both loops in `training.py` pop this tuple.
+
+`label_subjects` and `label_times` exist because a metric needs no provenance but a
+confidence interval does: the bootstrap resamples SUBJECTS, and pairing this model's
+predictions against another's needs a key both sides share.
+"""
+
 
 def padded_length(longest: int) -> int:
     """Rounds a sequence length up to the next power of two.
@@ -45,7 +57,10 @@ def collate(
     Returns:
         dict[str, torch.Tensor | int]: `indices`, `seq_len`, `ages`, `normed_ages`,
             `valid_tokens` and `segment_ids` are `MotorEncoder.forward`'s arguments
-            by name; `label_indices` and `labels` carry the supervision.
+            by name; `label_indices` and `labels` carry the supervision; and
+            `label_subjects` and `label_times` carry each label's provenance, in the
+            same order, so a caller can group predictions by patient or pair them
+            against another model's. See `LABEL_METADATA`.
 
     Raises:
         ValueError: If the batch holds no sequence, or if a label names a sequence
@@ -107,5 +122,15 @@ def collate(
         "label_indices": torch.from_numpy(placed["flat"].to_numpy().astype(np.int64)),
         "labels": torch.from_numpy(
             placed["boolean_value"].to_numpy().astype(np.float32)
+        ),
+        "label_subjects": torch.from_numpy(
+            placed["subject_id"].to_numpy().astype(np.int64)
+        ),
+        # microseconds since the epoch, because a batch is tensors and a tensor holds
+        # no datetime. The unit is fixed rather than inherited so that two frames
+        # stored at different precisions still produce the same integer for one
+        # instant -- this column is a JOIN KEY across models, not a duration.
+        "label_times": torch.from_numpy(
+            placed["prediction_time"].dt.epoch("us").to_numpy().astype(np.int64)
         ),
     }
