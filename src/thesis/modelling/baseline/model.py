@@ -63,7 +63,7 @@ def train_baseline(
     max_bin: int = 256,
     cache: Path | None = None,
 ) -> tuple[xgb.Booster, dict[str, dict[str, list[float]]]]:
-    """Fits the booster, early-stopping on validation AUPRC.
+    """Fits the booster, early-stopping on validation log loss.
 
     The validation matrix is built with `ref=dtrain`, so both folds share one set of
     quantile boundaries. Without that the same creatinine falls in different buckets
