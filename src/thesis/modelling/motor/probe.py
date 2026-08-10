@@ -146,6 +146,9 @@ def extract_features(
         moved = batch_to(batch, device)
         supervision = {key: moved.pop(key) for key in LABEL_METADATA}
         label_indices = moved.pop("label_indices")
+        # the clock is a head input, and this runs the BARE encoder, which would
+        # reject it at the splat
+        moved.pop("label_clocks", None)
 
         with torch.autocast(device.type, dtype=amp_dtype):
             features = encoder(**moved)
