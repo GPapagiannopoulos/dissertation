@@ -54,13 +54,23 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=300)
     parser.add_argument("--accumulate", type=int, default=4)
     parser.add_argument("--eval-every", type=int, default=500)
-    parser.add_argument("--eval-batches", type=int, default=150)
+    parser.add_argument(
+        "--eval-batches",
+        type=int,
+        default=400,
+        help="batches per in-loop evaluation. A PROGRESS SIGNAL, not a selection: "
+        "400 costs ~55s per evaluation (under 10%% of the run) and gives a steadier "
+        "line than 150 did, but no subsample ranks checkpoints -- "
+        "scripts/score_checkpoints.py does that against the whole fold",
+    )
     parser.add_argument(
         "--patience",
         type=int,
-        default=4,
-        help="stop after this many EVALUATIONS with no validation-loss drop; "
-        "0 disables it",
+        default=0,
+        help="stop after this many EVALUATIONS with no validation-loss drop. "
+        "Defaults to 0 (disabled): the 15,000-step run improved through 24 "
+        "consecutive subsample stalls, so patience truncates the checkpoint sweep "
+        "on evidence that cannot support it",
     )
     parser.add_argument(
         "--min-delta",
@@ -84,6 +94,14 @@ def _parse_args() -> argparse.Namespace:
         default=8,
         help="upper bound; the step "
         "count or the wall clock is what actually stops the run",
+    )
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="run the encoder eagerly. Compiled is the default: measured at 311.7 "
+        "vs 364.8 ms/batch (1.17x) and 3.10 vs 3.83 GiB, with a max logit "
+        "difference of 0.0 -- bit-identical. This escape hatch exists because "
+        "compilation adds a failure mode that does not exist eagerly",
     )
     return parser.parse_args()
 
@@ -138,6 +156,21 @@ def main() -> None:
     model = MotorClassifier(released_encoder(ORACLE), positive_rate=prevalence)
     model.to(device)
     print(f"parameters  {sum(p.numel() for p in model.parameters()):,}")
+
+    if not args.no_compile:
+        # `dynamic=True` is load-bearing, not a default worth copying past. Batches
+        # are built to a token budget and padded to the next power of two, so 24
+        # consecutive batches carried 22 distinct shapes across six length buckets.
+        # A static compile would specialise on each and spend more time compiling
+        # than it saves.
+        #
+        # The ENCODER only. `MotorClassifier.forward` raises on several guards --
+        # the empty-label check, the out-of-range gather, the clock width -- and a
+        # raise inside a traced region is a graph break. Those guards turn what
+        # would be a device-side assert, which kills the CUDA context, into an
+        # exception that kills one step.
+        model.encoder = torch.compile(model.encoder, dynamic=True)
+        print("encoder     compiled (dynamic=True); first steps include warmup")
 
     best = run_training(
         model,
