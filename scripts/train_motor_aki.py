@@ -59,13 +59,24 @@ def _parse_args() -> argparse.Namespace:
         "--patience",
         type=int,
         default=4,
-        help="stop after this many EVALUATIONS with no AUPRC gain; 0 disables it",
+        help="stop after this many EVALUATIONS with no validation-loss drop; "
+        "0 disables it",
     )
     parser.add_argument(
         "--min-delta",
         type=float,
-        default=0.002,
-        help="how much AUPRC must gain to reset patience, above the subsample's noise",
+        default=0.0,
+        help="how far validation loss must DROP to reset patience. Zero, because "
+        "loss moves in the third decimal -- the previous run gained 0.0049 in total "
+        "between steps 1,000 and 10,000 -- so the 0.002 floor that suited AUPRC's "
+        "noise would stop the run before it improved at all",
+    )
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=4,
+        help="save a step_NNNNNN.pt every this many EVALUATIONS regardless of score, "
+        "so a selection made on the subsample can be revisited against the full fold",
     )
     parser.add_argument(
         "--epochs",
@@ -151,6 +162,7 @@ def main() -> None:
         accumulate=args.accumulate,
         eval_every=args.eval_every,
         eval_batches=args.eval_batches,
+        checkpoint_every=args.checkpoint_every,
         patience=args.patience or None,
         min_delta=args.min_delta,
         max_hours=args.max_hours,
