@@ -402,7 +402,13 @@ def run_training(
     amp_dtype: torch.dtype = torch.bfloat16,
     verbose: bool = True,
 ) -> dict[str, float]:
-    """Fine-tunes the model, checkpointing the best validation AUPRC.
+    """Fine-tunes the model, checkpointing on a fixed cadence.
+
+    **This function does not choose a model.** It writes `step_NNNNNN.pt` every
+    `checkpoint_every` evaluations and `last.pt` at the end, and selection is a
+    separate job run afterwards against the whole validation fold -- see
+    `scripts/score_checkpoints.py`. The evaluations here are a progress signal and
+    an input to the optional stopping rule, nothing more.
 
     The loop is bounded by three parameters: a step count, optionally a wall clock,
     and optionally patience. Whichever comes first stops it, and the learning-rate
@@ -440,9 +446,9 @@ def run_training(
         clip (float): Global gradient-norm clip.
         eval_every (int): Optimizer steps between evaluations.
         eval_batches (int): Batches per evaluation.
-        checkpoint_every (int): Save `step_NNNNNN.pt` every this many evaluations,
-            whatever the score, so a selection made on the subsample can be revisited
-            against the full fold without paying for the run twice. Zero disables it.
+        checkpoint_every (int): Save `step_NNNNNN.pt` every this many evaluations.
+            These are the run's candidates; zero disables them, leaving only
+            `last.pt` and no way to select afterwards.
         patience (int | None): Stop after this many consecutive evaluations without
             a validation-loss improvement, or None to run the full budget.
         min_delta (float): How far validation loss must DROP to count as an
@@ -453,7 +459,10 @@ def run_training(
             a silent eight-hour run gives no way to tell a slow one from a hung one.
 
     Returns:
-        dict[str, float]: The best evaluation's metrics, plus the step it came from.
+        dict[str, float]: The lowest-loss evaluation's metrics and the step it came
+            from. This is a **progress summary, not a selection** -- the subsample
+            it was measured on cannot rank checkpoints, and the step named here is
+            routinely not the best one on the full fold.
 
     Raises:
         FileExistsError: If dest already exists, as elsewhere in the pipeline.
@@ -599,13 +608,16 @@ def run_training(
             )
             model.train()
 
-            # Selection is on validation LOSS, not AUPRC. AUPRC over the evaluation
-            # subsample rests on the ranking of a few hundred positives and wobbles
-            # by ~0.02; taking the maximum of forty such readings is optimistic by
-            # roughly twice that. Measured: the previous run's best.pt read 0.2017 on
-            # the subsample and 0.1610 on the full fold, and its validation loss said
-            # the model went on improving for another 6,000 steps. Loss uses every
-            # label in the subsample, so it is far steadier.
+            # This loop NO LONGER SELECTS A MODEL. The subsample cannot rank
+            # checkpoints: measured on the 15,000-step run, it scored step 3,000
+            # at 0.12939 and step 10,000 at 0.12970 -- calling step 3,000 the
+            # winner -- while the full fold puts them at 0.13341 and 0.13052, the
+            # other way round by ten times the margin the subsample was resolving.
+            # It is also the SAME ~1,600 patients at every evaluation, since
+            # `iter_epoch` is seeded identically, so its bias never averages out.
+            # Selection happens afterwards, over the periodic checkpoints, against
+            # the whole fold. What survives here is a progress signal and an
+            # optional stopping rule.
             improved = metrics["loss"] < best["loss"] - min_delta
             stalled = 0 if improved else stalled + 1
 
@@ -626,16 +638,13 @@ def run_training(
 
             if improved:
                 best = {**metrics, "step": step}
-                torch.save(
-                    {"model": model.state_dict(), "step": step, "metrics": metrics},
-                    dest / "best.pt",
-                )
 
-            # Periodic saves regardless of score. Selecting on a subsample is a
-            # judgement made with partial information, and without these the only
-            # recourse when it turns out wrong is another full run -- which is what
-            # happened when the genuinely better model, around step 10,000, was never
-            # written to disk. These are cheap next to 8.8 hours of GPU time.
+            # The ONLY checkpoints written, and deliberately so. A `best.pt` chosen
+            # here would carry a name asserting something the subsample cannot
+            # establish -- on the previous run the file so named was the worst of
+            # five candidates on the full fold. Saving on a fixed cadence instead
+            # leaves the choice to `scripts/score_checkpoints.py`, which has the
+            # whole fold to make it with. 517 MB each against a 913 GB disk.
             if checkpoint_every and (step // eval_every) % checkpoint_every == 0:
                 torch.save(
                     {"model": model.state_dict(), "step": step, "metrics": metrics},
