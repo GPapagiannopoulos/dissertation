@@ -28,6 +28,7 @@ modelling = [
     "meds-reader>=0.1.16",
     "peft>=0.19.1",
     "torch>=2.4",
+    "xgboost>=3.4.0",
 ]
 
 [tool.uv]
