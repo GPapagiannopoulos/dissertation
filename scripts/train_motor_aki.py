@@ -26,6 +26,7 @@ from thesis.modelling.motor.data import (
     iter_epoch,
 )
 from thesis.modelling.motor.head import MotorClassifier
+from thesis.modelling.motor.manifest import build_manifest, write_manifest
 from thesis.modelling.motor.tokenizer import build_ancestor_expansion, load_token_table
 from thesis.modelling.motor.training import (
     positive_rate,
@@ -201,6 +202,22 @@ def main() -> None:
         max_hours=args.max_hours,
     )
     print(f"best {best}")
+
+    # Written after the loop, so `results` carries the finished trajectory. The
+    # parameters are the driver's own arguments, which is the whole reason this
+    # beats reconstruction: `accumulate`, `token_budget`, `epochs` and whether
+    # the encoder was compiled leave no trace in any logged value.
+    manifest = build_manifest(
+        args.dest,
+        parameters={
+            **{key: value for key, value in vars(args).items() if key != "dest"},
+            "compiled": not args.no_compile,
+            "dest": str(args.dest),
+        },
+        provenance="runtime",
+        repo_root=ROOT,
+    )
+    print(f"wrote {write_manifest(args.dest, manifest)}")
 
 
 if __name__ == "__main__":

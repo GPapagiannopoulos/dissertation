@@ -29,7 +29,7 @@ import torch
 import xgboost as xgb
 
 from thesis.modelling.baseline.model import predict_fold
-from thesis.modelling.motor.checkpoint import released_encoder
+from thesis.modelling.motor.checkpoint import released_encoder, strip_compile_prefix
 from thesis.modelling.motor.data import fold_subjects, iter_epoch
 from thesis.modelling.motor.head import MotorClassifier
 from thesis.modelling.motor.tokenizer import build_ancestor_expansion, load_token_table
@@ -343,7 +343,9 @@ def score_motor(
     # has to be a legal probability.
     model = MotorClassifier(released_encoder(oracle), positive_rate=0.05)
     state = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    model.load_state_dict(state["model"])
+    # scored eagerly whatever the run used, so a checkpoint written under
+    # torch.compile has to have its `_orig_mod.` segments removed first
+    model.load_state_dict(strip_compile_prefix(state["model"]))
     model.to(device)
 
     batches = iter_epoch(

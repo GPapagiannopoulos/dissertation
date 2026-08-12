@@ -66,6 +66,47 @@ def load_released_params(oracle: Path) -> dict[str, torch.Tensor]:
     return params
 
 
+COMPILE_PREFIX = "_orig_mod."
+"""What `torch.compile` inserts into every parameter name beneath it.
+
+`torch.compile` returns an `OptimizedModule` wrapping the original, so a compiled
+submodule's parameters come back as `encoder._orig_mod.blocks.0.norm.weight`
+rather than `encoder.blocks.0.norm.weight`. A checkpoint saved that way loads
+into nothing but an identically compiled model -- which cost a seven-hour run's
+checkpoints before this existed. The weights are untouched; only the names move.
+"""
+
+
+def strip_compile_prefix(state: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Renames a state dict so it loads whether or not the model was compiled.
+
+    Applied at both ends: `run_training` writes normalised checkpoints, and
+    `score_motor` normalises what it reads, so checkpoints written before this
+    existed still load.
+
+    Args:
+        state (dict[str, torch.Tensor]): A state dict, compiled or not.
+
+    Returns:
+        dict[str, torch.Tensor]: The same tensors, with every `_orig_mod.`
+            segment removed from the keys. Unprefixed input passes through
+            unchanged.
+
+    Raises:
+        ValueError: If stripping collides two names onto one, which would mean the
+            dict holds both a compiled and an uncompiled copy of a parameter and
+            silently keeping one is not a choice this should make.
+    """
+    stripped = {key.replace(COMPILE_PREFIX, ""): value for key, value in state.items()}
+    if len(stripped) != len(state):
+        raise ValueError(
+            f"Removing {COMPILE_PREFIX!r} collapsed {len(state)} keys onto "
+            f"{len(stripped)}; the state dict holds the same parameter both "
+            f"compiled and uncompiled."
+        )
+    return stripped
+
+
 def released_encoder(oracle: Path) -> MotorEncoder:
     """Builds the released encoder at its own widths and loads the weights in.
 
