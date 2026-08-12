@@ -239,6 +239,7 @@ def test_returns_the_encoder_arguments_by_name(
         "valid_tokens",
         "segment_ids",
         "label_indices",
+        "label_clocks",
     }
     assert set(LABEL_METADATA) <= set(batch)
     assert batch["segment_ids"].shape == (1, 4)
