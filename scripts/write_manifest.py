@@ -6,11 +6,16 @@ Run from the repo root with the modelling environment's interpreter:
         --run motor_output/runs/aki-seed1 \
         --params '{"total_steps": 15000, "compiled": true}'
 
-Everything derivable is derived: wall clock, active clock with suspends
-subtracted, seconds per step, peak VRAM, the evaluation trajectory, the
-checkpoint inventory, the environment and the git state. The learning-rate
-schedule is reconstructed from the logged `lr` column, since the warmup is
-linear and the decay a cosine over the step budget.
+Everything derivable is derived: wall clock, active clock with stalls subtracted,
+seconds per step, peak VRAM, the evaluation trajectory, the checkpoint inventory,
+the environment and the git state. The learning-rate schedule is reconstructed
+from the logged `lr` column, since the warmup is linear and the decay a cosine
+over the step budget.
+
+A machine suspend is NOT among what it recovers: `elapsed_s` reads
+`CLOCK_MONOTONIC`, which stops with the machine, so a lid-close leaves no trace.
+The throughput figures are real compute either way; the wall clock simply is not
+calendar time for a run that slept.
 
 What no artifact records is `accumulate`, `token_budget`, `epochs` and whether
 the encoder was compiled. Those come in through `--params`, and anything not

@@ -170,7 +170,9 @@ def collate(
         "segment_ids": torch.zeros(batch_size, seq_len, dtype=torch.long),
         "label_indices": torch.from_numpy(placed["flat"].to_numpy().astype(np.int64)),
         "label_clocks": torch.from_numpy(
-            clocks.to_numpy().astype(np.float32).reshape(placed.height, -1)
+            clocks.to_numpy()
+            .astype(np.float32)
+            .reshape(placed.height, len(CLOCK_FEATURES))
         ),
         "labels": torch.from_numpy(
             placed["boolean_value"].to_numpy().astype(np.float32)
