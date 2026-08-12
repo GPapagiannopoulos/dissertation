@@ -39,19 +39,27 @@ fi
 
 for seed in "$@"; do
     dest="${ROOT}/motor_output/runs/aki-seed${seed}"
+
+    # The two halves are skipped independently. A sweep that dies between them --
+    # as one did, on a checkpoint-loading fault after 7h22m of training -- must be
+    # able to resume into the scoring rather than either redoing the training or
+    # skipping the seed entirely.
     if [ -e "${dest}" ]; then
-        echo "=== seed ${seed}: ${dest} exists, skipping" >&2
-        continue
+        echo "=== seed ${seed}: ${dest} exists, not retraining"
+    else
+        echo "=== seed ${seed}: training ${STEPS} steps -> ${dest}"
+        "${PYTHON}" "${ROOT}/scripts/train_motor_aki.py" \
+            --dest "${dest}" --seed "${seed}" \
+            --total-steps "${STEPS}" --max-hours "${MAX_HOURS}"
     fi
 
-    echo "=== seed ${seed}: training ${STEPS} steps -> ${dest}"
-    "${PYTHON}" "${ROOT}/scripts/train_motor_aki.py" \
-        --dest "${dest}" --seed "${seed}" \
-        --total-steps "${STEPS}" --max-hours "${MAX_HOURS}"
-
-    echo "=== seed ${seed}: scoring checkpoints on the validation fold"
-    "${PYTHON}" "${ROOT}/scripts/score_checkpoints.py" \
-        --run "${dest}" --stride "${STRIDE}"
+    if [ -f "${dest}/selection/checkpoint_ranking.json" ]; then
+        echo "=== seed ${seed}: already scored, skipping"
+    else
+        echo "=== seed ${seed}: scoring checkpoints on the validation fold"
+        "${PYTHON}" "${ROOT}/scripts/score_checkpoints.py" \
+            --run "${dest}" --stride "${STRIDE}"
+    fi
 
     echo "=== seed ${seed}: done"
 done

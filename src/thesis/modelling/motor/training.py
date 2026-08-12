@@ -32,6 +32,7 @@ import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from thesis.modelling.motor.batching import LABEL_METADATA
+from thesis.modelling.motor.checkpoint import strip_compile_prefix
 from thesis.modelling.motor.data import batch_to
 
 
@@ -647,7 +648,14 @@ def run_training(
             # whole fold to make it with. 517 MB each against a 913 GB disk.
             if checkpoint_every and (step // eval_every) % checkpoint_every == 0:
                 torch.save(
-                    {"model": model.state_dict(), "step": step, "metrics": metrics},
+                    {
+                        # normalised so the file loads into an uncompiled model;
+                        # a compiled run otherwise writes `_orig_mod.` into every
+                        # parameter name and the checkpoints load nowhere else
+                        "model": strip_compile_prefix(model.state_dict()),
+                        "step": step,
+                        "metrics": metrics,
+                    },
                     dest / f"step_{step:06d}.pt",
                 )
 
@@ -665,7 +673,10 @@ def run_training(
                     )
                 break
 
-    torch.save({"model": model.state_dict(), "step": step}, dest / "last.pt")
+    torch.save(
+        {"model": strip_compile_prefix(model.state_dict()), "step": step},
+        dest / "last.pt",
+    )
     _log(
         log_path,
         {"event": "finished", "step": step, "reason": stop_reason, "best": best},
