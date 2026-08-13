@@ -1,11 +1,12 @@
 """Testing suite for building a LoRA configuration from the registered defaults."""
 
+import json
 from typing import Any
 
 import pytest
 from peft import LoraConfig
 
-from thesis.modelling.motor.lora import LORA_DEFAULTS, lora_config
+from thesis.modelling.motor.lora import LORA_DEFAULTS, config_record, lora_config
 
 
 def test_the_registered_defaults_reach_the_configuration() -> None:
@@ -50,3 +51,22 @@ def test_the_defaults_are_not_mutated_by_an_override() -> None:
 
     assert LORA_DEFAULTS == before
     assert lora_config().r == 8
+
+
+def test_a_config_record_rebuilds_the_configuration() -> None:
+    """A checkpoint carries this; alpha cannot be read back off the saved tensors."""
+    original = lora_config(r=16, lora_alpha=64, target_modules=("q_proj", "o_proj"))
+
+    rebuilt = lora_config(**config_record(original))
+
+    assert rebuilt.r == original.r
+    assert rebuilt.lora_alpha == original.lora_alpha
+    assert rebuilt.lora_dropout == original.lora_dropout
+    assert set(rebuilt.target_modules) == set(original.target_modules)
+
+
+def test_a_config_record_survives_json() -> None:
+    """It rides in the manifest as well as the checkpoint, and a set would not."""
+    record = config_record(lora_config())
+
+    assert json.loads(json.dumps(record)) == record
