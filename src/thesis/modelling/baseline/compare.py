@@ -32,6 +32,7 @@ from thesis.modelling.baseline.model import predict_fold
 from thesis.modelling.motor.checkpoint import released_encoder, strip_compile_prefix
 from thesis.modelling.motor.data import fold_subjects, iter_epoch
 from thesis.modelling.motor.head import MotorClassifier
+from thesis.modelling.motor.lora import load_adapter, lora_classifier, lora_config
 from thesis.modelling.motor.tokenizer import build_ancestor_expansion, load_token_table
 from thesis.modelling.motor.training import binary_metrics, predict_stream
 
@@ -308,6 +309,7 @@ def score_motor(
     device: torch.device | None = None,
     resamples: int = 200,
     seed: int = 0,
+    lora: dict | None = None,
 ) -> tuple[dict[str, float], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """Scores a saved MOTOR classifier over a whole fold.
 
@@ -328,6 +330,8 @@ def score_motor(
         resamples (int): Bootstrap draws for the AUPRC interval.
         seed (int): Seeds the bootstrap. The batch order is seeded separately and
             fixed, since a different batching would score the same labels anyway.
+        lora (dict | None): A `lora.config_record` for an adapter checkpoint, which
+            holds only the adapters and the head. None scores a full fine-tune.
 
     Returns:
         tuple: The metrics (`binary_metrics`, the mean loss and `auprc_lo`/
@@ -339,13 +343,21 @@ def score_motor(
     expansion = build_ancestor_expansion(table).collect().lazy()
     subjects = fold_subjects(split, fold).collect().lazy()
 
-    # The bias is overwritten by the state dict, so the prevalence passed here only
-    # has to be a legal probability.
-    model = MotorClassifier(released_encoder(oracle), positive_rate=0.05)
     state = torch.load(checkpoint, map_location="cpu", weights_only=False)
     # scored eagerly whatever the run used, so a checkpoint written under
     # torch.compile has to have its `_orig_mod.` segments removed first
-    model.load_state_dict(strip_compile_prefix(state["model"]))
+    weights = strip_compile_prefix(state["model"])
+
+    # The bias is overwritten by the state dict, so the prevalence passed here only
+    # has to be a legal probability.
+    if lora is None:
+        model = MotorClassifier(released_encoder(oracle), positive_rate=0.05)
+        model.load_state_dict(weights)
+    else:
+        # the backbone comes from the oracle, not the file; only the adapters and
+        # the head were saved
+        model = lora_classifier(oracle, 0.05, lora_config(**lora))
+        load_adapter(model, weights)
     model.to(device)
 
     batches = iter_epoch(

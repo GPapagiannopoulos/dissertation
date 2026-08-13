@@ -22,7 +22,7 @@ Three choices worth stating, because none is the obvious default:
 
 import json
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -401,6 +401,8 @@ def run_training(
     min_delta: float = 0.0,
     max_hours: float | None = None,
     amp_dtype: torch.dtype = torch.bfloat16,
+    save_state: Callable[[torch.nn.Module], dict[str, torch.Tensor]] | None = None,
+    checkpoint_extra: dict | None = None,
     verbose: bool = True,
 ) -> dict[str, float]:
     """Fine-tunes the model, checkpointing on a fixed cadence.
@@ -456,6 +458,12 @@ def run_training(
             improvement.
         max_hours (float | None): Wall-clock budget, or None for no limit.
         amp_dtype (torch.dtype): The autocast dtype.
+        save_state (Callable | None): What a checkpoint's `model` entry holds,
+            defaulting to the whole state dict. The LoRA arm passes
+            `lora.adapter_state`, which writes 1.13 MB rather than 517.
+        checkpoint_extra (dict | None): Merged into every checkpoint, so a file
+            describes what has to be rebuilt to load it. The LoRA arm passes its
+            `config_record`, without which a scorer would have to guess `alpha`.
         verbose (bool): Whether to mirror the log to stdout. On by default, because
             a silent eight-hour run gives no way to tell a slow one from a hung one.
 
@@ -490,6 +498,10 @@ def run_training(
         )
     dest.mkdir(parents=True)
     log_path = dest / "log.jsonl"
+    # normalised so a compiled run's files load into an uncompiled model; without it
+    # every parameter name carries `_orig_mod.` and the checkpoints load nowhere else
+    save = save_state or (lambda module: strip_compile_prefix(module.state_dict()))
+    extra = checkpoint_extra or {}
 
     head_names = {f"head.{name}" for name, _ in model.head.named_parameters()}
     optimizer = torch.optim.AdamW(
@@ -648,14 +660,7 @@ def run_training(
             # whole fold to make it with. 517 MB each against a 913 GB disk.
             if checkpoint_every and (step // eval_every) % checkpoint_every == 0:
                 torch.save(
-                    {
-                        # normalised so the file loads into an uncompiled model;
-                        # a compiled run otherwise writes `_orig_mod.` into every
-                        # parameter name and the checkpoints load nowhere else
-                        "model": strip_compile_prefix(model.state_dict()),
-                        "step": step,
-                        "metrics": metrics,
-                    },
+                    {**extra, "model": save(model), "step": step, "metrics": metrics},
                     dest / f"step_{step:06d}.pt",
                 )
 
@@ -673,10 +678,7 @@ def run_training(
                     )
                 break
 
-    torch.save(
-        {"model": strip_compile_prefix(model.state_dict()), "step": step},
-        dest / "last.pt",
-    )
+    torch.save({**extra, "model": save(model), "step": step}, dest / "last.pt")
     _log(
         log_path,
         {"event": "finished", "step": step, "reason": stop_reason, "best": best},

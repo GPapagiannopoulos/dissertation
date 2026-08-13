@@ -46,6 +46,27 @@ def lora_config(**overrides: Any) -> LoraConfig:
     return LoraConfig(**settings)
 
 
+def config_record(config: LoraConfig) -> dict[str, Any]:
+    """The fields `lora_config` needs to rebuild this configuration, JSON-safe.
+
+    `alpha` is the reason this exists: it scales the adapter by alpha/r and is not
+    recoverable from the saved tensors, so a checkpoint that does not carry it can
+    only be rebuilt by guessing.
+
+    Args:
+        config (LoraConfig): The configuration a run trained under.
+
+    Returns:
+        dict[str, Any]: Keyword arguments for `lora_config`.
+    """
+    return {
+        "r": config.r,
+        "lora_alpha": config.lora_alpha,
+        "lora_dropout": config.lora_dropout,
+        "target_modules": sorted(config.target_modules),
+    }
+
+
 def apply_lora(model: MotorClassifier, config: LoraConfig) -> MotorClassifier:
     """Freezes the backbone in place and injects adapters into it.
 
