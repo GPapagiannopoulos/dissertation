@@ -22,6 +22,7 @@ import torch
 
 from thesis.modelling.motor.data import (
     DEFAULT_TOKEN_BUDGET,
+    bag_subjects,
     fold_subjects,
     iter_epoch,
 )
@@ -90,6 +91,15 @@ def _parse_args() -> argparse.Namespace:
         default=list(LORA_DEFAULTS["target_modules"]),
         help="module names to adapt, matched by suffix across all twelve blocks",
     )
+    parser.add_argument(
+        "--bag-fraction",
+        type=float,
+        default=None,
+        help="train on this share of the training subjects, drawn by --seed. "
+        "0.632 is a bootstrap's expected distinct share. Omitted, the member sees "
+        "every subject and differs from its siblings only by initialisation and "
+        "batch order",
+    )
     parser.add_argument("--no-compile", action="store_true")
     return parser.parse_args()
 
@@ -136,6 +146,16 @@ def main() -> None:
     expansion = build_ancestor_expansion(table).collect().lazy()
 
     train_subjects = fold_subjects(SPLIT, "training").collect().lazy()
+    if args.bag_fraction is not None:
+        # the bag is seeded off the member's own seed, so members differ in DATA as
+        # well as in initialisation and batch order
+        train_subjects = bag_subjects(train_subjects, args.bag_fraction, args.seed)
+        print(
+            f"bagged      {train_subjects.select(pl.len()).collect().item():,} "
+            f"subjects at fraction {args.bag_fraction}"
+        )
+    # never bagged: every member is scored on the same fold, or the numbers are not
+    # comparable to each other or to anything else in the project
     val_subjects = fold_subjects(SPLIT, "validation").collect().lazy()
 
     prevalence = positive_rate(SEQUENCES / "labels", SPLIT, "training")

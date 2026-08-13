@@ -309,6 +309,40 @@ def fold_subjects(split: Path, fold: str) -> pl.LazyFrame:
     return subjects
 
 
+def bag_subjects(subjects: pl.LazyFrame, fraction: float, seed: int) -> pl.LazyFrame:
+    """One ensemble member's share of the training subjects.
+
+    Subsampling **without** replacement, not a bootstrap: a subject drawn twice would
+    duplicate their sequence rows through `iter_epoch`'s join, and two rows sharing a
+    `sequence_id` and `position` collide in `collate`'s scatter. At the default
+    fraction this draws the same expected share as a bootstrap's distinct subjects,
+    which Buhlmann & Yu showed performs comparably.
+
+    Args:
+        subjects (pl.LazyFrame): One `subject_id` column, as `fold_subjects` returns.
+        fraction (float): The share to keep, in (0, 1].
+        seed (int): Seeds the draw; a different seed is a different member.
+
+    Returns:
+        pl.LazyFrame: The kept subjects, one column.
+
+    Raises:
+        ValueError: If the fraction is outside (0, 1], or if it would keep nobody.
+    """
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError(f"A bag holds a fraction in (0, 1], got {fraction}.")
+
+    available = subjects.collect()
+    drawn = available.sample(
+        fraction=fraction, with_replacement=False, shuffle=True, seed=seed
+    ).sort("subject_id")
+    if drawn.height == 0:
+        raise ValueError(
+            f"A fraction of {fraction} draws no subject from {available.height}."
+        )
+    return drawn.lazy()
+
+
 def batch_to(
     batch: dict[str, torch.Tensor | int], device: torch.device
 ) -> dict[str, torch.Tensor | int]:

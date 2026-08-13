@@ -22,6 +22,11 @@ MAX_HOURS="${MAX_HOURS:-8}"
 # three candidates either side of the optimum, as the full fine-tune's sweep used;
 # neighbouring saves differ by less than loss and AUPRC disagree with each other
 STRIDE="${STRIDE:-3}"
+# BAG is the share of training subjects each member draws, seeded by its own seed.
+# Empty means every member sees every subject and they differ only in initialisation
+# and batch order. PREFIX keeps a bagged sweep's runs in their own namespace.
+BAG="${BAG:-}"
+PREFIX="${PREFIX:-lora-seed}"
 
 if [ $# -eq 0 ]; then
     echo "usage: $0 <seed> [seed ...]" >&2
@@ -29,7 +34,9 @@ if [ $# -eq 0 ]; then
 fi
 
 for seed in "$@"; do
-    dest="${ROOT}/motor_output/runs/lora-seed${seed}"
+    dest="${ROOT}/motor_output/runs/${PREFIX}${seed}"
+    bag_args=()
+    [ -n "${BAG}" ] && bag_args=(--bag-fraction "${BAG}")
 
     if [ -e "${dest}" ]; then
         echo "=== lora seed ${seed}: ${dest} exists, not retraining"
@@ -37,7 +44,8 @@ for seed in "$@"; do
         echo "=== lora seed ${seed}: training ${STEPS} steps -> ${dest}"
         "${PYTHON}" "${ROOT}/scripts/train_motor_aki_lora.py" \
             --dest "${dest}" --seed "${seed}" \
-            --total-steps "${STEPS}" --max-hours "${MAX_HOURS}"
+            --total-steps "${STEPS}" --max-hours "${MAX_HOURS}" \
+            "${bag_args[@]}"
     fi
 
     if [ -f "${dest}/selection/checkpoint_ranking.json" ]; then
