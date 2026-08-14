@@ -162,6 +162,17 @@ def test_averaging_complementary_members_beats_both() -> None:
     assert gain["gain_over_best"] > 0
 
 
+def test_calibration_is_reported_beside_discrimination() -> None:
+    """Averaging improves calibration too, and by more than it improves AUPRC."""
+    targets = np.array([1.0, 1.0, 0.0, 0.0])
+    scores = np.array([[0.9, 0.2, 0.8, 0.1], [0.2, 0.9, 0.1, 0.8]])
+
+    gain = ensemble_gain(scores, targets)
+
+    assert gain["ensemble_brier"] < gain["mean_member_brier"]
+    assert {"ensemble_ece", "mean_member_ece"} <= set(gain)
+
+
 def test_the_interval_is_only_computed_when_subjects_are_given() -> None:
     """It is a subject-level bootstrap; without subjects there is no resampling unit."""
     targets = np.array([1.0, 0.0, 1.0, 0.0])

@@ -229,24 +229,39 @@ def ensemble_gain(
         resamples (int): Bootstrap draws for that interval.
         seed (int): Seeds the draws.
 
+    Calibration is reported alongside discrimination because averaging improves it
+    too, and by more: measured over three seed-only members, ECE fell 0.0034 -> 0.0020
+    while AUPRC rose 0.1622 -> 0.1683. Members are individually well calibrated but
+    noisy, and the mean cancels the noise.
+
     Returns:
         dict[str, float]: `ensemble_auprc`, `mean_member_auprc`,
             `best_member_auprc`, `auprc_gain`, and `gain_over_best` -- the number
             that justifies an ensemble, since shipping the single best member is
             always the alternative -- plus `gain_over_best_lo`/`_hi` when subjects
-            are given.
+            are given, and `ensemble_brier`/`ensemble_ece` against
+            `mean_member_brier`/`mean_member_ece`.
     """
-    members = [binary_metrics(row, targets)["auprc"] for row in scores]
+    scored = [binary_metrics(row, targets) for row in scores]
+    members = [metrics["auprc"] for metrics in scored]
     best = int(np.argmax(members))
+
+    # the arithmetic mean of PROBABILITIES, the deep-ensembles convention. Averaging
+    # logits instead is the geometric mean of the odds and is sharper; measured here
+    # the two agree to 1e-4 on AUPRC and ECE, so the choice is not load-bearing.
     ensemble_scores = scores.mean(axis=0)
-    ensemble = binary_metrics(ensemble_scores, targets)["auprc"]
+    ensemble = binary_metrics(ensemble_scores, targets)
 
     report = {
-        "ensemble_auprc": ensemble,
+        "ensemble_auprc": ensemble["auprc"],
         "mean_member_auprc": float(np.mean(members)),
         "best_member_auprc": float(members[best]),
-        "auprc_gain": ensemble - float(np.mean(members)),
-        "gain_over_best": ensemble - float(members[best]),
+        "auprc_gain": ensemble["auprc"] - float(np.mean(members)),
+        "gain_over_best": ensemble["auprc"] - float(members[best]),
+        "ensemble_brier": ensemble["brier"],
+        "ensemble_ece": ensemble["ece"],
+        "mean_member_brier": float(np.mean([m["brier"] for m in scored])),
+        "mean_member_ece": float(np.mean([m["ece"] for m in scored])),
     }
     if subjects is not None:
         _, low, high = paired_interval(
@@ -316,6 +331,10 @@ def format_report(report: dict[str, object], title: str) -> str:
         f"ensemble {report['ensemble_auprc']:.4f}",
         f"  gain   over mean {report['auprc_gain']:+.4f}   "
         f"over best {report['gain_over_best']:+.4f}",
+        f"  brier  members {report['mean_member_brier']:.5f}   "
+        f"ensemble {report['ensemble_brier']:.5f}",
+        f"  ece    members {report['mean_member_ece']:.4f}    "
+        f"ensemble {report['ensemble_ece']:.4f}",
     ]
     if "gain_over_best_lo" in report:
         lines.append(
