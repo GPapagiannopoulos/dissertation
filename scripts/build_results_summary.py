@@ -36,22 +36,70 @@ RANKING_FILES: list[tuple[str, Path]] = [
     ("MOTOR v3 full fine-tune, seed 0", COMPARISON / "v3_candidates.json"),
 ]
 
-# (label, run folder) -- each contributes its highest-AUPRC scored checkpoint
+# (label, run folder) -- each contributes its highest-AUPRC scored checkpoint.
+# A folder that has not been scored yet contributes nothing, so a config queued but
+# not reached is simply absent rather than an error.
 SINGLE_RUNS: list[tuple[str, str]] = [
     ("MOTOR v3 full fine-tune, seed 1", "aki-seed1"),
     ("MOTOR v3 full fine-tune, seed 2", "aki-seed2"),
-    ("LoRA r=8 q/v, 30k schedule", "lora-seed0-30k"),
-    ("LoRA r=8 q/v, seed 0", "lora-seed0"),
-    ("LoRA r=8 q/v, seed 1", "lora-seed1"),
-    ("LoRA r=8 q/v, seed 2", "lora-seed2"),
+    ("LoRA r=8 q/v, 15k schedule, seed 0", "lora-seed0"),
+    ("LoRA r=8 q/v, 15k schedule, seed 1", "lora-seed1"),
+    ("LoRA r=8 q/v, 15k schedule, seed 2", "lora-seed2"),
+    ("LoRA r=8 q/v, 30k schedule, seed 0", "lora-seed0-30k"),
+    ("LoRA r=8 q/v, 30k schedule, seed 1", "lora-sched-seed1"),
+    ("LoRA r=8 q/v, 30k schedule, seed 2", "lora-sched-seed2"),
     ("LoRA bagged 0.632, seed 10", "lora-bag10"),
     ("LoRA bagged 0.632, seed 11", "lora-bag11"),
     ("LoRA bagged 0.632, seed 12", "lora-bag12"),
+    # the target/rank sweep -- all seed 0, 30k schedule, so they differ only in
+    # which projections carry an adapter and at what rank
+    ("LoRA r=8 q/k/v/ff", "lora-cfg-all4-r8"),
+    ("LoRA r=16 q/k/v/ff", "lora-cfg-all4-r16"),
+    ("LoRA r=32 q/k/v/ff", "lora-cfg-all4-r32"),
+    ("LoRA r=8 ff only", "lora-cfg-ff-r8"),
+    ("LoRA r=8 o only", "lora-cfg-o-r8"),
+    ("LoRA r=8 q/k/v", "lora-cfg-qkv-r8"),
+    ("LoRA r=8 q/k/v/ff/o", "lora-cfg-all5-r8"),
+    # the alpha row: same four projections, alpha held at 32 instead of 4r
+    ("LoRA r=16 a=32 q/k/v/ff", "lora-cfg-all4-r16-a32"),
+    ("LoRA r=32 a=32 q/k/v/ff", "lora-cfg-all4-r32-a32"),
+    ("LoRA r=16 q/v", "lora-cfg-qv-r16"),
+    ("LoRA r=32 q/v", "lora-cfg-qv-r32"),
+    ("LoRA r=4 q/v", "lora-cfg-qv-r4"),
 ]
 
 ENSEMBLES: list[tuple[str, Path]] = [
-    ("LoRA ensemble of 3, seed-only", COMPARISON / "diversity_seed_only.json"),
+    ("LoRA ensemble of 3, seed-only, 15k", COMPARISON / "diversity_seed_only.json"),
     ("LoRA ensemble of 3, bagged 0.632", COMPARISON / "diversity_bagged.json"),
+    ("LoRA ensemble of 3, seed-only, 30k", COMPARISON / "diversity_sched30k_n3.json"),
+    (
+        "LoRA ensemble of 3, seed-only, 30k, best per member",
+        COMPARISON / "diversity_sched30k_n3_bestper.json",
+    ),
+    ("LoRA ensemble of 2, q/v + all4", COMPARISON / "diversity_qv_all4_n2.json"),
+    (
+        "LoRA ensemble of 4, 3 q/v seeds + all4",
+        COMPARISON / "diversity_qv3_all4_n4.json",
+    ),
+    ("LoRA ensemble of 2, all4 + ff", COMPARISON / "diversity_all4_ff_n2.json"),
+    (
+        "LoRA ensemble of 3, q/v + all4 + ff",
+        COMPARISON / "diversity_qv_all4_ff_n3.json",
+    ),
+    (
+        "LoRA ensemble, every swept config + q/v, step-matched",
+        COMPARISON / "diversity_all_configs.json",
+    ),
+    (
+        "LoRA ensemble, every swept config + q/v, best per member",
+        COMPARISON / "diversity_all_configs_bestper.json",
+    ),
+    # the defensible rule: each member's checkpoint chosen by validation LOSS, the
+    # reported metric is AUPRC, so selection and reporting are different quantities
+    (
+        "LoRA ensemble, every swept config + q/v, selected by loss",
+        COMPARISON / "diversity_all_configs_byloss.json",
+    ),
 ]
 
 

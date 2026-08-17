@@ -63,12 +63,11 @@ def build_subject_strata(
     subject_ids is the left side of the join and every subject in it survives,
     including those holding no admissions at all. Those can never be labelled, so
     they are absent from the evaluation cohort, but they are still assigned a
-    stratum so that pretraining has an unambiguous train set. Joining the other
-    way round would delete them silently.
+    stratum so that pretraining has an unambiguous train set.
 
     An admission absent from admissions counts towards neither total even if the
     labels name it. admissions is the normalised event data, so absence means the
-    concept map left that admission with no events and it cannot be modelled.
+    concept map left that admission with no events, and it cannot be modelled.
 
     Args:
         subject_ids: every subject in the database, as read from stage 3
