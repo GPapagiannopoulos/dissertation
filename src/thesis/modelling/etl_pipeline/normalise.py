@@ -135,6 +135,8 @@ def build_code_metadata(lookup: pl.LazyFrame, concept: pl.LazyFrame) -> pl.LazyF
         .join(descriptions, on="code", how="left")
         .with_columns(
             description=pl.col("description").fill_null(pl.col("code")),
+            # parents_code empty because the Athena derived ontological hierarchy
+            # would be misleading when we are using MOTOR's shipped hierarchy
             parent_codes=pl.lit([], dtype=pl.List(pl.String)),
         )
         .sort("code")

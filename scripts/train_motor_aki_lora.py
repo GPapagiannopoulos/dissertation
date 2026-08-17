@@ -54,6 +54,14 @@ def _parse_args() -> argparse.Namespace:
     """Reads the run's configuration off the command line."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dest", type=Path, required=True)
+    parser.add_argument(
+        "--sequences",
+        type=Path,
+        default=SEQUENCES,
+        help="stage 5.2 output. A different prediction horizon is a different label "
+        "set and so a different directory; the sequences themselves do not change",
+    )
+    parser.add_argument("--split", type=Path, default=SPLIT)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--total-steps", type=int, default=15000)
     parser.add_argument("--max-hours", type=float, default=None)
@@ -113,12 +121,17 @@ def _seed_everything(seed: int) -> None:
 
 
 def _training_stream(
-    expansion: pl.LazyFrame, subjects: pl.LazyFrame, seed: int, epochs: int, budget: int
+    sequences: Path,
+    expansion: pl.LazyFrame,
+    subjects: pl.LazyFrame,
+    seed: int,
+    epochs: int,
+    budget: int,
 ) -> Iterator[dict[str, torch.Tensor | int]]:
     """Chains epochs into one stream, each shuffled differently."""
     return itertools.chain.from_iterable(
         iter_epoch(
-            SEQUENCES,
+            sequences,
             expansion,
             subjects=subjects,
             token_budget=budget,
@@ -136,8 +149,8 @@ def main() -> None:
     _seed_everything(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"sequences   {SEQUENCES}")
-    print(f"split       {SPLIT}")
+    print(f"sequences   {args.sequences}")
+    print(f"split       {args.split}")
     print(f"checkpoint  {ORACLE}")
     print(f"destination {args.dest}")
     print(f"device      {device} seed {args.seed}")
@@ -145,7 +158,7 @@ def main() -> None:
     table = load_token_table(DICTIONARY, vocab_size=VOCAB_SIZE)
     expansion = build_ancestor_expansion(table).collect().lazy()
 
-    train_subjects = fold_subjects(SPLIT, "training").collect().lazy()
+    train_subjects = fold_subjects(args.split, "training").collect().lazy()
     if args.bag_fraction is not None:
         # the bag is seeded off the member's own seed, so members differ in DATA as
         # well as in initialisation and batch order
@@ -156,9 +169,9 @@ def main() -> None:
         )
     # never bagged: every member is scored on the same fold, or the numbers are not
     # comparable to each other or to anything else in the project
-    val_subjects = fold_subjects(SPLIT, "validation").collect().lazy()
+    val_subjects = fold_subjects(args.split, "validation").collect().lazy()
 
-    prevalence = positive_rate(SEQUENCES / "labels", SPLIT, "training")
+    prevalence = positive_rate(args.sequences / "labels", args.split, "training")
     print(f"training prevalence {prevalence:.4%}")
 
     config = lora_config(
@@ -188,11 +201,16 @@ def main() -> None:
     best = run_training(
         model,
         _training_stream(
-            expansion, train_subjects, args.seed, args.epochs, args.token_budget
+            args.sequences,
+            expansion,
+            train_subjects,
+            args.seed,
+            args.epochs,
+            args.token_budget,
         ),
         validation_stream(
             lambda: iter_epoch(
-                SEQUENCES,
+                args.sequences,
                 expansion,
                 subjects=val_subjects,
                 token_budget=args.token_budget,
