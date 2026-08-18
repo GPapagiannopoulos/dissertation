@@ -1,14 +1,13 @@
 """Stage 2.5: maps the codes our MEDS data emits onto codes MOTOR understands.
 
-Every layer produces one code shape <vocabulary_id>/<concept_code> (e.g.
-LOINC/2160-0). What differs is whether OMOP considers a concept standard, and
-whether MOTOR kept it. MEDS standardises the container, not the vocabulary, so
-meds_etl emits concepts such as ICD10CM/I50.84 untouched. These are not standard;
-MOTOR's dictionary holds standard concepts only. Closing that gap is this module's job.
+MEDS standardises the container, not the vocabulary, so meds_etl emits concepts such
+as ICD10CM/I50.84 untouched. These are not always standard; MOTOR's dictionary holds
+standard concepts only. This module ensures that codes are standard OMOP concepts and
+that they are included in MOTOR's vocabulary as tokens.
 
 The work runs in two phases:
 
-1. Resolve -- our code to a standard OMOP concept. One helper per kind of gap:
+1. Resolve -- MIMIC-IV code to a standard OMOP concept. One helper per kind of gap:
    resolve_direct (already a token), resolve_sssom (MIMIC itemids, which have
    no OMOP vocabulary at all), resolve_maps_to (valid but non-standard, e.g.
    ICD10CM/NDC) and the manual table (MIMIC inventions such as MIMIC_IV_Gender/M).
@@ -25,7 +24,7 @@ Every resolver shares one output schema so the driver can chain them::
     target (String)  the OMOP concept it resolved to
     method (String)  which layer resolved it, one of the METHOD_* constants
 
-A code the layer cannot resolve emits no row rather than a null target; the
+A code the layer cannot resolve emits no row rather than a null target. The
 driver's anti-joins depend on absence to pass work down the chain.
 """
 
@@ -48,12 +47,12 @@ METHOD_MANUAL: Literal["manual"] = "manual"
 def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
     """Determines the number of events per code in the dataset.
 
-    The inventory is the denominator for every coverage claim we make, so null codes
-    are counted rather than dropped: their events are real, they simply cannot map.
+    The inventory is the denominator for every coverage claim we make. Null codes
+    are also counted because despite not mapping to a standard concept they are
+    valid events.
 
     Args:
-        events: MEDS events, of which only ``code`` (String) is read. Stage 1's
-            shards carry 21 columns; the rest are ignored
+        events: MEDS events, of which only `code` (String) is read.
 
     Returns:
         pl.LazyFrame: sorted by code, nulls last::
@@ -71,15 +70,10 @@ def code_inventory(events: pl.LazyFrame) -> pl.LazyFrame:
 def scan_athena(path: Path) -> pl.LazyFrame:
     """Opens one of Athena's vocabulary exports.
 
-    The exports are tab separated rather than comma separated, and concept names
-    carry unbalanced quotes, so quoting must be disabled outright: left on, a stray
-    quote swallows every row until the next one and silently shortens the file. femr
-    passes quote_char for CONCEPT but not for CONCEPT_RELATIONSHIP, which is a bug to
-    avoid inheriting rather than a convention to copy.
+    The exports are tab separated with occasional unbalanced quotes. Hence
+    quoting is disabled.
 
-    Every column is read as String. Athena's own header types are advisory, the ids
-    are only ever joined on, and inference over a 766 MB file costs more than the
-    casts the resolvers do for themselves.
+    Every column is read as String since ids are only used for joins.
 
     Args:
         path: Path to an Athena export, e.g. athena/CONCEPT.csv
@@ -109,11 +103,11 @@ class MotorVocab:
 def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
     """Extracts the vocabulary of MOTOR.
 
-    The released dictionary holds a candidate list far longer than the model's
-    vocabulary; only its first vocab_size entries are real tokens, their position
-    in the list being the embedding row they index. Entries past the cut, and
-    entries of the unused type, never reach the model. This represents unused
-    model capacity built into MOTOR.
+    The dictionary holds an extensive list of concepts. The vocabulary holds an
+    embedding only the first vocab_size entries. Their position in the
+    dictionary is the index to their corresponding entry in the embedding table.
+    Entries past the cut, and entries of the unused type, never reach the model. This
+    represents unused model capacity built into MOTOR.
 
     Args:
         dictionary_path: Path to the msgpack dictionary shipped with the weights
@@ -173,12 +167,10 @@ def load_motor_vocab(dictionary_path: Path, *, vocab_size: int) -> MotorVocab:
 def resolve_direct(codes: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     """Resolves codes MOTOR already holds, which map to themselves.
 
-    The first and cheapest layer: no external data, and nothing downstream can improve
-    on a code that is already a token. Membership is tested against the union of the
-    token sets.
+    Membership is tested against the union of the token sets.
 
     Args:
-        codes: any frame with a code (String) column; other columns are ignored
+        codes: any frame with a code (String) column
         vocab: the extracted MOTOR vocabulary
 
     Returns:
@@ -203,12 +195,9 @@ def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFr
     """Resolves MIMIC itemids through the crosswalks meds_etl ships.
 
     MIMIC itemids (MIMIC_IV_LABITEM/50912, MIMIC_IV_ITEM/220045) belong to no
-    OMOP vocabulary, so no Athena lookup can reach them. meds_etl bundles MIT-LCP
+    OMOP vocabulary, so no Athena lookup can reach them. meds_etl bundles MIT-LCP's
     SSSOM crosswalks for exactly these and records the result in parent_codes.
     Those crosswalks are curated, so this layer runs before the general Athena bridge.
-
-    Note the metadata covers only the two itemid families. Diagnoses and drugs are
-    absent from it entirely, which is why resolve_maps_to exists.
 
     Args:
         codes: any frame with a code (String) column; other columns are ignored
@@ -227,8 +216,8 @@ def resolve_sssom(codes: pl.LazyFrame, code_metadata: pl.LazyFrame) -> pl.LazyFr
 
         One row per parent: the column is a list, so a code may emit several rows
         Codes whose parent_codes is null and codes the metadata does not mention
-        emit no row. Codes the metadata knows but the events never carried are not
-        invented.
+        emit no row. Codes the metadata knows but the events never carried also emit
+        no row.
     """
     metadata = (
         code_metadata.select(pl.col("code"), pl.col("parent_codes"))
@@ -248,22 +237,18 @@ def resolve_maps_to(
 ) -> pl.LazyFrame:
     """Resolves valid but non-standard codes through OMOP's 'Maps to' bridge.
 
-    ICD10CM, ICD9CM and NDC are legitimate OMOP vocabularies, so meds_etl emits
+    ICD10CM, ICD9CM and NDC are OMOP vocabularies, so meds_etl emits
     them untouched, but they are source concepts: OMOP expects analysis to happen on
     the standard concept each maps to (SNOMED for conditions, RxNorm for drugs).
-    CONCEPT_RELATIONSHIP carries that bridge as a directed edge,
-    ``concept_id_1 --[Maps to]--> concept_id_2``.
+    Athena's CONCEPT_RELATIONSHIP.csv carries that bridge as a directed edge,
+    concept_id_1 --[Maps to]--> concept_id_2.
 
-    Already-standard codes map to themselves, and those self-edges are kept
-    deliberately: ICD10PCS/0T773DZ is standard yet absent from MOTOR's kept
-    vocabulary, so it needs a target purely to give the climb a starting point.
-    Filtering self-edges out, as femr's own ontology loader does, would silently strip
-    the procedure codes.
+    Already-standard codes map to themselves. Standard codes that do not appear
+    in MOTOR's vocabulary serve as the starting point for the climb.
 
-    Athena keys everything on integer concept_id, so concept is consulted
+    Athena keys everything on integer concept_id, so CONCEPT.csv is consulted
     twice: once to turn our code string into a source id, once to turn the target id
-    back into a string. That costs two scans of a 766 MB file, which is the deliberate
-    trade against holding ~9.9M rows in memory.
+    back into a string.
 
     Args:
         codes: any frame with a code (String) column; other columns are ignored
@@ -312,17 +297,17 @@ def resolve_maps_to(
 def resolve_manual(codes: pl.LazyFrame, mapping: Mapping[str, str]) -> pl.LazyFrame:
     """Resolves the curated mapping for MIMIC codes no crosswalk can reach.
 
-    MIMIC invents a handful of families outright: ``MIMIC_IV_Gender/M`` is a column
+    MIMIC invents a handful of families outright: `MIMIC_IV_Gender/M` is a column
     value, not a code in any vocabulary, so neither the SSSOM crosswalks nor Athena
-    can say anything about it. The mapping in ``codes`` is the hand-written bridge for
+    can say anything about it. The mapping in `codes` is the hand-written bridge for
     those, and because we wrote it, it is the least authoritative layer and runs last.
 
     The mapping is a parameter rather than an import so the layer stays independent of
     the table it happens to be driven by, in keeping with the other resolvers.
 
     Args:
-        codes: any frame with a ``code`` (String) column; other columns are ignored
-        mapping: MEDS code to OMOP concept, e.g. ``MANUAL_CONCEPT_MAP``
+        codes: any frame with a `code` (String) column; other columns are ignored
+        mapping: MEDS code to OMOP concept, e.g. `MANUAL_CONCEPT_MAP`
 
     Returns:
         pl.LazyFrame: the shared resolver schema, method = "manual"::
@@ -394,7 +379,7 @@ def _best_ancestor(
     Candidates are ranked by hops first, then weight, then the code itself.
 
     Args:
-        code (str): the code to climb from, which need not be a target
+        code (str): the code to climb from
         vocab (MotorVocab): the extracted MOTOR vocabulary, read for its tokens, weights
             and ancestor closure
         parents (dict[str, tuple]): cache of immediate parents per code
@@ -411,7 +396,7 @@ def _best_ancestor(
         best[code] = (code, 0, vocab.weights[code])
         return best[code]
 
-    best[code] = None
+    best[code] = None  # cycle guard
     if code not in vocab.all_parents:
         return None
     if code not in parents:
@@ -441,7 +426,7 @@ def climb_to_vocab(targets: pl.LazyFrame, vocab: MotorVocab) -> pl.LazyFrame:
     we are called to find the nearest ontology parent so that the event may
     be parsed by the model.
 
-    The weight of each code is stored as the negative Shanon entropy. This means
+    The weight of each code is stored as the negative Shannon entropy. This means
     that the most negative weight represents the most informative. Ties are settled
     on hops first, then weight, then the code itself, so the map a run produces does
     not depend on the order a set happened to iterate in.
@@ -511,12 +496,10 @@ def build_concept_map(
 
     Assembles the module: the resolvers run in a chain, each seeing only what the
     layer above it could not place, and the concepts they produce are then climbed to
-    the tokens MOTOR holds. The result is the artefact that rewrites code in the
-    normalised shards, with the original kept as source_code.
+    the tokens MOTOR holds.
 
     Null codes are dropped entering the chain but kept in the inventory. Their events
-    are real and belong in any denominator; they simply carry nothing to map, and
-    counting them as a mapping failure would overstate the gap.
+    are real and belong in any denominator.
 
     Args:
         inventory: code_inventory's output, i.e. code (String) and count (UInt32)
@@ -537,6 +520,8 @@ def build_concept_map(
             hops       (UInt32)  layers climbed, 0 when the target is a token
             weights    (Float64) the token's weight, i.e. its negative entropy
     """
+    # Collect forces Polars to materialize the frame rather than continuously extending
+    # a plan.
     remaining = inventory.drop_nulls("code").select(pl.col("code")).collect().lazy()
 
     direct = resolve_direct(remaining, vocab).collect().lazy()
@@ -559,8 +544,10 @@ def build_concept_map(
         .agg(
             pl.all()
             .sort_by(pl.col("hops"), pl.col("weights"), pl.col("vocab_code"))
-            .first()
+            .first()  # keeps the nearest token match
         )
+        # every code originated from inventory. Could have been an inner join
+        # but this signals that it is a lookup for "count"
         .join(inventory, on="code", how="left")
         .select(
             pl.col("code"),

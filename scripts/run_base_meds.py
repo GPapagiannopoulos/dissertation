@@ -55,6 +55,7 @@ def main() -> None:
     """Resolves the venv-local executable and launches the conversion."""
     args = _parse_args()
     # Take the console script from the venv running this file, not from PATH.
+    # This is string surgery and hence does NOT confirm that the path exists
     executable = Path(sys.executable).with_name("meds_etl_mimic")
 
     print(f"src        {SRC}")

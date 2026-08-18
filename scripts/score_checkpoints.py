@@ -83,6 +83,36 @@ def candidates(run: Path, stride: int) -> list[Path]:
     return chosen
 
 
+def lora_record(run: Path, saved: dict) -> dict | None:
+    """The adapter configuration to rebuild, or None for a full fine-tune.
+
+    Preferred from the checkpoint, which carries its own since stage 8. Runs written
+    before that fall back to the manifest, which records the driver's arguments.
+
+    Args:
+        run (Path): The run folder, for the manifest fallback.
+        saved (dict): A loaded checkpoint.
+
+    Returns:
+        dict | None: Keyword arguments for `lora_config`.
+    """
+    if "lora" in saved:
+        return saved["lora"]
+
+    manifest = run / "manifest.json"
+    if not manifest.is_file():
+        return None
+    parameters = json.loads(manifest.read_text()).get("parameters", {})
+    if parameters.get("arm") != "lora":
+        return None
+    return {
+        "r": parameters["lora_r"],
+        "lora_alpha": parameters["lora_alpha"],
+        "lora_dropout": parameters["lora_dropout"],
+        "target_modules": parameters["lora_targets"],
+    }
+
+
 def main() -> None:
     """Scores every candidate and writes the ranking."""
     args = _parse_args()
@@ -96,10 +126,11 @@ def main() -> None:
 
     rows = []
     for checkpoint in chosen:
-        step = int(
-            torch.load(checkpoint, map_location="cpu", weights_only=False)["step"]
-        )
-        print(f"== {checkpoint.name} (step {step})", flush=True)
+        saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        step = int(saved["step"])
+        lora = lora_record(args.run, saved)
+        arm = f"lora r={lora['r']} alpha={lora['lora_alpha']}" if lora else "full"
+        print(f"== {checkpoint.name} (step {step}, {arm})", flush=True)
 
         metrics, bundle = score_motor(
             checkpoint,
@@ -109,6 +140,7 @@ def main() -> None:
             args.dictionary,
             fold=args.fold,
             resamples=200,
+            lora=lora,
         )
         np.savez(dest / f"{checkpoint.stem}_predictions.npz", *bundle)
 
