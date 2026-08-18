@@ -59,18 +59,10 @@ def flag_in_hospital_death(windows: pl.LazyFrame, events: pl.LazyFrame) -> pl.La
 
     Discharge truncates the horizon rather than censoring the landmark, which
     reads an admission ending without AKI as an observed negative. That reading
-    fails when the admission ended in death: 8,500 admissions and 99,035
-    landmarks are negative only because the patient died first, a competing risk
-    rather than a benign outcome. The flag does not change any label; it exists
-    so those landmarks can be excluded in a sensitivity analysis.
+    fails when the admission ended in death. This is a competing risk
+    rather than a benign outcome.
 
-    MEDS_DEATH carries the date of death only: all 38,301 events sit at
-    00:00:00, because stage 1 sources them from patients.dod rather than the
-    admissions deathtime. The comparison is therefore between dates. Measured
-    against hospital_expire_flag over the 394,712 inpatient admissions, the date
-    rule finds all 11,559 flagged deaths with 346 extra; a timestamp comparison
-    misses 573 of them, since a death at midnight predates the same day's
-    discharge.
+    MEDS_DEATH carries the date instead of datetime of death.
 
     Args:
         windows: admission windows holding admittime and dischtime

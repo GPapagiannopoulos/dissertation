@@ -286,5 +286,8 @@ def write_manifest(run: Path, manifest: dict[str, Any]) -> Path:
         Path: The file written.
     """
     destination = run / "manifest.json"
-    destination.write_text(json.dumps(manifest, indent=2))
+    # default=str, because the manifest is written AFTER training: a driver adding a
+    # Path-typed argument would otherwise lose the provenance record for a run that
+    # had already cost its whole wall clock. A loose repr beats no manifest.
+    destination.write_text(json.dumps(manifest, indent=2, default=str))
     return destination
