@@ -11,7 +11,12 @@ a spuriously tight interval, which is why the shape guard is load-bearing.
 import numpy as np
 import pytest
 
-from thesis.modelling.baseline.compare import paired_interval
+from thesis.modelling.baseline.compare import (
+    _draw_rows,
+    _subject_groups,
+    paired_interval,
+)
+from thesis.modelling.motor.training import binary_metrics
 
 
 def cohort(
@@ -113,6 +118,35 @@ def test_a_wider_alpha_gives_a_narrower_interval() -> None:
     )
 
     assert wide_high - wide_low > tight_high - tight_low
+
+
+def test_the_bounds_are_the_two_sided_quantiles_of_the_draws() -> None:
+    """`alpha` is split across both tails: 0.05 cuts at 2.5% and 97.5%, not 5% and 95%.
+
+    This one deliberately recomputes the draws with the same seed and asserts the
+    exact quantile levels, because the levels are the thing under test and no
+    coarser property distinguishes them -- a one-sided reading orders every interval
+    the same way, it just reports the wrong coverage.
+    """
+    left, right, targets, subjects = cohort()
+    alpha, resamples = 0.2, 40
+
+    _, low, high = paired_interval(
+        left, right, targets, subjects, resamples=resamples, seed=0, alpha=alpha
+    )
+
+    rng = np.random.default_rng(0)
+    groups = _subject_groups(subjects)
+    draws = []
+    for _ in range(resamples):
+        rows = _draw_rows(groups, rng)
+        draws.append(
+            binary_metrics(left[rows], targets[rows])["auprc"]
+            - binary_metrics(right[rows], targets[rows])["auprc"]
+        )
+
+    assert low == pytest.approx(float(np.quantile(draws, alpha / 2)))
+    assert high == pytest.approx(float(np.quantile(draws, 1 - alpha / 2)))
 
 
 def test_the_same_seed_reproduces_the_bounds_exactly() -> None:

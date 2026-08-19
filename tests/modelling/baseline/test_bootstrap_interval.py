@@ -9,7 +9,12 @@ to a number, so its width has to be honest.
 import numpy as np
 import pytest
 
-from thesis.modelling.baseline.compare import bootstrap_interval
+from thesis.modelling.baseline.compare import (
+    _draw_rows,
+    _subject_groups,
+    bootstrap_interval,
+)
+from thesis.modelling.motor.training import binary_metrics
 
 
 def cohort(
@@ -64,6 +69,31 @@ def test_a_wider_alpha_gives_a_narrower_interval() -> None:
     )
 
     assert wide_high - wide_low > tight_high - tight_low
+
+
+def test_the_bounds_are_the_two_sided_quantiles_of_the_draws() -> None:
+    """`alpha` is split across both tails: 0.2 cuts at 10% and 90%, not 20% and 80%.
+
+    Recomputes the draws at the same seed and asserts the exact quantile levels,
+    because no coarser property distinguishes them -- a one-sided reading orders
+    every interval the same way and only reports the wrong coverage.
+    """
+    scores, targets, subjects = cohort()
+    alpha, resamples = 0.2, 40
+
+    low, high = bootstrap_interval(
+        scores, targets, subjects, resamples=resamples, seed=0, alpha=alpha
+    )
+
+    rng = np.random.default_rng(0)
+    groups = _subject_groups(subjects)
+    draws = [
+        binary_metrics(scores[rows], targets[rows])["auprc"]
+        for rows in (_draw_rows(groups, rng) for _ in range(resamples))
+    ]
+
+    assert low == pytest.approx(float(np.quantile(draws, alpha / 2)))
+    assert high == pytest.approx(float(np.quantile(draws, 1 - alpha / 2)))
 
 
 def test_correlated_landmarks_widen_the_interval() -> None:

@@ -88,6 +88,19 @@ def test_ties_are_broken_by_row_order() -> None:
     assert precision_recall_at_k(scores, targets, k=0.25) == (0.0, 0.0)
 
 
+def test_the_count_rounds_up_past_a_half() -> None:
+    """Four rows at k=0.7 is 2.8, which flags three -- truncating would flag two.
+
+    The third flag is the second positive, so rounding down would halve both numbers.
+    """
+    scores, targets = arrays([0.9, 0.8, 0.3, 0.1], [1.0, 0.0, 1.0, 0.0])
+
+    precision, recall = precision_recall_at_k(scores, targets, k=0.7)
+
+    assert precision == pytest.approx(2 / 3)
+    assert recall == 1.0
+
+
 @pytest.mark.parametrize("k", [0.0, -0.1, 1.5])
 def test_a_budget_outside_the_unit_interval_is_refused(k: float) -> None:
     """Zero flags nothing and more than one flags rows that do not exist."""
