@@ -79,6 +79,19 @@ def test_tied_scores_are_split_in_their_original_order() -> None:
     assert expected_calibration_error(scores, targets, bins=2) == pytest.approx(0.5)
 
 
+def test_bins_are_cut_from_the_lowest_score_upward() -> None:
+    """Sorting direction changes the grouping whenever the bins come out uneven.
+
+    Five rows into two bins gives sizes 3 and 2, so ascending puts the three
+    zero-scored rows together and descending puts one of them with the two
+    one-scored rows. Only the ascending reading pairs each score with the rows that
+    actually share it.
+    """
+    scores, targets = arrays([0.0, 0.0, 0.0, 1.0, 1.0], [1.0, 0.0, 0.0, 0.0, 0.0])
+
+    assert expected_calibration_error(scores, targets, bins=2) == pytest.approx(0.6)
+
+
 @pytest.mark.parametrize("bins", [0, -1])
 def test_a_non_positive_bin_count_is_refused(bins: int) -> None:
     """`np.array_split` would raise something unreadable, or divide by zero."""
