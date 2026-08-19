@@ -9,9 +9,9 @@ Averaging every member is not optimal: a member with high error and low ambiguit
 subtracts from the mean. Greedy selection picks members one at a time, with
 replacement, so a strong member can be picked repeatedly and effectively weighted.
 
-Selecting and reporting on the same rows is optimistic, so the honest number here is
-the held-out one: subjects are split in half, selection runs on one half and the
-chosen bag is scored on the other. Both directions are reported, plus the
+Selecting and reporting on the same rows is optimistic, so testing on a held-out set
+is used for validation: subjects are split in half, selection runs on one half and the
+ensemble is scored on the other. Both directions are reported, plus the
 select-on-everything bag as the upper bound it is.
 
 Needs no GPU -- it reads the prediction bundles `score_checkpoints.py` banked.
@@ -23,7 +23,11 @@ from pathlib import Path
 
 import numpy as np
 
-from thesis.modelling.ensemble.diversity import align_members, load_member
+from thesis.modelling.ensemble.diversity import (
+    align_members,
+    load_member,
+    subject_halves,
+)
 from thesis.modelling.motor.training import binary_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,26 +56,6 @@ def best_bundle(run: Path) -> Path:
 def auprc(scores: np.ndarray, targets: np.ndarray) -> float:
     """AUPRC through the project's one metric definition."""
     return float(binary_metrics(scores, targets)["auprc"])
-
-
-def subject_halves(subjects: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
-    """Splits rows into two halves by SUBJECT, never by row.
-
-    A subject contributes ~9 correlated landmarks, so a row-level split would leak
-    the same patient into both halves and make the held-out number optimistic again.
-
-    Args:
-        subjects (np.ndarray): The subject each row belongs to.
-        seed (int): Seeds the permutation.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: Boolean row masks for the two halves.
-    """
-    unique = np.unique(subjects)
-    shuffled = np.random.default_rng(seed).permutation(unique)
-    left = set(shuffled[: len(shuffled) // 2].tolist())
-    mask = np.fromiter((s in left for s in subjects), dtype=bool, count=len(subjects))
-    return mask, ~mask
 
 
 def greedy_select(
