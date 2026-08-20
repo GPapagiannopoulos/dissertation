@@ -23,17 +23,25 @@ import numpy as np
 class SubsetCurves(NamedTuple):
     """Net benefit over every ensemble of one size.
 
+    The spread here is over WHICH MEMBERS were picked, not over which patients were
+    studied. Those are independent uncertainties and a subject-level bootstrap is still
+    needed for the second.
+
     Attributes:
         mean (np.ndarray): The mean curve over all subsets, shaped (n_thresholds,).
         low (np.ndarray): The worst subset's benefit at each threshold.
         high (np.ndarray): The best subset's benefit at each threshold.
         n_subsets (int): How many subsets were enumerated.
+        subsets (tuple[tuple[int, ...], ...]): The member indices behind each curve.
+        curves (np.ndarray): Every subset's curve, shaped (n_subsets, n_thresholds).
     """
 
     mean: np.ndarray
     low: np.ndarray
     high: np.ndarray
     n_subsets: int
+    subsets: tuple[tuple[int, ...], ...]
+    curves: np.ndarray
 
 
 def _validate(scores: np.ndarray, targets: np.ndarray, thresholds: np.ndarray) -> None:
@@ -175,6 +183,8 @@ def subset_curves(
         low=curves.min(axis=0),
         high=curves.max(axis=0),
         n_subsets=len(every),
+        subsets=tuple(every),
+        curves=curves,
     )
 
 
@@ -194,3 +204,53 @@ def alert_rate(scores: np.ndarray, thresholds: Sequence[float]) -> np.ndarray:
     thresholds = np.asarray(thresholds, dtype=float)
     ranked = np.sort(scores)[::-1]
     return np.searchsorted(-ranked, -thresholds, side="right") / scores.size
+
+
+def fraction_beating(curves: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """How often a subset's curve sits strictly above a reference curve.
+
+    Answers the member-choice question directly, with no resampling: of every ensemble
+    you could have assembled from the runs you trained, what share beats the
+    comparator? A bootstrap cannot answer this, because the uncertainty is over which
+    members were picked rather than over which patients were seen.
+
+    Args:
+        curves (np.ndarray): Subset curves, shaped (n_subsets, n_thresholds).
+        reference (np.ndarray): The curve to beat, shaped (n_thresholds,).
+
+    Returns:
+        np.ndarray: The beating fraction per threshold, in [0, 1].
+
+    Raises:
+        ValueError: If the reference does not match the curves' threshold count.
+    """
+    if curves.ndim != 2:
+        raise ValueError(
+            f"Expected curves shaped (n_subsets, n_thresholds), got {curves.shape}."
+        )
+    if reference.shape != curves.shape[1:]:
+        raise ValueError(
+            f"Reference shaped {reference.shape} does not match the curves' "
+            f"{curves.shape[1]} thresholds."
+        )
+    return (curves > reference).mean(axis=0)
+
+
+def worst_subset(result: SubsetCurves, index: int) -> tuple[int, ...]:
+    """The member indices of the subset with the lowest benefit at one threshold.
+
+    Bootstrapping every subset is prohibitive, so the honest shortcut is to give a
+    normal paired interval to the WORST one: if even that clears the comparator, so
+    does every other subset a practitioner might have ended up with.
+
+    Args:
+        result (SubsetCurves): The enumerated subsets.
+        index (int): Which threshold to rank on.
+
+    Returns:
+        tuple[int, ...]: The member indices of the weakest subset.
+
+    Raises:
+        IndexError: If the threshold index is out of range.
+    """
+    return result.subsets[int(np.argmin(result.curves[:, index]))]

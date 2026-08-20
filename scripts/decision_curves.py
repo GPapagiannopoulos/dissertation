@@ -38,9 +38,11 @@ import numpy as np
 from thesis.modelling.baseline.compare import _draw_rows, _subject_groups
 from thesis.modelling.ensemble.decision_curve import (
     alert_rate,
+    fraction_beating,
     net_benefit,
     subset_curves,
     treat_all_net_benefit,
+    worst_subset,
 )
 from thesis.modelling.ensemble.diversity import (
     align_members,
@@ -81,6 +83,9 @@ MONOLITHIC_SEEDS = ["aki-seed1", "aki-seed2"]
 XGBOOST = ROOT / "motor_output" / "stale_analysis" / "xgboost_predictions.npz"
 
 REPORTED_THRESHOLDS = (0.05, 0.10, 0.15)
+
+# the panel B size matching the monolithic arm's three training runs
+BUDGET_MATCHED_SIZE = 3
 
 
 def _parse_args() -> argparse.Namespace:
@@ -141,7 +146,10 @@ def arm_definitions() -> dict[str, list[Path]]:
 def main() -> None:
     """Builds both panels and, unless disabled, the paired difference bands."""
     args = _parse_args()
-    thresholds = np.linspace(args.low, args.high, args.steps)
+    # rounded so the reported thresholds land exactly on the grid; linspace puts
+    # 0.09999999999999998 where 0.10 belongs, and a searchsorted then silently reads
+    # the next grid point while the label still formats as "10%"
+    thresholds = np.round(np.linspace(args.low, args.high, args.steps), 6)
 
     definitions = arm_definitions()
     flat = [path for paths in definitions.values() for path in paths]
@@ -173,6 +181,42 @@ def main() -> None:
         },
     }
 
+    # panel B is computed first: it names the worst three-run ensemble, which then
+    # joins the arms so it can take an ordinary paired interval like everything else
+    run_members = np.stack(
+        [
+            stacked[[flat.index(path) for path in paired_bundles(run)]].mean(axis=0)
+            for run in LORA_RUNS
+        ]
+    )
+    marks = np.argmin(
+        np.abs(thresholds[:, None] - np.array(REPORTED_THRESHOLDS)), axis=0
+    )
+    if not np.allclose(thresholds[marks], REPORTED_THRESHOLDS):
+        raise SystemExit(
+            f"The reported thresholds {REPORTED_THRESHOLDS} are not on the grid; "
+            f"nearest are {thresholds[marks]}. Widen --steps or move the window."
+        )
+    budget = int(marks[1])
+
+    report["subset_curves"] = {}
+    panel_b = {
+        size: subset_curves(run_members, targets, thresholds, size=size)
+        for size in args.sizes
+    }
+
+    trio = panel_b.get(BUDGET_MATCHED_SIZE)
+    if trio is not None:
+        chosen = worst_subset(trio, budget)
+        definitions["lora_worst_trio"] = [
+            path for index in chosen for path in paired_bundles(LORA_RUNS[index])
+        ]
+        arms["lora_worst_trio"] = run_members[list(chosen)].mean(axis=0)
+        report["worst_trio"] = {
+            "runs": [LORA_RUNS[index] for index in chosen],
+            "ranked_at_threshold": float(thresholds[budget]),
+        }
+
     header = "  ".join(f"NB@{t:.0%}" for t in REPORTED_THRESHOLDS)
     print(f"{'arm':22s} {'n':>3} {'auprc':>7} {'ece':>7}  {header}   alert@10%")
     for name, scores in arms.items():
@@ -203,45 +247,58 @@ def main() -> None:
         + "  ".join(f"{value:>7.5f}" for value in reference)
     )
 
-    # panel B: ensemble size, counted in training runs, each contributing two
-    # checkpoints -- so the size sweep varies the training budget, not the rule
-    run_members = np.stack(
-        [
-            stacked[[flat.index(path) for path in paired_bundles(run)]].mean(axis=0)
-            for run in LORA_RUNS
-        ]
+    print(
+        f"\nensemble size, over every subset of the {len(LORA_RUNS)} LoRA runs "
+        f"(the spread is over WHICH RUNS, not which patients)"
     )
-    print(f"\nensemble size, over every subset of the {len(LORA_RUNS)} LoRA runs")
     print(
         f"{'runs':>5} {'subsets':>8}  "
-        + "  ".join(f"NB@{t:.0%}" for t in REPORTED_THRESHOLDS)
+        + "  ".join(f"{'NB@' + format(t, '.0%'):>25}" for t in REPORTED_THRESHOLDS)
     )
-    report["subset_curves"] = {}
-    for size in args.sizes:
-        curves = subset_curves(run_members, targets, thresholds, size=size)
-        at = subset_curves(
-            run_members, targets, np.array(REPORTED_THRESHOLDS), size=size
-        )
+    for size, curves in panel_b.items():
         report["subset_curves"][str(size)] = {
             "n_subsets": curves.n_subsets,
             "mean": curves.mean.tolist(),
             "low": curves.low.tolist(),
             "high": curves.high.tolist(),
             "at_reported": {
-                f"{t}": {"mean": float(m), "low": float(lo), "high": float(hi)}
-                for t, m, lo, hi in zip(
-                    REPORTED_THRESHOLDS, at.mean, at.low, at.high, strict=True
-                )
+                f"{thresholds[i]}": {
+                    "mean": float(curves.mean[i]),
+                    "low": float(curves.low[i]),
+                    "high": float(curves.high[i]),
+                }
+                for i in marks
             },
         }
-        body = "  ".join(f"{value:>7.5f}" for value in at.mean)
+        body = "  ".join(
+            f"{curves.mean[i]:.5f} [{curves.low[i]:.5f},{curves.high[i]:.5f}]"
+            for i in marks
+        )
         print(f"{size:>5} {curves.n_subsets:>8}  {body}")
+
+    # the member-choice question, answered by counting rather than by resampling
+    if trio is not None:
+        reference_curve = net_benefit(arms["monolithic_seeds"], targets, thresholds)
+        beating = fraction_beating(trio.curves, reference_curve)
+        report["trios_beating_monolithic_seeds"] = beating.tolist()
+        print(
+            f"\nof the {trio.n_subsets} possible three-run LoRA ensembles, how many "
+            f"beat the three-run monolithic ensemble:"
+        )
+        for i in marks:
+            print(
+                f"  at {thresholds[i]:.0%}: "
+                f"{int(round(beating[i] * trio.n_subsets)):>3}/{trio.n_subsets} "
+                f"({beating[i]:.1%})"
+            )
+        print(f"  worst trio: {', '.join(report['worst_trio']['runs'])}")
 
     pairs = [tuple(spec.split(":", 1)) for spec in args.pair] or [
         ("lora_last2", "monolithic_seeds"),
         ("lora_last2", "monolithic_single"),
         ("lora_last2", "xgboost"),
         ("lora_last2", "lora_all_last"),
+        ("lora_worst_trio", "monolithic_seeds"),
     ]
     for left, right in pairs:
         for name in (left, right):
@@ -276,7 +333,6 @@ def main() -> None:
                 "hi": high.tolist(),
                 "p_positive": (values > 0).mean(axis=0).tolist(),
             }
-            marks = np.searchsorted(thresholds, REPORTED_THRESHOLDS)
             body = "  ".join(
                 f"{thresholds[i]:.0%}: {observed[i]:+.5f} "
                 f"[{low[i]:+.5f}, {high[i]:+.5f}]"
