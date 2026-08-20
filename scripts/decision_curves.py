@@ -1,0 +1,294 @@
+"""Decision curve analysis over every arm, plus the ensemble-size curve.
+
+Run from the repo root with the modelling interpreter:
+
+    .venv-modelling/bin/python scripts/decision_curves.py \
+        --dest motor_output/comparison/decision_curves.json
+
+Net benefit assesses whether at the threshold a clinician would actually act on,
+is this model worth consulting at all?
+
+This script generates two panels:
+
+A) arm comparison: a single monolithic fine-tune, an ensemble of three
+  monolithic fine-tunes, one monolithic run's own checkpoints, the LoRA ensemble under
+  both checkpoint rules, and XGBoost, against alerting on everyone and on nobody.
+B) ensemble size sweep: each member is one training run contributing its
+  `step_014000` and `last` checkpoints. Every subset of each size is enumerated and
+  averaged to avoid selection bias. A spread of ensemble performance is given as an
+  argument for deployment.
+
+The threshold window is fixed in advance of the intervention, using clinical judgement.
+Acting on predicted AKI means checking creatinine more often, reviewing
+nephrotoxic drugs, holding contrast, and offering more IV fluids. These are low risk
+interventions, and clinicians have a low barrier to offer them. On that basis a band of
+5%-15% was selected.
+
+Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
+"""
+
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+
+# the subject-level draw already exists for the XGBoost comparison; a second copy here
+# is exactly the metric drift the project keeps one of everything to avoid
+from thesis.modelling.baseline.compare import _draw_rows, _subject_groups
+from thesis.modelling.ensemble.decision_curve import (
+    alert_rate,
+    net_benefit,
+    subset_curves,
+    treat_all_net_benefit,
+)
+from thesis.modelling.ensemble.diversity import (
+    align_members,
+    checkpoint_bundles,
+    load_member,
+)
+from thesis.modelling.motor.training import binary_metrics
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = ROOT / "motor_output" / "runs"
+COMPARISON = ROOT / "motor_output" / "comparison"
+
+# the ten LoRA configuration runs; each contributes two checkpoints
+LORA_RUNS = [
+    "lora-sched-seed1",
+    "lora-cfg-all4-r16",
+    "lora-cfg-all4-r16-a32",
+    "lora-cfg-all4-r32",
+    "lora-cfg-all4-r32-a32",
+    "lora-cfg-all4-r8",
+    "lora-cfg-all5-r8",
+    "lora-cfg-ff-r8",
+    "lora-cfg-o-r8",
+    "lora-cfg-qkv-r8",
+]
+PAIRED_STEMS = ("step_014000", "last")
+
+# seed 0's monolithic bundles were banked under comparison/ rather than its run folder,
+# so anything walking runs/*/selection/ silently skips the headline comparator
+V3 = {
+    stem: COMPARISON / f"v3_{stem}_predictions.npz"
+    for stem in ("step_006000", "step_010000", "step_014000", "last")
+}
+MONOLITHIC_SEEDS = ["aki-seed1", "aki-seed2"]
+
+# verified 2026-08-20 to read AUPRC 0.20006 / AUROC 0.82212, matching the reported
+# XGBoost figures; the directory name refers to a stale-feature study, not to these
+XGBOOST = ROOT / "motor_output" / "stale_analysis" / "xgboost_predictions.npz"
+
+REPORTED_THRESHOLDS = (0.05, 0.10, 0.15)
+
+
+def _parse_args() -> argparse.Namespace:
+    """Reads the threshold grid and the resampling budget."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--low", type=float, default=0.01, help="lowest threshold")
+    parser.add_argument("--high", type=float, default=0.30, help="highest threshold")
+    parser.add_argument("--steps", type=int, default=59, help="points on the grid")
+    parser.add_argument(
+        "--sizes",
+        type=int,
+        nargs="+",
+        default=(1, 3, 5, 7, 10),
+        help="ensemble sizes for panel B, counted in training runs",
+    )
+    parser.add_argument(
+        "--pair",
+        action="append",
+        default=[],
+        metavar="LEFT:RIGHT",
+        help="bootstrap the difference between two arms; repeatable",
+    )
+    parser.add_argument(
+        "--resamples", type=int, default=2000, help="subject draws; 0 skips intervals"
+    )
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--dest", type=Path, default=None)
+    return parser.parse_args()
+
+
+def paired_bundles(run: str) -> list[Path]:
+    """One run's `step_014000` and `last` bundles."""
+    available = dict(checkpoint_bundles(RUNS / run))
+    return [available[stem] for stem in PAIRED_STEMS]
+
+
+def arm_definitions() -> dict[str, list[Path]]:
+    """Definitions for the different arms of the study.
+
+    The roster checked is intentionally hardcoded to avoid silent failures.
+    """
+    lora_paired = [path for run in LORA_RUNS for path in paired_bundles(run)]
+    monolithic_paired = [V3[stem] for stem in PAIRED_STEMS]
+    for run in MONOLITHIC_SEEDS:
+        monolithic_paired.extend(paired_bundles(run))
+    return {
+        "monolithic_single": [V3["step_010000"]],
+        "monolithic_snapshot": list(V3.values()),
+        "monolithic_seeds": monolithic_paired,
+        "lora_all_last": [
+            dict(checkpoint_bundles(RUNS / run))["last"] for run in LORA_RUNS
+        ],
+        "lora_last2": lora_paired,
+        "xgboost": [XGBOOST],
+    }
+
+
+def main() -> None:
+    """Builds both panels and, unless disabled, the paired difference bands."""
+    args = _parse_args()
+    thresholds = np.linspace(args.low, args.high, args.steps)
+
+    definitions = arm_definitions()
+    flat = [path for paths in definitions.values() for path in paths]
+    stacked, targets, subjects = align_members([load_member(path) for path in flat])
+    targets = targets.astype(float)
+    groups = _subject_groups(subjects)
+
+    arms, cursor = {}, 0
+    for name, paths in definitions.items():
+        arms[name] = stacked[cursor : cursor + len(paths)].mean(axis=0)
+        cursor += len(paths)
+
+    prevalence = float(targets.mean())
+    print(
+        f"{targets.size:,} landmarks, {len(groups):,} subjects, "
+        f"prevalence {prevalence:.4%}\n"
+    )
+
+    report = {
+        "thresholds": thresholds.tolist(),
+        "n_labels": int(targets.size),
+        "n_subjects": len(groups),
+        "prevalence": prevalence,
+        "reported_thresholds": list(REPORTED_THRESHOLDS),
+        "arms": {},
+        "references": {
+            "treat_all": treat_all_net_benefit(targets, thresholds).tolist(),
+            "treat_none": np.zeros_like(thresholds).tolist(),
+        },
+    }
+
+    header = "  ".join(f"NB@{t:.0%}" for t in REPORTED_THRESHOLDS)
+    print(f"{'arm':22s} {'n':>3} {'auprc':>7} {'ece':>7}  {header}   alert@10%")
+    for name, scores in arms.items():
+        curve = net_benefit(scores, targets, thresholds)
+        at = net_benefit(scores, targets, np.array(REPORTED_THRESHOLDS))
+        rates = alert_rate(scores, REPORTED_THRESHOLDS)
+        metrics = binary_metrics(scores, targets)
+        report["arms"][name] = {
+            "members": [str(path) for path in definitions[name]],
+            "n_members": len(definitions[name]),
+            "net_benefit": curve.tolist(),
+            "alert_rate": alert_rate(scores, thresholds).tolist(),
+            "at_reported": {
+                f"{t}": float(v) for t, v in zip(REPORTED_THRESHOLDS, at, strict=True)
+            },
+            "auprc": float(metrics["auprc"]),
+            "ece": float(metrics["ece"]),
+        }
+        body = "  ".join(f"{value:>7.5f}" for value in at)
+        print(
+            f"{name:22s} {len(definitions[name]):>3} {metrics['auprc']:>7.5f} "
+            f"{metrics['ece']:>7.5f}  {body}   {rates[1]:>8.2%}"
+        )
+
+    reference = treat_all_net_benefit(targets, np.array(REPORTED_THRESHOLDS))
+    print(
+        f"{'treat everyone':22s} {'-':>3} {'-':>7} {'-':>7}  "
+        + "  ".join(f"{value:>7.5f}" for value in reference)
+    )
+
+    # panel B: ensemble size, counted in training runs, each contributing two
+    # checkpoints -- so the size sweep varies the training budget, not the rule
+    run_members = np.stack(
+        [
+            stacked[[flat.index(path) for path in paired_bundles(run)]].mean(axis=0)
+            for run in LORA_RUNS
+        ]
+    )
+    print(f"\nensemble size, over every subset of the {len(LORA_RUNS)} LoRA runs")
+    print(
+        f"{'runs':>5} {'subsets':>8}  "
+        + "  ".join(f"NB@{t:.0%}" for t in REPORTED_THRESHOLDS)
+    )
+    report["subset_curves"] = {}
+    for size in args.sizes:
+        curves = subset_curves(run_members, targets, thresholds, size=size)
+        at = subset_curves(
+            run_members, targets, np.array(REPORTED_THRESHOLDS), size=size
+        )
+        report["subset_curves"][str(size)] = {
+            "n_subsets": curves.n_subsets,
+            "mean": curves.mean.tolist(),
+            "low": curves.low.tolist(),
+            "high": curves.high.tolist(),
+            "at_reported": {
+                f"{t}": {"mean": float(m), "low": float(lo), "high": float(hi)}
+                for t, m, lo, hi in zip(
+                    REPORTED_THRESHOLDS, at.mean, at.low, at.high, strict=True
+                )
+            },
+        }
+        body = "  ".join(f"{value:>7.5f}" for value in at.mean)
+        print(f"{size:>5} {curves.n_subsets:>8}  {body}")
+
+    pairs = [tuple(spec.split(":", 1)) for spec in args.pair] or [
+        ("lora_last2", "monolithic_seeds"),
+        ("lora_last2", "monolithic_single"),
+        ("lora_last2", "xgboost"),
+        ("lora_last2", "lora_all_last"),
+    ]
+    for left, right in pairs:
+        for name in (left, right):
+            if name not in arms:
+                raise SystemExit(f"--pair names unknown arm {name!r}.")
+
+    if args.resamples:
+        rng = np.random.default_rng(args.seed)
+        draws = {pair: [] for pair in pairs}
+        for index in range(args.resamples):
+            rows = _draw_rows(groups, rng)
+            drawn = {
+                name: net_benefit(scores[rows], targets[rows], thresholds)
+                for name, scores in arms.items()
+            }
+            for pair in pairs:
+                draws[pair].append(drawn[pair[0]] - drawn[pair[1]])
+            if (index + 1) % 200 == 0:
+                print(f"  draw {index + 1}/{args.resamples}", flush=True)
+
+        report["differences"] = {}
+        print(f"\npaired 95% bands, {args.resamples} subject resamples")
+        for left, right in pairs:
+            values = np.stack(draws[left, right])
+            observed = net_benefit(arms[left], targets, thresholds) - net_benefit(
+                arms[right], targets, thresholds
+            )
+            low, high = np.quantile(values, [0.025, 0.975], axis=0)
+            report["differences"][f"{left}-{right}"] = {
+                "value": observed.tolist(),
+                "lo": low.tolist(),
+                "hi": high.tolist(),
+                "p_positive": (values > 0).mean(axis=0).tolist(),
+            }
+            marks = np.searchsorted(thresholds, REPORTED_THRESHOLDS)
+            body = "  ".join(
+                f"{thresholds[i]:.0%}: {observed[i]:+.5f} "
+                f"[{low[i]:+.5f}, {high[i]:+.5f}]"
+                for i in marks
+            )
+            print(f"  {left} - {right}\n    {body}")
+
+    if args.dest:
+        args.dest.parent.mkdir(parents=True, exist_ok=True)
+        args.dest.write_text(json.dumps(report, indent=1))
+        print(f"\nwrote {args.dest}")
+
+
+if __name__ == "__main__":
+    main()
