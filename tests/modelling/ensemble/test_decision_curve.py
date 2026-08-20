@@ -5,9 +5,11 @@ import pytest
 
 from thesis.modelling.ensemble.decision_curve import (
     alert_rate,
+    fraction_beating,
     net_benefit,
     subset_curves,
     treat_all_net_benefit,
+    worst_subset,
 )
 
 SCORES = np.array([0.9, 0.8, 0.3, 0.1])
@@ -225,3 +227,76 @@ def test_an_impossible_subset_size_is_refused(size: int) -> None:
 
     with pytest.raises(ValueError, match="Cannot draw ensembles"):
         subset_curves(members, targets, np.array([0.2]), size=size)
+
+
+def test_the_beating_fraction_counts_subsets_above_the_reference() -> None:
+    """Three subsets against one reference, checked by hand at two thresholds."""
+    curves = np.array([[0.10, 0.05], [0.20, 0.01], [0.30, 0.02]])
+    reference = np.array([0.15, 0.03])
+
+    assert fraction_beating(curves, reference) == pytest.approx([2 / 3, 1 / 3])
+
+
+def test_a_tie_does_not_count_as_beating() -> None:
+    """Matching the comparator is not beating it; the comparison is strict."""
+    curves = np.array([[0.2], [0.2]])
+
+    assert fraction_beating(curves, np.array([0.2])) == pytest.approx([0.0])
+
+
+def test_the_beating_fraction_is_bounded_by_the_spread() -> None:
+    """Nothing beats the best subset's own curve, everything beats below the worst."""
+    rng = np.random.default_rng(11)
+    members = rng.random((5, 200))
+    targets = (rng.random(200) < 0.3).astype(float)
+    thresholds = np.linspace(0.05, 0.4, 8)
+
+    got = subset_curves(members, targets, thresholds, size=2)
+
+    assert fraction_beating(got.curves, got.high) == pytest.approx(np.zeros(8))
+    assert fraction_beating(got.curves, got.low - 1.0) == pytest.approx(np.ones(8))
+
+
+def test_the_worst_subset_is_the_one_holding_the_low_curve() -> None:
+    """The arm that gets bootstrapped, so it must be the genuinely weakest one."""
+    rng = np.random.default_rng(12)
+    targets = (rng.random(300) < 0.3).astype(float)
+    strong = np.clip(targets * 0.7 + rng.random(300) * 0.3, 0.0, 1.0)
+    members = np.stack([strong, rng.random(300), rng.random(300)])
+    thresholds = np.linspace(0.05, 0.4, 6)
+
+    got = subset_curves(members, targets, thresholds, size=1)
+    chosen = worst_subset(got, index=2)
+
+    assert got.curves[got.subsets.index(chosen)][2] == pytest.approx(got.low[2])
+    assert chosen != (0,)
+
+
+def test_the_subsets_and_curves_line_up() -> None:
+    """Row i of `curves` must be the ensemble named by `subsets[i]`, not another."""
+    rng = np.random.default_rng(13)
+    members = rng.random((4, 150))
+    targets = (rng.random(150) < 0.25).astype(float)
+    thresholds = np.linspace(0.05, 0.4, 5)
+
+    got = subset_curves(members, targets, thresholds, size=2)
+
+    for subset, curve in zip(got.subsets, got.curves, strict=True):
+        assert curve == pytest.approx(
+            net_benefit(members[list(subset)].mean(axis=0), targets, thresholds)
+        )
+
+
+@pytest.mark.parametrize(
+    ("curves", "reference", "match"),
+    [
+        (np.ones(4), np.ones(4), "n_subsets, n_thresholds"),
+        (np.ones((3, 4)), np.ones(5), "does not match"),
+    ],
+)
+def test_a_malformed_beating_request_is_refused(
+    curves: np.ndarray, reference: np.ndarray, match: str
+) -> None:
+    """A shape mismatch would broadcast into a silently wrong fraction."""
+    with pytest.raises(ValueError, match=match):
+        fraction_beating(curves, reference)

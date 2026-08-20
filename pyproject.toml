@@ -23,6 +23,7 @@ eda = [
 ]
 modelling = [
     "femr>=0.2.4",
+    "matplotlib>=3.9",
     "meds==0.3.3",
     "meds-etl[cpp]==0.3.11",
     "meds-reader>=0.1.16",
