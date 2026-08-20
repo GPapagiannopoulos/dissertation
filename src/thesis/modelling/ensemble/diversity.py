@@ -22,8 +22,8 @@ from scipy.stats import spearmanr
 # the paired subject-level bootstrap already exists for the XGBoost comparison; a
 # second copy here is exactly the metric drift the project keeps one of everything to
 # avoid
-from thesis.modelling.baseline.compare import paired_interval
-from thesis.modelling.motor.training import binary_metrics
+from thesis.modelling.evaluation.intervals import paired_interval
+from thesis.modelling.evaluation.metrics import binary_metrics
 
 
 class Member(NamedTuple):
@@ -86,7 +86,7 @@ def checkpoint_bundles(run: Path) -> list[tuple[str, Path]]:
     if not found:
         raise FileNotFoundError(
             f"{run} has no banked predictions; score it first with "
-            f"scripts/score_checkpoints.py."
+            f"scripts/evaluate/score_checkpoints.py."
         )
     return sorted(found, key=lambda pair: _step_order(pair[0]))
 

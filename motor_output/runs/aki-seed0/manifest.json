@@ -1,0 +1,79 @@
+{
+  "manifest_version": 1,
+  "run": "aki-seed0",
+  "written": "2026-08-12T10:00:39+00:00",
+  "provenance": "reconstructed",
+  "parameters": {
+    "accumulate": 4,
+    "token_budget": 8192,
+    "epochs": 8,
+    "compiled": false,
+    "head_lr": 0.0001,
+    "seed": 0,
+    "encoder_lr": 1e-05,
+    "warmup": 306,
+    "total_steps": 20001,
+    "warmup_resolution": 50,
+    "peak_observed_at_step": 300,
+    "eval_every": 500,
+    "evaluation_labels": 11254.0,
+    "eval_batches": 150,
+    "_supplied_keys": [
+      "accumulate",
+      "compiled",
+      "epochs",
+      "eval_batches",
+      "head_lr",
+      "seed",
+      "token_budget"
+    ]
+  },
+  "git": {
+    "commit": "934b22133d3ef03c82ac5d199e23656b9eb7df3e",
+    "branch": "feat/gp/motor-port",
+    "dirty": true
+  },
+  "environment": {
+    "python": "3.13.14",
+    "platform": "Linux-6.19.10-300.fc44.x86_64-x86_64-with-glibc2.43",
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": 92000,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memory_mib": 7834,
+      "capability": "8.9"
+    },
+    "cpu_count": 16,
+    "host_ram_gb": 14.9
+  },
+  "checkpoints": [
+    {
+      "name": "best.pt",
+      "bytes": 541964032
+    },
+    {
+      "name": "last.pt",
+      "bytes": 541963904
+    }
+  ],
+  "results": {
+    "steps": 20000,
+    "stop_reason": "unknown",
+    "wall_clock_s": 28214.7,
+    "wall_clock": "7:50:14",
+    "active_clock_s": 28214.7,
+    "active_clock": "7:50:14",
+    "seconds_per_step": 1.4107,
+    "peak_gib": 5.42,
+    "final_train_loss": 0.09266040131835414,
+    "evaluations": 40,
+    "evaluation_labels": 11254.0,
+    "best_evaluation": {
+      "step": 9000,
+      "loss": 0.1287970986420506,
+      "auprc": 0.1983660004325599
+    },
+    "suspected_stalls": []
+  }
+}

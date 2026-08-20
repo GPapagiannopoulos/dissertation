@@ -1,0 +1,631 @@
+<title>MOTOR Viva Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+:root {
+  --ground:  #EDEFF2;
+  --surface: #FDFDFE;
+  --sunken:  #E4E8ED;
+  --ink:     #131A24;
+  --muted:   #5C6976;
+  --rule:    #D5DAE1;
+  --accent:  #2F4F7A;
+  --trap:    #9A5B12;
+  --errata:  #93304A;
+  --pass:    #2C6A52;
+
+  --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --cond:  "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+  --mono:  "IBM Plex Mono", "SF Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:  #12161C;
+    --surface: #191F27;
+    --sunken:  #10141A;
+    --ink:     #E4E8ED;
+    --muted:   #94A2B0;
+    --rule:    #2C343E;
+    --accent:  #8FB0E0;
+    --trap:    #D9A45C;
+    --errata:  #E094A6;
+    --pass:    #74C4A1;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:  #12161C;
+  --surface: #191F27;
+  --sunken:  #10141A;
+  --ink:     #E4E8ED;
+  --muted:   #94A2B0;
+  --rule:    #2C343E;
+  --accent:  #8FB0E0;
+  --trap:    #D9A45C;
+  --errata:  #E094A6;
+  --pass:    #74C4A1;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 56px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 32px;
+  align-items: start;
+}
+
+/* ---------- rail ---------- */
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 40px 0 40px;
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.rail-title {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: .01em;
+  line-height: 1.2;
+  margin: 0;
+}
+.rail-sub {
+  font-family: var(--cond);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+
+/* 21 cells, one per session: filled = written */
+.strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cell {
+  height: 15px;
+  background: var(--sunken);
+  border: 1px solid var(--rule);
+}
+.cell.done { background: var(--accent); border-color: var(--accent); }
+
+.rail nav { display: flex; flex-direction: column; gap: 2px; }
+.rail nav a {
+  font-family: var(--cond);
+  font-weight: 500;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 5px 8px 5px 0;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 6px;
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+}
+.rail nav a:hover { color: var(--ink); }
+.rail nav a.here { color: var(--accent); border-left-color: var(--accent); }
+.rail nav a .n {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding-top: 1px;
+}
+.rail nav a.pending { opacity: .48; }
+
+/* ---------- reading column ---------- */
+main { padding: 40px 0 140px; max-width: 70ch; }
+
+.masthead { padding-bottom: 30px; border-bottom: 2px solid var(--ink); margin-bottom: 44px; }
+.masthead h1 {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: clamp(30px, 4.4vw, 42px);
+  line-height: 1.08;
+  letter-spacing: -.005em;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+.masthead p { margin: 0; color: var(--muted); font-size: 16px; }
+
+.session { margin-bottom: 92px; scroll-margin-top: 24px; }
+
+.sess-head { margin-bottom: 30px; }
+.sess-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--accent);
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+.session h2 {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 27px;
+  line-height: 1.16;
+  margin: 0 0 8px;
+  text-wrap: balance;
+}
+.sess-head .stage {
+  margin: 0;
+  font-style: italic;
+  color: var(--muted);
+  font-size: 15.5px;
+}
+
+/* eyebrow section markers */
+h3 {
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 42px 0 14px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--rule);
+}
+h4 {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 14.5px;
+  margin: 30px 0 10px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+p { margin: 0 0 15px; }
+strong { font-weight: 600; }
+ul, ol { margin: 0 0 15px; padding-left: 22px; }
+li { margin-bottom: 7px; }
+li::marker { color: var(--muted); }
+
+code {
+  font-family: var(--mono);
+  font-size: .855em;
+  background: var(--sunken);
+  padding: 1px 4px;
+  border: 1px solid var(--rule);
+  overflow-wrap: anywhere;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--sunken);
+  border: 1px solid var(--rule);
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+}
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+.tablewrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--rule); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-family: var(--cond); font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th {
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--sunken);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: none; }
+td { font-variant-numeric: tabular-nums; }
+td code { font-size: 12.5px; }
+
+/* callouts: flat block, colored top hairline, corner label. no rails, no radii. */
+.note {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--tone, var(--accent));
+  padding: 15px 18px 4px;
+  margin: 0 0 20px;
+}
+.note > .lbl {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--tone, var(--accent));
+  display: block;
+  margin-bottom: 9px;
+}
+.note.trap   { --tone: var(--trap); }
+.note.errata { --tone: var(--errata); }
+.note.ask    { --tone: var(--accent); }
+.note p:last-child { margin-bottom: 15px; }
+
+/* Q&A */
+.qa { border-top: 1px solid var(--rule); padding-top: 18px; margin-bottom: 22px; }
+.qa .q {
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 16px;
+  margin: 0 0 10px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.qa .q .qn { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.chip {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.chip.ok      { color: var(--pass); }
+.chip.partial { color: var(--trap); }
+.chip.wrong   { color: var(--errata); }
+.verdict { font-size: 15.5px; }
+.verdict .redo { color: var(--errata); font-weight: 600; }
+
+.score {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.next {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  padding: 16px 18px;
+  margin-top: 34px;
+}
+.next .lbl {
+  font-family: var(--cond); font-weight: 700; font-size: 11px;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+  display: block; margin-bottom: 7px;
+}
+.next p { margin: 0; }
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; gap: 0; padding: 0 22px; }
+  .rail {
+    position: static; height: auto; border-right: none;
+    border-bottom: 1px solid var(--rule); padding: 26px 0;
+  }
+  .rail nav { max-height: 210px; overflow-y: auto; }
+  main { padding-top: 30px; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<div class="shell">
+
+<aside class="rail">
+  <div>
+    <p class="rail-title">MOTOR Viva Notes</p>
+    <p class="rail-sub" id="progress">1 of 21 written</p>
+  </div>
+  <div class="strip" id="strip"></div>
+  <nav id="toc"></nav>
+</aside>
+
+<main>
+
+<header class="masthead">
+  <h1>Modelling walkthrough</h1>
+  <p>Twenty-one sessions through <code>src/thesis/modelling/</code>, in pipeline order, each source
+  file paired with its tests. Every session records the file map, the per-function notes, the design
+  decisions with their rejected alternatives, the traps, the test story, and the questions with my
+  answers and the corrections. Sessions are numbered because the pipeline is genuinely ordered —
+  stage <em>n</em> reads what stage <em>n−1</em> wrote.</p>
+</header>
+
+<!-- ======================= SESSION 1 ======================= -->
+<section class="session" id="s1" data-title="base_meds &amp; meds_reader_db">
+<div class="sess-head">
+  <span class="sess-num">Session 01 · Stages 1–2</span>
+  <h2><code>etl/base_meds.py</code> + <code>etl/meds_reader_db.py</code></h2>
+  <p class="stage">MIMIC-IV → MEDS, and MEDS → the meds_reader database. 189 lines, 4 functions, 4 test files.</p>
+</div>
+
+<h3>Map</h3>
+
+<p>These are the <strong>only two stages that wrap a third-party console script</strong>. Everything
+from stage 2.5 onward is our own Polars code.</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>File</th><th>Stage</th><th>Wraps</th><th>In → out</th></tr></thead>
+<tbody>
+<tr><td><code>base_meds.py</code></td><td>1</td><td><code>meds_etl_mimic</code></td><td>raw MIMIC-IV CSVs → MEDS long-format parquet shards</td></tr>
+<tr><td><code>meds_reader_db.py</code></td><td>2</td><td><code>meds_reader_convert</code></td><td>those shards → the column store <code>meds_reader</code> queries</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Neither library exposes a Python API. <strong>That single fact determines the entire design of
+both files.</strong></p>
+
+<h3>Walk</h3>
+
+<h4>build_command(src, dest, *, executable, num_shards=100, num_proc=1, backend="cpp") -&gt; list[str]</h4>
+
+<p>Pure. Touches no filesystem. Validates, then returns argv:</p>
+
+<pre><code>[exe, src, dest, "--num_shards", "100", "--num_proc", "1", "--backend", "cpp"]</code></pre>
+
+<ul>
+<li><strong>The <code>*</code></strong> makes everything after it keyword-only. <code>src</code> and
+<code>dest</code> stay positional to mirror the CLI — but swapping them makes the ETL read your
+output as its input, so <code>test_build_command_orders_positionals_source_before_destination</code>
+does nothing but assert <code>args[1] == src</code> and <code>args[2] == dest</code>.</li>
+<li><strong>Everything is <code>str()</code>-ed.</strong> <code>subprocess</code> accepts
+<code>PathLike</code> in argv on POSIX, so a leaked <code>Path</code> works here and breaks silently
+elsewhere. <code>test_build_command_returns_only_strings</code> closes it.</li>
+<li><strong>Validation lives here, not in the runner</strong> — <code>backend not in _BACKENDS</code>,
+<code>num_shards &lt; 1 or num_proc &lt; 1</code>, both <code>ValueError</code>. A typo fails in
+microseconds instead of after launch.</li>
+</ul>
+
+<h4>run_base_meds(src, dest, *, executable=None, ...) -&gt; Path</h4>
+
+<p>Three guards, then exactly one child process.</p>
+
+<ol>
+<li><strong>Version subfolder</strong> — <code>(src / "2.2").is_dir()</code>.
+<code>meds_etl_mimic</code> wants the <em>parent</em> of the version folder. Pointing at
+<code>mimic_data/2.2</code> directly is the classic mistake.</li>
+<li><strong>No overwrite, ever</strong> — <code>dest.exists()</code> → <code>FileExistsError</code>.
+A multi-hour job that half-overwrites looks finished and is unrecoverable.</li>
+<li><strong>Executable resolution</strong> — injected, else <code>shutil.which</code>, else
+<code>FileNotFoundError</code> naming <code>.venv-modelling/bin/meds_etl_mimic</code>.</li>
+</ol>
+
+<p>Then <code>subprocess.run(cmd, check=True)</code>; return <code>dest</code>. No
+<code>capture_output</code>, no <code>stdout=</code>, no <code>stderr=</code>.</p>
+
+<h4>build_db_command / run_meds_reader_convert</h4>
+
+<p>Structurally identical. One flag (<code>--num_threads</code>) instead of three; the guard checks
+<code>src / "data"</code>. The symmetry is deliberate: <strong>learn one and you have learned
+both</strong>, and a reviewer comparing them spots a divergence instantly.</p>
+
+<h3>Decisions</h3>
+
+<div class="note ask">
+<span class="lbl">Why split <code>build_*_command</code> from <code>run_*</code>?</span>
+<p>The pure half is verifiable with no filesystem, no binary, and no process — all five parametrized
+cases run in microseconds and CI needs nothing installed. And argv can be diffed against the real
+<code>meds_reader_convert --help</code> output without launching it, which is how the signature was
+actually verified: positional <code>source_dataset</code>, positional
+<code>destination_database</code>, <code>--num_threads INT [1]</code>.</p>
+</div>
+
+<div class="note ask">
+<span class="lbl">Why is output never captured?</span>
+<p><code>capture_output=True</code> buffers the child's stdout in memory until it exits: nothing
+visible for four hours, and possibly an OOM on the buffer. The log comes from <strong>the shell, not
+Python</strong> — the driver docstring's <code>2>&amp;1 | tee ~/meds_etl_$(date +%F_%H%M).log</code>,
+which writes to terminal <em>and</em> file at once. Capturing cannot do both.</p>
+</div>
+
+<div class="note ask">
+<span class="lbl">Why <code>check=True</code>, and why is the executable injectable?</span>
+<p><code>check=True</code> because these are hand-run one-off jobs and the traceback <em>is</em> the
+error report; a silent non-zero exit leaves a partial dataset that looks complete.</p>
+<p>The executable is injectable because there are two virtualenvs, split on numpy
+(<code>pyhealth</code> needs ≥ 2.2, <code>femr</code> needs &lt; 2). PATH may point at either, so
+the driver passes <code>Path(sys.executable).with_name("meds_etl_mimic")</code> — the console script
+from the same venv as the interpreter that imported the library. <code>shutil.which</code> is only
+the interactive fallback.</p>
+</div>
+
+<div class="note ask">
+<span class="lbl">Why is parallelism a CLI flag, not our own process pool?</span>
+<p>Each <code>run_*</code> launches <strong>exactly one</strong> child, which parallelises
+internally; we never manage workers or their failure modes. Note <code>num_proc</code> is the
+<em>sort stage's</em> process count and <code>num_shards</code> is the <em>output partition</em>
+count — different things. The driver overrides shards to 200 (the library default is the tool's 100)
+because shard count is what stage 2's <code>--num_threads</code> fans out over, and what caps peak
+memory in every downstream stage.</p>
+</div>
+
+<h3>Traps</h3>
+
+<div class="note trap">
+<span class="lbl">Trap · the "2.2" symlink</span>
+<p>We run MIMIC-IV <strong>3.1</strong>. <code>mimic_data/2.2</code> is a symlink to
+<code>mimic-iv-3.1</code> because the tool hardcodes the path and will not look anywhere else —
+<em>not</em> because the versions are equivalent. They are not; 3.1 has more patients.</p>
+<p><em>Marker's question: "isn't parsing 3.1 data with a 2.2 parser dangerous?"</em> — The ETL reads
+<strong>column names</strong>, not a version header, and it was verified after the fact: 364,627
+subjects, exactly MIMIC-IV v3.1's patient count, and all 546,028 raw admissions survive into
+<code>base/</code>. The mislabel lands in <code>base/metadata/dataset.json</code> and is corrected in
+<strong>stage 2.6</strong> (<code>normalise.py</code>), which writes <code>dataset.json</code> fresh
+with <code>dataset_version: "3.1"</code>. Stage 2 carries metadata through unchanged.</p>
+</div>
+
+<div class="note errata">
+<span class="lbl">Erratum · ROOT depth regression, found and fixed 2026-08-20</span>
+<p>Every driver had <code>ROOT = Path(__file__).resolve().parents[1]</code>, correct when they lived
+at <code>scripts/*.py</code>. The tree refactor moved them into
+<code>scripts/{etl,train,evaluate,tools}/</code>, so <code>parents[1]</code> became
+<code>scripts/</code> and <strong>every default path in every driver was wrong</strong>. Fixed to
+<code>parents[2]</code> across 28 Python drivers, and <code>dirname/..</code> →
+<code>dirname/../..</code> across 6 sweep shell scripts.</p>
+<p>Two spellings were in play: <code>parents[1]</code> in 26 files, and <code>.parent.parent</code>
+in <code>train_motor_aki.py</code> and <code>train_motor_aki_lora.py</code> — the two most important
+drivers in the project. <strong>A grep for one spelling undercounts.</strong> Nothing had actually
+broken, because every completed stage ran before the refactor.</p>
+</div>
+
+<h3>Tests</h3>
+
+<div class="note trap">
+<span class="lbl">Trap · <code>spy_run</code> patches globally, by accident of design</span>
+<p>It does <code>monkeypatch.setattr(base_meds.subprocess, "run", _fake_run)</code>. But
+<code>base_meds.subprocess</code> <strong>is</strong> the one global <code>subprocess</code> module
+object, so patching its <code>run</code> attribute patches it process-wide — which is why the same
+fixture silently works for <code>meds_reader_db</code>'s tests without a second fixture. It is
+implicit, and it breaks the day either module switches to <code>from subprocess import run</code>.</p>
+</div>
+
+<p><strong>Every guard test ends <code>assert spy_run == []</code>.</strong> Not "it raised" — "it
+raised <em>before launching</em>". A guard that fires after starting a four-hour job is not a guard.
+The line passes on correct code either way, so it is there deliberately; deleting it lets a
+guard-after-launch bug through undetected.</p>
+
+<p><code>test_run_base_meds_propagates_nonzero_exit</code> does not use <code>spy_run</code> — it
+installs its own raising fake, because <code>spy_run</code> always returns success.</p>
+
+<p>Not covered: <code>src</code> being a file rather than a directory; non-integer
+<code>num_shards</code>. Neither matters.</p>
+
+<h3>Questions</h3>
+<p class="score">Scored 4 / 5</p>
+
+<div class="qa">
+<p class="q"><span class="qn">Q1</span> <span>Name two concrete things the tests can do because
+<code>build_command</code> is pure and <code>run_base_meds</code> is not.</span>
+<span class="chip partial">Partial</span></p>
+<p class="verdict">I answered "test it independently" and "check the ordering" — that is one
+capability and one finding it enables. The two that count: <strong>(a)</strong> argv is verifiable
+with no filesystem, binary, or process; <strong>(b)</strong> it can be diffed against the real CLI's
+<code>--help</code> without launching it. <span class="redo">Re-ask in session 3.</span></p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="qn">Q2</span> <span>Counter the claim that <code>capture_output=True</code>
+would give better logging than dumping to a terminal.</span>
+<span class="chip partial">Partial</span></p>
+<p class="verdict">The "blank terminal for hours" reasoning was right, but I skipped the second half:
+what the codebase does instead. The shell's <code>2>&amp;1 | tee &lt;logfile&gt;</code> — terminal
+and file simultaneously, which capturing cannot do.
+<span class="redo">Re-ask in session 3.</span></p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="qn">Q3</span> <span>Explain <code>_VERSION_SUBDIR = "2.2"</code> against
+MIMIC-IV 3.1 data, and name the artifact and the stage that fixes it.</span>
+<span class="chip ok">Right</span></p>
+<p class="verdict">Right conclusion, shaky premise — I claimed the versions were equivalent. They are
+not; the reason is the hardcoded path. And the fix is stage <strong>2.6</strong>, not "the next
+stage" (stage 2 only carries metadata through).</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="qn">Q4</span> <span>What class of bug survives if
+<code>assert spy_run == []</code> is deleted from every guard test?</span>
+<span class="chip ok">Correct</span></p>
+<p class="verdict">A guard that raises <em>after</em> launching the child process. And yes — the
+tests still pass on correct code, which is why the assertion has to be written deliberately. One
+wording fix: it asserts the mock was never <em>called</em>, not that it "fails".</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="qn">Q5</span> <span>Why does the driver pass
+<code>Path(sys.executable).with_name(...)</code> rather than relying on
+<code>shutil.which</code>?</span>
+<span class="chip ok">Correct</span></p>
+<p class="verdict">Two virtualenvs split on numpy; resolving from the running interpreter guarantees
+the console script matches it, whatever PATH says.</p>
+</div>
+
+<div class="next">
+  <span class="lbl">Next session</span>
+  <p><strong>Session 2 — <code>etl/coverage.py</code> (the four resolvers) + <code>etl/codes.py</code>.</strong>
+  Anchor question: <em>why four resolvers most-authoritative-first with anti-joins, rather than one
+  lookup?</em></p>
+</div>
+
+</section>
+
+</main>
+</div>
+
+<script>
+// The rail is generated from the sections, so appending a session updates the
+// index and the progress strip with no second place to keep in sync.
+(function () {
+  var TOTAL = 21;
+  var planned = [
+    "base_meds & meds_reader_db", "coverage: the resolvers", "coverage: climb_to_vocab",
+    "normalise", "cohort split", "labeller", "layers I: rotary & projections",
+    "layers II: attention & block", "model, checkpoint", "tokenizer", "sequences",
+    "batching: collate", "data, head", "training", "lora", "probe, manifest",
+    "baseline features & matrix", "baseline model", "evaluation", "diversity & uncertainty",
+    "decision curves & mock viva"
+  ];
+  var written = Array.prototype.slice.call(document.querySelectorAll(".session"));
+
+  var strip = document.getElementById("strip");
+  for (var i = 0; i < TOTAL; i++) {
+    var c = document.createElement("div");
+    c.className = "cell" + (i < written.length ? " done" : "");
+    strip.appendChild(c);
+  }
+  document.getElementById("progress").textContent =
+    written.length + " of " + TOTAL + " written";
+
+  var toc = document.getElementById("toc");
+  for (var j = 0; j < TOTAL; j++) {
+    var done = j < written.length;
+    var el = document.createElement(done ? "a" : "span");
+    el.className = "rail-link" + (done ? "" : " pending");
+    if (done) { el.href = "#" + written[j].id; }
+    el.innerHTML = '<span class="n">' + String(j + 1).padStart(2, "0") + "</span><span>" +
+      (done ? written[j].dataset.title : planned[j]) + "</span>";
+    if (!done) { el.style.cssText = "display:grid;grid-template-columns:26px 1fr;gap:6px;" +
+      "font-family:var(--cond);font-size:13.5px;line-height:1.35;color:var(--muted);" +
+      "padding:5px 8px 5px 10px;"; }
+    toc.appendChild(el);
+  }
+
+  var links = toc.querySelectorAll("a");
+  if ("IntersectionObserver" in window && links.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        links.forEach(function (a) {
+          a.classList.toggle("here", a.getAttribute("href") === "#" + e.target.id);
+        });
+      });
+    }, { rootMargin: "-10% 0px -70% 0px" });
+    written.forEach(function (s) { obs.observe(s); });
+  }
+})();
+</script>

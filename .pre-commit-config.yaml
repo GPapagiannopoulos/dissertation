@@ -11,3 +11,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+      # 23 GB of checkpoints reached the index once; the largest file worth
+      # versioning here is a 13 MB adapter.
+      - id: check-added-large-files
+        args: [--maxkb=25600]
