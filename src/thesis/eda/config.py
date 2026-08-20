@@ -1,0 +1,104 @@
+"""Application configuration: typed settings and EHR manifest loading."""
+
+import functools
+from importlib import resources
+from pathlib import Path
+from typing import Any, NamedTuple
+
+import yaml
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class EAVFieldInformation(NamedTuple):
+    """Mandatory filter and uom fields corresponding to an EAV field."""
+
+    filters: list[str]
+    uom: str | None
+
+
+class Settings(BaseSettings):
+    """Lazily loaded application configuration settings.
+
+    Attributes:
+        mimic4_ehr_data_path: Filesystem path to the MIMIC-IV EHR root
+            read from 'MIMIC4_EHR_DATA_PATH'. Validated at startup.
+
+    """
+
+    model_config = {
+        "env_file": Path(__file__).resolve().parents[3] / ".env",
+        "extra": "ignore",
+    }
+
+    mimic4_ehr_data_path: Path = Field(..., frozen=True)
+    mimic4_ehr_d_icd_procedures: Path = Field(..., frozen=True)
+    mimic4_ehr_d_icd_diagnoses: Path = Field(..., frozen=True)
+    mimic4_ehr_d_hcpcs: Path = Field(..., frozen=True)
+    mimic4_ehr_d_labitems: Path = Field(..., frozen=True)
+    mimic4_ehr_chartevents: Path = Field(..., frozen=True)
+    mimic4_ehr_outputevents: Path = Field(..., frozen=True)
+    mimic4_ehr_weight_parquet: Path = Field(..., frozen=True)
+    mimic4_ehr_urine_output_parquet: Path = Field(..., frozen=True)
+    mimic4_ehr_dev_mode: bool = Field(default=True, frozen=True)
+
+    @functools.cached_property
+    def mimic4_ehr_manifest(self) -> Any:
+        """Extract MIMIC-IV EHR manifest from YAML file.
+
+        Returns:
+            An indexable object containing MIMIC-IV EHR manifest mimic_data. Empty if
+            file is empty
+
+        Raises:
+            ModuleNotFoundError: If the package isn't importable under the exact name
+            FileNotFoundError: If the file doesn't exist under the constructed path
+            yaml.YAMLError: If the manifest is not valid YAML
+
+        """
+        text = resources.files("thesis.eda").joinpath("mimic4_ehr.yaml").read_text()
+
+        return yaml.safe_load(text)
+
+    @functools.cached_property
+    def mimic4_ehr_tables(self) -> list[str]:
+        """Table names declared in the EHR manifest.
+
+        Raises:
+            KeyError: MIMIC-IV EHR tables not declared in the manifest.
+
+        """
+        return list(self.mimic4_ehr_manifest["tables"].keys())
+
+    @functools.cached_property
+    def mimic4_ehr_dtype_mapping(self) -> dict[str, str]:
+        """Returns a mapping of column to mimic_data types."""
+        mapping_by_table = [
+            self.mimic4_ehr_manifest["tables"][t].get("dtype_mapping", {})
+            for t in self.mimic4_ehr_tables
+        ]
+        return {
+            field: dtype
+            for mapping in mapping_by_table
+            for field, dtype in mapping.items()
+        }
+
+    @functools.cached_property
+    def mimic4_ehr_eav_fields(self) -> dict[str, EAVFieldInformation]:
+        """Returns the necessary filters and uom for eav fields."""
+        eav_fields_by_table = [
+            self.mimic4_ehr_manifest["tables"][t].get("eav_fields", {})
+            for t in self.mimic4_ehr_tables
+        ]
+
+        output: dict[str, EAVFieldInformation] = {}
+        for eav_field in eav_fields_by_table:
+            for field, reqs in eav_field.items():
+                output[field] = EAVFieldInformation(
+                    reqs.get("filters"), reqs.get("uom")
+                )
+
+        return output
+
+
+settings = Settings()

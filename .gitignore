@@ -1,5 +1,4 @@
-.venv/
-.venv-modelling/
+.venv*/
 .idea/
 __pycache__/
 *.pyc
@@ -9,7 +8,17 @@ meds_output/
 CLAUDE.md
 athena/
 motor_model/
-motor_output/
-scripts/build_flashcards.py
+scripts/tools/build_flashcards.py
 motor_pipeline_flashcards.apkg
 REPORT_*
+
+# Model artifacts. Most of motor_output/ is enormous and regenerable, so only the
+# irreplaceable parts are versioned: the LoRA adapters, the banked prediction
+# bundles every downstream analysis re-reads, the run logs and manifests, the
+# comparison tables and the figures. Ignored below are the full fine-tune
+# checkpoints (517 MB each), the probe's cached features, and the oracle dumps
+# (~3 min to rebuild with scripts/tools/dump_motor_oracle.py).
+motor_output/oracle_*.npz
+motor_output/probe/
+motor_output/runs/aki-seed*/*.pt
+motor_output/runs/smoke-metrics/*.pt

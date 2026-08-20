@@ -13,24 +13,31 @@ dashboard is a deliberately thin lens over it.
 
 ```
 src/thesis/
-  config.py            # Pydantic Settings + EAVFieldInformation; loads mimic4_ehr.yaml
-  constants.py         # DTYPE_TO_POLARS_DTYPE_MAP: dtype string -> pl.DataType
-  mimic4_ehr.yaml      # Manifest: per-table attributes, dtype_mapping, eav_fields
-  data/
-    eda_source.py      # EDASource port (Protocol) + NumericSummary, MixedUnitsError, EmptyHistError
-    sources.py         # PolarsEDASource adapter + module-level transform helpers
-  eda/
+  eda/                 # the `eda` extra: loading, transforms, phenotyping, the dashboard
+    config.py          # Pydantic Settings + EAVFieldInformation; loads mimic4_ehr.yaml
+    constants.py       # DTYPE_TO_POLARS_DTYPE_MAP: dtype string -> pl.DataType
+    mimic4_ehr.yaml    # Manifest: per-table attributes, dtype_mapping, eav_fields
     dashboard.py       # Streamlit app: load -> transform -> PolarsEDASource -> tabs
     filters.py         # valid_fields() and field-exclusion helpers for the dashboard
+    data/
+      eda_source.py    # EDASource port (Protocol) + NumericSummary, MixedUnitsError, EmptyHistError
+      sources.py       # PolarsEDASource adapter + module-level transform helpers
+    feature_engineering/ # KDIGO phenotyping over the cached event substrate
+  modelling/           # the `modelling` extra: MEDS ETL, the MOTOR port, training, evaluation
 tests/
-  data/                # Builder + parametrize suites for the transforms and the adapter
+  eda/                 # Builder + parametrize suites for the transforms and the adapter
+  modelling/           # mirrors src/thesis/modelling package for package
 ```
+
+The two top-level packages match the two optional-dependency extras exactly: nothing under
+`thesis.modelling` imports from `thesis.eda`, or the other way round. They cannot share an
+environment (pyhealth pins numpy>=2.2, femr pins numpy<2), so each has its own venv.
 
 ### The pipeline, end to end
 
 1. `MIMIC4Dataset` (PyHealth) reads the CSVs and exposes `global_event_df` as a Polars
    `LazyFrame` in an Entity-Attribute-Value shape (`{table}/{attribute}` columns).
-2. Module-level helpers in `data/sources.py` transform the frame **before** `.collect()`
+2. Module-level helpers in `eda/data/sources.py` transform the frame **before** `.collect()`
    (each is pure — frame in, frame out — and unit-tested):
    - `cleanse_float_values` — strip commas/ranges so string columns are safe to cast to float.
    - `cast_frame` — apply the dtype casts declared in `mimic4_ehr.yaml`.
@@ -104,6 +111,6 @@ uv run ruff check
 ```
 
 Tests follow a **builder + parametrize** style: small-DataFrame builder fixtures (in
-`tests/data/conftest.py`) overriding only the fields a case cares about, literal expected
+`tests/eda/data/conftest.py`) overriding only the fields a case cares about, literal expected
 frames, and `polars.testing.assert_frame_equal`. Ruff enforces the Google docstring
 convention.

@@ -1,0 +1,81 @@
+{
+  "members": [
+    "lora-cfg-all4-r8/step_014000",
+    "lora-cfg-all4-r16/step_014000",
+    "lora-cfg-all4-r16-a32/step_014000",
+    "lora-cfg-all4-r32/step_014000",
+    "lora-cfg-all4-r32-a32/step_014000",
+    "lora-cfg-all5-r8/step_014000",
+    "lora-cfg-ff-r8/last",
+    "lora-cfg-o-r8/step_014000",
+    "lora-cfg-qkv-r8/step_014000",
+    "lora-sched-seed1/step_014000"
+  ],
+  "monolithic_checkpoint": "step_010000.pt",
+  "resamples": 2000,
+  "n_subjects": 22789,
+  "point": {
+    "ensemble": {
+      "auprc": 0.18658542783521398,
+      "auroc": 0.8076702054329645,
+      "brier": 0.031506430357694626,
+      "ece": 0.0020492944908773046,
+      "precision_at_1pct": 0.38021534320323014,
+      "recall_at_1pct": 0.1070278461829892,
+      "precision_at_5pct": 0.2097707594993495,
+      "base_rate": 0.035523783415555954,
+      "n": 445814.0,
+      "n_positive": 15837.0
+    },
+    "monolithic": {
+      "auprc": 0.17747994031402864,
+      "auroc": 0.7975994184043187,
+      "brier": 0.03170246258378029,
+      "ece": 0.003679156375700853,
+      "precision_at_1pct": 0.3694481830417227,
+      "recall_at_1pct": 0.10399696912293994,
+      "precision_at_5pct": 0.2025929747431699,
+      "base_rate": 0.035523783415555954,
+      "n": 445814.0,
+      "n_positive": 15837.0
+    }
+  },
+  "deltas_ensemble_minus_monolithic": {
+    "auprc": {
+      "value": 0.00910548752118534,
+      "lo": 0.005961892573443573,
+      "hi": 0.012030487589212132,
+      "p_ensemble_wins": 1.0
+    },
+    "auroc": {
+      "value": 0.010070787028645833,
+      "lo": 0.00803678464662888,
+      "hi": 0.012300928444302443,
+      "p_ensemble_wins": 1.0
+    },
+    "precision_at_1pct": {
+      "value": 0.010767160161507416,
+      "lo": -0.0006684753033306429,
+      "hi": 0.024341872447921978,
+      "p_ensemble_wins": 0.967
+    },
+    "recall_at_1pct": {
+      "value": 0.0030308770600492585,
+      "lo": -0.00019052639334311562,
+      "hi": 0.006881967215539619,
+      "p_ensemble_wins": 0.967
+    },
+    "brier": {
+      "value": -0.00019603222608566284,
+      "lo": -0.00026833349838852885,
+      "hi": -0.00012076310813426975,
+      "p_ensemble_wins": 0.0
+    },
+    "ece": {
+      "value": -0.0016298618848235484,
+      "lo": -0.002935662870126146,
+      "hi": -0.00019709469273758676,
+      "p_ensemble_wins": 0.011
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 import polars as pl
 
-from thesis.data.sources import PolarsEDASource
+from thesis.eda.data.sources import PolarsEDASource
 
 
 def is_id_field(field_name: str) -> bool:
