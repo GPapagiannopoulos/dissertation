@@ -1,11 +1,14 @@
 """Tests for the per-admission landmark grid, the heart of stage 4.
 
 Every landmark is one prediction_time: the moment forecast from and the cutoff
-features may be drawn up to. The grid runs from admittime + 48h, the earliest
-point a hospital-acquired diagnosis is possible, to the censor, which is the
-first of discharge and diagnosis. Both ends of that censor are excluded: a
-prediction made at the moment of diagnosis has nothing left to predict, and one
-made at discharge has nothing left to act on.
+features may be drawn up to. The grid runs over the OPEN interval
+(admittime, censor), where the censor is the first of discharge and diagnosis.
+
+Both ends are excluded, for different reasons. The censor, because a prediction
+made at the moment of diagnosis has nothing left to predict and one made at
+discharge has nothing left to act on. admittime itself, because the HA-AKI gate
+upstream admits only onsets beyond 48h (measured minimum 48.02h), so a landmark
+there forecasting 48h is structurally negative.
 """
 
 from collections.abc import Callable
@@ -22,18 +25,22 @@ def _landmarks(grid: pl.LazyFrame) -> list[datetime]:
     return grid.collect()["prediction_time"].to_list()
 
 
-def test_build_landmark_grid_starts_48h_after_admission(
+def test_build_landmark_grid_starts_one_delta_after_admission(
     make_windows_with_onset: Callable,
 ) -> None:
-    """Nothing before admittime + 48h can be hospital-acquired.
+    """The first landmark is one delta in, not at admission and not at the gate.
 
-    The measured minimum onset offset across the 34,625 positives is 48.02h, so
-    this start loses no positive admission and every positive landmark it emits
-    sits strictly before its own diagnosis.
+    A landmark AT admittime is structurally negative: the measured minimum onset
+    offset across the 34,326 positives is 48.02h, so a 48h horizon from admittime
+    reaches 48.00h and can never contain one.
+
+    One delta in it can. A landmark at admittime + 12h forecasting 48h covers
+    onsets in (48.02h, 60h], so it is a genuine prediction. Starting at the 48h
+    gate instead would delete these.
     """
     grid = build_landmark_grid(make_windows_with_onset())
 
-    assert _landmarks(grid)[0] == datetime(2020, 1, 3)
+    assert _landmarks(grid)[0] == datetime(2020, 1, 1, 12)
 
 
 def test_build_landmark_grid_spaces_landmarks_by_delta(
@@ -43,6 +50,9 @@ def test_build_landmark_grid_spaces_landmarks_by_delta(
     grid = build_landmark_grid(make_windows_with_onset())
 
     assert _landmarks(grid) == [
+        datetime(2020, 1, 1, 12),
+        datetime(2020, 1, 2, 0),
+        datetime(2020, 1, 2, 12),
         datetime(2020, 1, 3, 0),
         datetime(2020, 1, 3, 12),
         datetime(2020, 1, 4, 0),
@@ -110,24 +120,31 @@ def test_build_landmark_grid_excludes_the_censor_itself(
     """A landmark landing exactly on the censor is dropped, not kept.
 
     We do not want a prediction at the moment of diagnosis or of discharge, so
-    the range is closed on the left only.
+    the range is open at both ends. Both cases censor at 2020-01-04 00:00, which
+    is a grid point, and neither emits it.
     """
     grid = build_landmark_grid(
         make_windows_with_onset(dischtime=[dischtime], diagtime=[diagtime])
     )
 
-    assert _landmarks(grid) == [datetime(2020, 1, 3), datetime(2020, 1, 3, 12)]
+    assert _landmarks(grid) == [
+        datetime(2020, 1, 1, 12),
+        datetime(2020, 1, 2, 0),
+        datetime(2020, 1, 2, 12),
+        datetime(2020, 1, 3, 0),
+        datetime(2020, 1, 3, 12),
+    ]
 
 
 @pytest.mark.parametrize(
     ("dischtime", "diagtime"),
     [
-        pytest.param(datetime(2020, 1, 2), None, id="stay_shorter_than_48h"),
-        pytest.param(datetime(2020, 1, 3), None, id="stay_of_exactly_48h"),
+        pytest.param(datetime(2020, 1, 1, 6), None, id="stay_shorter_than_one_delta"),
+        pytest.param(datetime(2020, 1, 1, 12), None, id="stay_of_exactly_one_delta"),
         pytest.param(
             datetime(2020, 1, 6),
-            datetime(2020, 1, 2, 12),
-            id="diagnosis_before_the_grid_starts",
+            datetime(2020, 1, 1, 6),
+            id="diagnosis_before_the_first_landmark",
         ),
     ],
 )
@@ -136,10 +153,14 @@ def test_build_landmark_grid_emits_no_row_for_an_empty_grid(
 ) -> None:
     """An admission with no room for a landmark contributes nothing at all.
 
-    Polars explode turns an empty list into one null row rather than none, so
-    the empty ranges have to be dropped explicitly. 79,533 of the 394,712
-    inpatient admissions land here, and a null prediction_time reaching femr is
-    a label with no timestamp.
+    Polars explode turns an empty list into one null row rather than none, so the
+    empty ranges have to be dropped explicitly, and a null prediction_time reaching
+    femr is a label with no timestamp.
+
+    Because the interval is open at both ends, a stay of exactly one delta is empty
+    too: its only grid point is the excluded endpoint. The third case cannot arise
+    in real data -- the HA-AKI gate forbids an onset inside the first 48h -- but the
+    function must not depend on that.
     """
     grid = build_landmark_grid(
         make_windows_with_onset(dischtime=[dischtime], diagtime=[diagtime])
@@ -154,14 +175,13 @@ def test_build_landmark_grid_honours_a_custom_delta(
 ) -> None:
     """Landmark spacing is a parameter: the 12h default is a choice, not a law."""
     grid = build_landmark_grid(
-        make_windows_with_onset(dischtime=[datetime(2020, 1, 4)]), "6h"
+        make_windows_with_onset(dischtime=[datetime(2020, 1, 2)]), "6h"
     )
 
     assert _landmarks(grid) == [
-        datetime(2020, 1, 3, 0),
-        datetime(2020, 1, 3, 6),
-        datetime(2020, 1, 3, 12),
-        datetime(2020, 1, 3, 18),
+        datetime(2020, 1, 1, 6),
+        datetime(2020, 1, 1, 12),
+        datetime(2020, 1, 1, 18),
     ]
 
 
@@ -185,9 +205,9 @@ def test_build_landmark_grid_repeats_the_admission_on_every_landmark(
 
     grid = build_landmark_grid(windows).collect()
 
-    assert grid["visit_id"].to_list() == [10, 10, 20, 20]
-    assert grid["subject_id"].to_list() == [1, 1, 1, 1]
-    assert grid["visit_code"].to_list() == ["Visit/IP"] * 2 + ["Visit/ERIP"] * 2
+    assert grid["visit_id"].to_list() == [10] * 5 + [20] * 5
+    assert grid["subject_id"].to_list() == [1] * 10
+    assert grid["visit_code"].to_list() == ["Visit/IP"] * 5 + ["Visit/ERIP"] * 5
 
 
 def test_build_landmark_grid_stays_lazy(make_windows_with_onset: Callable) -> None:
