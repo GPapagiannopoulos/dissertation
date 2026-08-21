@@ -406,10 +406,11 @@ def make_windows_with_onset(
 
     The default is a single negative admission on round hours: admitted
     2020-01-01 00:00, discharged five days later, no diagnosis. The grid then
-    starts at 2020-01-03 00:00 and every landmark falls on a whole or half day,
-    so a case can state its expectation as a literal list rather than compute
-    one. ``diagtime`` defaults to null, which is what every negative admission
-    carries after the label join.
+    starts at 2020-01-01 12:00 -- one delta in, since the interval is open at
+    admittime -- and every landmark falls on a whole or half day, so a case can
+    state its expectation as a literal list rather than compute one. ``diagtime``
+    defaults to null, which is what every negative admission carries after the
+    label join.
     """
 
     def _make(**columns: list) -> pl.LazyFrame:
