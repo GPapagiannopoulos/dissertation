@@ -10,10 +10,10 @@ from typing import Final
 import polars as pl
 from pyhealth.datasets import MIMIC4Dataset
 
-from thesis.config import settings
-from thesis.data.normalize import build_event_pipeline
+from thesis.eda.config import settings
+from thesis.eda.data.normalize import build_event_pipeline
 
-# Bump when the transform pipeline in thesis.data.normalize changes
+# Bump when the transform pipeline in thesis.eda.data.normalize changes
 # Parsing the bytes of the repository was thought excessive
 CACHE_VERSION: Final[int] = 3
 

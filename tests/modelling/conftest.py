@@ -1,14 +1,16 @@
 """Fixtures shared by every modelling suite.
 
 The released MOTOR dictionary is read by two stages that sit either side of the
-pipeline -- the concept map in etl_pipeline, and the tokeniser in motor -- so its
-factories live here rather than in either one.
+pipeline -- the concept map in etl, and the tokeniser in backbone -- so its
+factories live here rather than in either one, as does the MEDS-shaped event
+builder the tokeniser and the sequence builder share.
 """
 
 from collections.abc import Callable
 from pathlib import Path
 
 import msgpack
+import polars as pl
 import pytest
 
 
@@ -45,5 +47,39 @@ def make_dictionary(tmp_path: Path) -> Callable:
         path = tmp_path / "dictionary"
         path.write_bytes(msgpack.dumps(defaults))
         return path
+
+    return _make
+
+
+@pytest.fixture
+def make_events() -> Callable:
+    """Returns a factory for MEDS-shaped events, overriding only what a case needs.
+
+    Columns beyond these exist in the real shards and are irrelevant here: the
+    tokeniser reads the code and its two value columns and nothing else.
+    """
+
+    def _make(**columns: list) -> pl.LazyFrame:
+        height = max((len(values) for values in columns.values()), default=1)
+        defaults = {
+            "subject_id": [1],
+            "code": ["SNOMED/plain"],
+            "numeric_value": [None],
+            "text_value": [None],
+        }
+        merged = {
+            name: values * height if len(values) == 1 else values
+            for name, values in (defaults | columns).items()
+        }
+        frame = pl.DataFrame(
+            merged,
+            schema_overrides={
+                "subject_id": pl.Int64,
+                "code": pl.String,
+                "numeric_value": pl.Float32,
+                "text_value": pl.String,
+            },
+        )
+        return frame.lazy()
 
     return _make

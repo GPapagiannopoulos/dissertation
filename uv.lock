@@ -387,7 +387,8 @@ name = "contourpy"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/01/1253e6698a07380cd31a736d248a3f2a50a7c88779a1813da27503cadc2a/contourpy-1.3.3.tar.gz", hash = "sha256:083e12155b210502d0bca491432bb04d56dc3432f95a979b429f2848c3dbe880", size = 13466174, upload-time = "2025-07-26T12:03:12.549Z" }
 wheels = [
@@ -1358,7 +1359,8 @@ dependencies = [
     { name = "cycler" },
     { name = "fonttools" },
     { name = "kiwisolver" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-modelling'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-thesis-eda'" },
     { name = "packaging" },
     { name = "pillow" },
     { name = "pyparsing" },
@@ -3290,6 +3292,7 @@ eda = [
 ]
 modelling = [
     { name = "femr" },
+    { name = "matplotlib" },
     { name = "meds" },
     { name = "meds-etl", extra = ["cpp"], marker = "extra == 'extra-6-thesis-modelling'" },
     { name = "meds-reader" },
@@ -3309,6 +3312,7 @@ dev = [
 requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "femr", marker = "extra == 'modelling'", specifier = ">=0.2.4" },
+    { name = "matplotlib", marker = "extra == 'modelling'", specifier = ">=3.9" },
     { name = "meds", marker = "extra == 'modelling'", specifier = "==0.3.3" },
     { name = "meds-etl", extras = ["cpp"], marker = "extra == 'modelling'", specifier = "==0.3.11" },
     { name = "meds-reader", marker = "extra == 'modelling'", specifier = ">=0.1.16" },

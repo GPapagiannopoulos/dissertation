@@ -14,6 +14,9 @@ from typing import Final
 import polars as pl
 
 _INPATIENT_VISIT_CODES: Final[list[str]] = ["Visit/IP", "Visit/ERIP"]
+# The HA-AKI gate, enforced upstream in `diagnose_hospital_acquired_aki`, not here.
+# Recorded so `build_landmark_grid` can document why a landmark at admittime is
+# structurally negative and every later one is not.
 _COMMUNITY_ACQUIRED_CUTOFF_HOURS: Final[int] = 48
 _PREDICTION_GRID_DELTA_HOURS: Final[str] = "12h"
 _PREDICTION_HORIZON_HOURS: Final[str] = "48h"
@@ -120,6 +123,27 @@ def build_landmark_grid(
 ) -> pl.LazyFrame:
     """Generates the prediction landmark grid for each visit.
 
+    The grid runs over the open interval (admittime, censor), where the censor is
+    the earlier of discharge and diagnosis. Both ends are excluded, for different
+    reasons:
+
+    - The censor, because a prediction made at the moment of diagnosis has nothing
+      left to predict and one made at discharge has nothing left to act on.
+    - `admittime` itself, because such a landmark is structurally negative. The
+      HA-AKI gate in `diagnose_hospital_acquired_aki` admits only diagnoses more
+      than `_COMMUNITY_ACQUIRED_CUTOFF_HOURS` after admission (measured minimum
+      onset: 48.02h), so a landmark at admittime forecasting 48h can never see one.
+      Keeping it would add one guaranteed negative per admission.
+
+    The grid deliberately does NOT start at the cutoff. The gate is already enforced
+    upstream on the labels, so starting there would delete the landmarks between one
+    delta and the cutoff -- which are genuinely predictive, since a landmark at
+    admittime + 12h forecasting 48h reaches onsets in (48.02h, 60h].
+
+    Independence from the horizon is deliberate and load-bearing: the grid is a
+    function of the admission window alone, so all horizons hold the same landmarks
+    and `apply_time_horizons` can relabel banked predictions without a forward pass.
+
     Args:
         windows_with_onset (pl.LazyFrame): a LazyFrame containing the admission windows
             for each visit_id and the time of diagnosis
@@ -128,18 +152,17 @@ def build_landmark_grid(
 
     Returns:
         pl.LazyFrame: a LazyFrame containing one record for each prediction
-            landmark, starting 48h post admission, and ending at discharge or
+            landmark, starting one delta post admission, and ending at discharge or
             diagnosis confirmation exclusive, whichever comes first. Drops visits
             without any admission landmarks in the generated window.
     """
     return (
         windows_with_onset.with_columns(
             pl.datetime_ranges(
-                pl.col("admittime")
-                + pl.duration(hours=_COMMUNITY_ACQUIRED_CUTOFF_HOURS),
+                pl.col("admittime"),
                 pl.min_horizontal(pl.col("dischtime"), pl.col("diagtime")),
                 interval=delta_hours,
-                closed="left",
+                closed="none",
             ).alias("prediction_time")
         )
         .filter(pl.col("prediction_time").list.len() > 0)

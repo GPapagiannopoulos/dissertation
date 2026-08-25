@@ -22,8 +22,8 @@ from scipy.stats import spearmanr
 # the paired subject-level bootstrap already exists for the XGBoost comparison; a
 # second copy here is exactly the metric drift the project keeps one of everything to
 # avoid
-from thesis.modelling.baseline.compare import paired_interval
-from thesis.modelling.motor.training import binary_metrics
+from thesis.modelling.evaluation.intervals import paired_interval
+from thesis.modelling.evaluation.metrics import binary_metrics
 
 
 class Member(NamedTuple):
@@ -62,6 +62,61 @@ def load_member(path: Path) -> Member:
             f"(scores, targets, subjects, times)."
         )
     return Member(*arrays)
+
+
+def checkpoint_bundles(run: Path) -> list[tuple[str, Path]]:
+    """Every scored checkpoint of one run, ordered by training step.
+
+    Args:
+        run (Path): A run folder holding `selection/*_predictions.npz`.
+
+    Returns:
+        list[tuple[str, Path]]: `(checkpoint stem, bundle path)`. `last` sorts after
+            every `step_NNNN`; any other stem sorts before them, since only those two
+            forms carry a step this can order on.
+
+    Raises:
+        FileNotFoundError: If the run has no banked predictions.
+    """
+    suffix = "_predictions.npz"
+    found = [
+        (path.name[: -len(suffix)], path)
+        for path in (run / "selection").glob(f"*{suffix}")
+    ]
+    if not found:
+        raise FileNotFoundError(
+            f"{run} has no banked predictions; score it first with "
+            f"scripts/evaluate/score_checkpoints.py."
+        )
+    return sorted(found, key=lambda pair: _step_order(pair[0]))
+
+
+def _step_order(stem: str) -> tuple[int, int]:
+    """Sort key over checkpoint stems, putting `last` after every `step_NNNN`."""
+    if stem == "last":
+        return (1, 0)
+    if stem.startswith("step_"):
+        return (0, int(stem.split("_")[1]))
+    return (-1, 0)
+
+
+def subject_halves(subjects: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """Splits rows into two halves by SUBJECT, never by row.
+
+    A subject contributes ~9 correlated landmarks, so a row-level split would leak the
+    same patient into both halves and make the held-out number optimistic again.
+
+    Args:
+        subjects (np.ndarray): The subject each row belongs to.
+        seed (int): Seeds the permutation.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Boolean row masks for the two halves.
+    """
+    unique = np.unique(subjects)
+    shuffled = np.random.default_rng(seed).permutation(unique)
+    left = np.isin(subjects, shuffled[: len(shuffled) // 2])
+    return left, ~left
 
 
 def align_members(

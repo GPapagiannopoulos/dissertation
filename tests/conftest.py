@@ -21,8 +21,7 @@ import pytest
 
 # Top-level directory under tests/ -> the stack (extra) it belongs to.
 _STACK_BY_DIR = {
-    "data": "eda",
-    "feature_engineering": "eda",
+    "eda": "eda",
     "modelling": "modelling",
 }
 _STACKS = frozenset(_STACK_BY_DIR.values())

@@ -1,0 +1,21 @@
+{
+  "label": "sched-30k-N3-bestper",
+  "n_members": 3.0,
+  "n_labels": 445814.0,
+  "alert_budget": 0.01,
+  "mean_flag_overlap": 0.4454744721406252,
+  "min_flag_overlap": 0.4186157517899761,
+  "mean_rank_correlation": 0.9030475221104558,
+  "min_rank_correlation": 0.9014070761070745,
+  "ensemble_auprc": 0.1750819445487321,
+  "mean_member_auprc": 0.16618350584877103,
+  "best_member_auprc": 0.16863580151378801,
+  "auprc_gain": 0.00889843869996107,
+  "gain_over_best": 0.006446143034944091,
+  "ensemble_brier": 0.0317324735224247,
+  "ensemble_ece": 0.0025687735179252083,
+  "mean_member_brier": 0.03209381798903147,
+  "mean_member_ece": 0.0067114143071258575,
+  "gain_over_best_lo": 0.004021174371776423,
+  "gain_over_best_hi": 0.008654086234923001
+}

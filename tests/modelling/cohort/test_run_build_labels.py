@@ -15,8 +15,8 @@ def test_run_build_labels_writes_one_row_per_landmark(
 ) -> None:
     """The grid is laid inside each admission and exploded to one row a landmark.
 
-    Visit 10 is censored at its 2020-01-04 diagnosis and yields two landmarks;
-    visit 20 is an unlabelled negative running to discharge and yields three.
+    Visit 10 is censored at its 2020-01-04 diagnosis and yields five landmarks;
+    visit 20 is an unlabelled negative running to discharge and yields six.
     The order is asserted because the left join returns hash-probe order and
     the wrapper sorts it back; without that sort this artifact is not
     reproducible between runs.
@@ -24,8 +24,14 @@ def test_run_build_labels_writes_one_row_per_landmark(
     run_build_labels(make_event_shards(), make_surviving_labels(), dest)
 
     assert pl.read_parquet(dest)["prediction_time"].to_list() == [
+        datetime(2020, 1, 1, 20),
+        datetime(2020, 1, 2, 8),
+        datetime(2020, 1, 2, 20),
         datetime(2020, 1, 3, 8),
         datetime(2020, 1, 3, 20),
+        datetime(2020, 2, 1, 19),
+        datetime(2020, 2, 2, 7),
+        datetime(2020, 2, 2, 19),
         datetime(2020, 2, 3, 7),
         datetime(2020, 2, 3, 19),
         datetime(2020, 2, 4, 7),
@@ -35,13 +41,42 @@ def test_run_build_labels_writes_one_row_per_landmark(
 def test_run_build_labels_labels_each_landmark_against_the_diagnosis(
     make_event_shards: Callable, make_surviving_labels: Callable, dest: Path
 ) -> None:
-    """Both of visit 10's landmarks reach the onset; the negative's never do."""
+    """Visit 10's landmarks reach the onset once a 48h horizon spans it.
+
+    The first is 52h out from the 2020-01-04 diagnosis and falls short; the other
+    four reach it. The negative's never do. This is exactly the range the old 48h
+    grid start deleted.
+    """
     run_build_labels(make_event_shards(), make_surviving_labels(), dest)
 
     written = pl.read_parquet(dest)
 
-    assert written["boolean_value"].to_list() == [True, True, False, False, False]
-    assert written["horizon_hours"].to_list() == [48.0, 48.0, 27.0, 15.0, 3.0]
+    assert written["boolean_value"].to_list() == [
+        False,
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert written["horizon_hours"].to_list() == [
+        48.0,
+        48.0,
+        48.0,
+        48.0,
+        48.0,
+        48.0,
+        48.0,
+        39.0,
+        27.0,
+        15.0,
+        3.0,
+    ]
 
 
 def test_run_build_labels_keeps_only_inpatient_admissions(
@@ -102,7 +137,7 @@ def test_run_build_labels_reads_every_shard(
     """The events arrive as 200 shards, so a single-shard read would lose most."""
     run_build_labels(make_event_shards(n_shards=3), make_surviving_labels(), dest)
 
-    assert pl.read_parquet(dest).height == 5
+    assert pl.read_parquet(dest).height == 11
 
 
 def test_run_build_labels_passes_the_delta_through(
@@ -113,7 +148,7 @@ def test_run_build_labels_passes_the_delta_through(
         make_event_shards(), make_surviving_labels(), dest, delta_hours="6h"
     )
 
-    assert pl.read_parquet(dest).height == 8
+    assert pl.read_parquet(dest).height == 22
 
 
 def test_run_build_labels_passes_the_horizon_through(
@@ -126,7 +161,13 @@ def test_run_build_labels_passes_the_horizon_through(
 
     assert pl.read_parquet(dest)["boolean_value"].to_list() == [
         False,
+        False,
+        False,
+        False,
         True,
+        False,
+        False,
+        False,
         False,
         False,
         False,
@@ -213,7 +254,7 @@ def test_run_build_labels_reports_what_it_wrote(
 
     printed = capsys.readouterr().out
 
-    assert "5 landmarks" in printed
+    assert "11 landmarks" in printed
     assert "2 admissions" in printed
     assert "2 subjects" in printed
-    assert "2 positive" in printed
+    assert "4 positive" in printed
