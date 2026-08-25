@@ -20,6 +20,14 @@ REPORT_*
 # (~3 min to rebuild with scripts/tools/dump_motor_oracle.py).
 motor_output/oracle_*.npz
 motor_output/probe/
+motor_output/probe-ng/
 motor_output/runs/aki-seed*/*.pt
 motor_output/runs/smoke-metrics/*.pt
+# The new-grid rebuild (2026-08-21 onward) prefixes every run `ng-`, which the
+# rules above do not match. Full fine-tune checkpoints are 517 MB apiece; LoRA
+# adapters are 3-6 MB and stay versioned, as does every selection/*.npz.
+motor_output/runs/ng-aki-*/*.pt
+# XGBoost's QuantileDMatrix page cache -- 28 GB while a fit is in flight.
+# run_train_baseline removes it on exit, but it exists during the run.
+motor_output/runs/*/cache/
 docs/
