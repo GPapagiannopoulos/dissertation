@@ -1,0 +1,97 @@
+{
+  "manifest_version": 1,
+  "run": "ng-aki-lowlr",
+  "written": "2026-08-24T12:56:08+00:00",
+  "provenance": "runtime",
+  "parameters": {
+    "seed": 0,
+    "total_steps": 15000,
+    "max_hours": null,
+    "token_budget": 8192,
+    "encoder_lr": 3e-06,
+    "head_lr": 0.0001,
+    "warmup": 300,
+    "accumulate": 4,
+    "eval_every": 1000,
+    "eval_batches": 400,
+    "patience": 0,
+    "min_delta": 0.0,
+    "checkpoint_every": 2,
+    "epochs": 8,
+    "no_compile": false,
+    "compiled": true,
+    "dest": "motor_output/runs/ng-aki-lowlr"
+  },
+  "git": {
+    "commit": "bebcf490d929180dd03e246ba1102d386c10f21e",
+    "branch": "feat/gp/peft",
+    "dirty": true
+  },
+  "environment": {
+    "python": "3.13.14",
+    "platform": "Linux-6.19.10-300.fc44.x86_64-x86_64-with-glibc2.43",
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": 92000,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memory_mib": 7834,
+      "capability": "8.9"
+    },
+    "cpu_count": 16,
+    "host_ram_gb": 14.9
+  },
+  "checkpoints": [
+    {
+      "name": "last.pt",
+      "bytes": 541961664
+    },
+    {
+      "name": "step_002000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_004000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_006000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_008000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_010000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_012000.pt",
+      "bytes": 541971625
+    },
+    {
+      "name": "step_014000.pt",
+      "bytes": 541971625
+    }
+  ],
+  "results": {
+    "steps": 15000,
+    "stop_reason": "step_budget",
+    "wall_clock_s": 19293.9,
+    "wall_clock": "5:21:33",
+    "active_clock_s": 19293.9,
+    "active_clock": "5:21:33",
+    "seconds_per_step": 1.2863,
+    "peak_gib": 4.74,
+    "final_train_loss": 0.12605056408215462,
+    "evaluations": 15,
+    "evaluation_labels": 42168.0,
+    "best_evaluation": {
+      "step": 10000,
+      "loss": 0.1229451101445039,
+      "auprc": 0.1530419125945061
+    },
+    "suspected_stalls": []
+  }
+}

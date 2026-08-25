@@ -110,12 +110,23 @@ def environment() -> dict[str, Any]:
     except (ValueError, OSError):
         host_ram_gb = None
 
+    # cuDNN is queried, never used: the encoder is GEMMs, not convolutions. The
+    # query nonetheless initialises cuDNN and raises if the loader finds a
+    # version other than the one torch was built against -- which is the default
+    # on AWS's Deep Learning AMI, whose LD_LIBRARY_PATH shadows torch's bundled
+    # copy. Recording "unavailable" beats losing a finished run to a metadata
+    # field, the same failure mode as the PosixPath serialisation crash.
+    try:
+        cudnn = torch.backends.cudnn.version()
+    except (RuntimeError, OSError) as error:
+        cudnn = f"unavailable: {error.__class__.__name__}"
+
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch": torch.__version__,
         "cuda_runtime": torch.version.cuda,
-        "cudnn": torch.backends.cudnn.version(),
+        "cudnn": cudnn,
         "gpu": gpu,
         "cpu_count": os.cpu_count(),
         "host_ram_gb": host_ram_gb,

@@ -1,0 +1,139 @@
+{
+  "manifest_version": 1,
+  "run": "ng-o-r8",
+  "written": "2026-08-23T00:10:48+00:00",
+  "provenance": "runtime",
+  "parameters": {
+    "sequences": "/home/ubuntu/dissertation/meds_output/sequences",
+    "split": "/home/ubuntu/dissertation/meds_output/labels/subject_split.parquet",
+    "seed": 0,
+    "total_steps": 30000,
+    "max_hours": null,
+    "token_budget": 8192,
+    "adapter_lr": 0.0002,
+    "head_lr": 0.0001,
+    "warmup": 300,
+    "accumulate": 4,
+    "eval_every": 1000,
+    "eval_batches": 100,
+    "checkpoint_every": 2,
+    "patience": 0,
+    "min_delta": 0.0,
+    "epochs": 8,
+    "lora_r": 8,
+    "lora_alpha": 32,
+    "lora_dropout": 0.0,
+    "lora_targets": [
+      "o_proj"
+    ],
+    "bag_fraction": null,
+    "no_compile": false,
+    "compiled": true,
+    "arm": "lora",
+    "dest": "motor_output/runs/ng-o-r8"
+  },
+  "git": {
+    "commit": null,
+    "branch": null,
+    "dirty": null
+  },
+  "environment": {
+    "python": "3.13.15",
+    "platform": "Linux-6.8.0-1052-aws-x86_64-with-glibc2.35",
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": "unavailable: RuntimeError",
+    "gpu": {
+      "name": "NVIDIA A10G",
+      "memory_mib": 22588,
+      "capability": "8.6"
+    },
+    "cpu_count": 8,
+    "host_ram_gb": 31.0
+  },
+  "checkpoints": [
+    {
+      "name": "last.pt",
+      "bytes": 1783797
+    },
+    {
+      "name": "step_002000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_004000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_006000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_008000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_010000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_012000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_014000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_016000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_018000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_020000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_022000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_024000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_026000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_028000.pt",
+      "bytes": 1785877
+    },
+    {
+      "name": "step_030000.pt",
+      "bytes": 1785877
+    }
+  ],
+  "results": {
+    "steps": 30000,
+    "stop_reason": "step_budget",
+    "wall_clock_s": 14349.1,
+    "wall_clock": "3:59:09",
+    "active_clock_s": 14349.1,
+    "active_clock": "3:59:09",
+    "seconds_per_step": 0.4783,
+    "peak_gib": 2.93,
+    "final_train_loss": 0.12882174078793565,
+    "evaluations": 30,
+    "evaluation_labels": 10360.0,
+    "best_evaluation": {
+      "step": 13000,
+      "loss": 0.1148325464900396,
+      "auprc": 0.12378149304727255
+    },
+    "suspected_stalls": []
+  }
+}
