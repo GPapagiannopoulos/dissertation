@@ -17,9 +17,7 @@ def expected_calibration_error(
     Args:
         scores (np.ndarray): The predicted probabilities, shaped (n,).
         targets (np.ndarray): The binary labels, shaped (n,).
-        bins (int): How many quantile bins to cut. The bins are only approximately
-            equal-mass when scores tie across a cut point, which is why each is
-            weighted by its own count rather than by 1/bins.
+        bins (int): How many quantile bins to cut.
 
     Returns:
         float: The weighted mean absolute gap, in probability units. Zero is perfect.
@@ -62,6 +60,7 @@ def precision_recall_at_k(
         raise ValueError(f"An alert budget is a fraction in (0, 1], got {k}.")
 
     flagged = max(1, int(round(k * scores.size)))
+    # pinned version of numpy doesn't implement 'descending'
     top = np.argsort(-scores, kind="stable")[:flagged]
 
     hits = float(targets[top].sum())
@@ -72,7 +71,7 @@ def precision_recall_at_k(
 def binary_metrics(scores: np.ndarray, targets: np.ndarray) -> dict[str, float]:
     """Scores one set of predictions against its labels.
 
-    AUPRC leads because the task is 3.56% positive, where AUROC is dominated by the
+    AUPRC leads because the task is 3.350% positive, where AUROC is dominated by the
     negatives and a useless model still reads around 0.5 rather than around the base
     rate.
 

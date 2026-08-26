@@ -1,38 +1,24 @@
 | model | AUPRC | AUROC | Brier | ECE | source |
 |---|---|---|---|---|---|
-| XGBoost, full | 0.2001 | 0.8221 | 0.03116 | 0.0021 | `motor_output/comparison/comparison.json` |
-| LoRA ensemble, every swept config + q/v, best per member | 0.1919 | — | 0.03138 | 0.0030 | `motor_output/comparison/diversity_all_configs_bestper.json` |
-| LoRA ensemble, every swept config + q/v, selected by loss | 0.1866 | — | 0.03151 | 0.0020 | `motor_output/comparison/diversity_all_configs_byloss.json` |
-| LoRA ensemble, every swept config + q/v, step-matched | 0.1857 | — | 0.03153 | 0.0024 | `motor_output/comparison/diversity_all_configs.json` |
-| LoRA ensemble of 3, q/v + all4 + ff | 0.1807 | — | 0.03163 | 0.0012 | `motor_output/comparison/diversity_qv_all4_ff_n3.json` |
-| LoRA r=16 q/k/v/ff | 0.1799 | 0.8000 | 0.03217 | 0.0103 | `runs/lora-cfg-all4-r16` |
-| LoRA ensemble of 2, q/v + all4 | 0.1792 | — | 0.03165 | 0.0009 | `motor_output/comparison/diversity_qv_all4_n2.json` |
-| MOTOR v3 full fine-tune, seed 0 | 0.1791 | 0.7973 | 0.03194 | 0.0077 | `motor_output/comparison/v3_candidates.json` |
-| LoRA ensemble of 4, 3 q/v seeds + all4 | 0.1791 | — | 0.03164 | 0.0014 | `motor_output/comparison/diversity_qv3_all4_n4.json` |
-| LoRA r=16 a=32 q/k/v/ff | 0.1790 | 0.7989 | 0.03165 | 0.0028 | `runs/lora-cfg-all4-r16-a32` |
-| LoRA r=8 q/k/v/ff/o | 0.1789 | 0.8007 | 0.03228 | 0.0124 | `runs/lora-cfg-all5-r8` |
-| LoRA ensemble of 2, all4 + ff | 0.1776 | — | 0.03168 | 0.0022 | `motor_output/comparison/diversity_all4_ff_n2.json` |
-| LoRA r=32 a=32 q/k/v/ff | 0.1773 | 0.7974 | 0.03169 | 0.0025 | `runs/lora-cfg-all4-r32-a32` |
-| LoRA ensemble of 3, seed-only, 30k, best per member | 0.1751 | — | 0.03173 | 0.0026 | `motor_output/comparison/diversity_sched30k_n3_bestper.json` |
-| MOTOR v3 full fine-tune, seed 2 | 0.1750 | 0.7983 | 0.03205 | 0.0084 | `runs/aki-seed2` |
-| MOTOR v3 full fine-tune, seed 1 | 0.1749 | 0.7981 | 0.03192 | 0.0072 | `runs/aki-seed1` |
-| LoRA r=8 o only | 0.1748 | 0.7974 | 0.03217 | 0.0083 | `runs/lora-cfg-o-r8` |
-| LoRA ensemble of 3, seed-only, 30k | 0.1746 | — | 0.03174 | 0.0020 | `motor_output/comparison/diversity_sched30k_n3.json` |
-| LoRA r=8 q/k/v/ff | 0.1744 | 0.7992 | 0.03174 | 0.0022 | `runs/lora-cfg-all4-r8` |
-| LoRA r=8 ff only | 0.1720 | 0.7966 | 0.03188 | 0.0043 | `runs/lora-cfg-ff-r8` |
-| LoRA r=32 q/k/v/ff | 0.1706 | 0.7947 | 0.03235 | 0.0143 | `runs/lora-cfg-all4-r32` |
-| LoRA r=8 q/k/v | 0.1694 | 0.7931 | 0.03185 | 0.0025 | `runs/lora-cfg-qkv-r8` |
-| XGBoost, recency removed | 0.1690 | 0.7971 | 0.03184 | 0.0025 | `motor_output/comparison/ablation_comparison.json` |
-| LoRA r=8 q/v, 30k schedule, seed 1 | 0.1686 | 0.7912 | 0.03188 | 0.0036 | `runs/lora-sched-seed1` |
-| LoRA ensemble of 3, seed-only, 15k | 0.1683 | — | 0.03187 | 0.0020 | `motor_output/comparison/diversity_seed_only.json` |
-| LoRA r=8 q/v, 30k schedule, seed 0 | 0.1661 | 0.7897 | 0.03192 | 0.0029 | `runs/lora-seed0-30k` |
-| LoRA ensemble of 3, bagged 0.632 | 0.1651 | — | 0.03204 | 0.0048 | `motor_output/comparison/diversity_bagged.json` |
-| LoRA r=8 q/v, 30k schedule, seed 2 | 0.1638 | 0.7891 | 0.03248 | 0.0136 | `runs/lora-sched-seed2` |
-| LoRA r=8 q/v, 15k schedule, seed 1 | 0.1628 | 0.7887 | 0.03200 | 0.0027 | `runs/lora-seed1` |
-| LoRA r=8 q/v, 15k schedule, seed 0 | 0.1622 | 0.7873 | 0.03205 | 0.0035 | `runs/lora-seed0` |
-| LoRA r=8 q/v, 15k schedule, seed 2 | 0.1616 | 0.7880 | 0.03206 | 0.0041 | `runs/lora-seed2` |
-| MOTOR v1, bare head | 0.1610 | 0.7833 | 0.03216 | 0.0074 | `motor_output/comparison/comparison.json` |
-| LoRA bagged 0.632, seed 11 | 0.1559 | 0.7795 | 0.03241 | 0.0078 | `runs/lora-bag11` |
-| LoRA bagged 0.632, seed 10 | 0.1534 | 0.7777 | 0.03240 | 0.0074 | `runs/lora-bag10` |
-| LoRA bagged 0.632, seed 12 | 0.1533 | 0.7798 | 0.03249 | 0.0084 | `runs/lora-bag12` |
-| MOTOR frozen + linear probe | 0.1085 | 0.7342 | 0.03308 | 0.0011 | `probe` |
+| XGBoost, 300 rounds (round cap, not converged) | 0.1827 | 0.8151 | 0.02976 | 0.0029 | `motor_output/comparison/newgrid/comparison.json` |
+| LoRA ensemble, 12 configs x (by-loss + last) | 0.1821 | — | 0.02979 | 0.0010 | `motor_output/comparison/diversity_ng23.json` |
+| LoRA ensemble, 12 configs by loss | 0.1799 | — | 0.02985 | 0.0015 | `motor_output/comparison/diversity_ng12.json` |
+| LoRA r=8 q/k/v/ff/o | 0.1730 | 0.8027 | 0.02997 | 0.0013 | `runs/ng-all5-r8` |
+| LoRA r=16 a=64 q/k/v/ff | 0.1712 | 0.8014 | 0.03000 | 0.0009 | `runs/ng-all4-r16` |
+| LoRA r=4 a=32 q/k/v/ff | 0.1690 | 0.7998 | 0.03005 | 0.0014 | `runs/ng-all4-r4-a32` |
+| LoRA r=32 a=32 q/k/v/ff | 0.1683 | 0.8008 | 0.03008 | 0.0017 | `runs/ng-all4-r32-a32` |
+| LoRA r=16 a=32 q/k/v/ff | 0.1682 | 0.7991 | 0.03007 | 0.0019 | `runs/pilot-all4-r16-a32` |
+| LoRA r=2 a=32 q/k/v/ff | 0.1679 | 0.7989 | 0.03007 | 0.0011 | `runs/ng-all4-r2-a32` |
+| LoRA r=8 a=32 q/k/v/ff | 0.1677 | 0.8004 | 0.03008 | 0.0015 | `runs/ng-all4-r8` |
+| LoRA r=32 a=128 q/k/v/ff | 0.1660 | 0.7963 | 0.03011 | 0.0018 | `runs/ng-all4-r32` |
+| LoRA r=8 q/k/v | 0.1653 | 0.7944 | 0.03015 | 0.0023 | `runs/ng-qkv-r8` |
+| MOTOR full fine-tune, seed 1, 30k | 0.1652 | 0.7955 | 0.03033 | 0.0063 | `runs/ng-aki-seed1` |
+| MOTOR full fine-tune, seed 1, paired against it | 0.1652 | 0.7955 | 0.03033 | 0.0062 | `motor_output/comparison/newgrid/comparison.json` |
+| MOTOR full fine-tune, seed 0, 15k | 0.1645 | 0.7996 | 0.03016 | 0.0020 | `runs/ng-aki-seed0-15k` |
+| LoRA r=8 o only | 0.1633 | 0.7954 | 0.03016 | 0.0010 | `runs/ng-o-r8` |
+| MOTOR full fine-tune, seed 0, 30k | 0.1626 | 0.7981 | 0.03017 | 0.0013 | `runs/ng-aki-seed0` |
+| LoRA r=8 ff only | 0.1616 | 0.7935 | 0.03020 | 0.0012 | `runs/ng-ff-r8` |
+| MOTOR full fine-tune, seed 2, 30k | 0.1595 | 0.7956 | 0.03051 | 0.0113 | `runs/ng-aki-seed2` |
+| LoRA r=8 q/v | 0.1595 | 0.7944 | 0.03022 | 0.0020 | `runs/ng-qv-seed1` |
+| MOTOR full fine-tune, seed 0, lr 3e-6 | 0.1557 | 0.7913 | 0.03031 | 0.0022 | `runs/ng-aki-lowlr` |
+| MOTOR frozen + linear probe | 0.0905 | 0.7321 | 0.03150 | 0.0026 | `probe` |

@@ -1,13 +1,13 @@
 """Subject-level bootstrap intervals, paired and unpaired.
 
-Confidence intervals resample **subjects**, not landmarks. The 12-hourly grid puts
-around nine highly correlated predictions inside one admission, so the validation
-fold's 445,814 rows carry the information of roughly 22,789 independent patients; a
+Confidence intervals resample subjects instead of landmarks. The 12-hourly grid puts
+around ten highly correlated predictions inside one admission, so the validation
+fold's 613,712 rows carry the information of roughly 26,534 independent patients; a
 row-level bootstrap would report an interval several times too narrow.
 
-The headline number is always the **paired** difference, not two per-model intervals.
-Those overlap freely even when one model wins on nearly every resample, because each
-carries the variance of the cohort; scoring both models on the same draw cancels it.
+The headline number is always the paired difference. Per-model intervals overlap even
+when one model wins on nearly every resample, because each carries the variance of
+the cohort. Scoring both models on the same draw cancels it out.
 """
 
 import numpy as np
@@ -26,6 +26,7 @@ def _subject_groups(subjects: np.ndarray) -> list[np.ndarray]:
     """
     unique, inverse = np.unique(subjects, return_inverse=True)
     order = np.argsort(inverse, kind="stable")
+    # indexes where each new subject index begins
     boundaries = np.searchsorted(inverse[order], np.arange(unique.size + 1))
     return [order[boundaries[i] : boundaries[i + 1]] for i in range(unique.size)]
 
@@ -48,9 +49,8 @@ def bootstrap_interval(
 ) -> tuple[float, float]:
     """A subject-level bootstrap interval for one metric.
 
-    Subjects are resampled with replacement and every landmark belonging to a drawn
-    subject comes along, which is what preserves the within-admission correlation the
-    interval has to account for.
+    Subjects are resampled with replacement. All of the subject landmarks are included.
+    This accounts for the inter-admission correlation between landmarks.
 
     Args:
         scores (np.ndarray): Predicted probabilities.
