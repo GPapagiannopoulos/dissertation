@@ -1,0 +1,10 @@
+{
+  "best_iteration": 598,
+  "best_score": 0.1216314611502031,
+  "n_codes": 8331,
+  "base_rate": 0.033580846687811305,
+  "max_bin": 64,
+  "seed": 0,
+  "continued_from": "motor_output/runs/ng-xgb-seed0",
+  "total_rounds": 600
+}

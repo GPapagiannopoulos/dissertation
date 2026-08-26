@@ -45,6 +45,15 @@ HEADLINE = ("auprc", "auroc", "brier", "ece", "precision_at_1pct", "recall_at_1p
 """The metrics reported side by side, discrimination first then calibration."""
 
 
+MAX_CONTESTED_SHARE = 0.001
+"""How much of a fold may be duplicated keys before the join is called broken.
+
+Overlapping admissions are genuinely rare -- three landmarks in 4,082,007 on the
+2026-08-21 grid, needing both an overlap and admit times congruent modulo the 12-hour
+step. A percent of the fold means something else is wrong.
+"""
+
+
 def align_predictions(
     left: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     right: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
@@ -64,6 +73,16 @@ def align_predictions(
     disagreement about a label means the two feature pipelines are not describing the
     same landmark at all. Each of those produces a plausible number.
 
+    A key repeated on either side is dropped from BOTH, because a duplicate cannot be
+    paired: two landmarks for one subject at one instant come from overlapping
+    admissions in stage 4 -- MIMIC records an observation stay and an emergency
+    admission with the same `admittime`, and stage 5.2 keeps no `visit_id` to tell
+    them apart. Dropping is safe here only because the colliding landmarks share one
+    patient history, so MOTOR emits the same score for both; they differ only in the
+    horizon their own admission ends at. The count is printed, and more than
+    `MAX_CONTESTED_SHARE` of the fold raises instead, since at that scale the cause is
+    a broken join rather than a handful of overlapping admissions.
+
     Args:
         left (tuple): `(scores, targets, subjects, times)` for the first model.
         right (tuple): The same four arrays for the second.
@@ -74,8 +93,9 @@ def align_predictions(
             right scores, the shared targets and the subjects, all row-aligned.
 
     Raises:
-        ValueError: If either side repeats a `(subject, time)` key, if the two do not
-            cover exactly the same landmarks, or if they disagree on a label.
+        ValueError: If duplicated keys exceed `MAX_CONTESTED_SHARE` of either side, if
+            the two do not cover exactly the same landmarks, or if they disagree on a
+            label.
     """
     frames = []
     for (scores, targets, subjects, times), name in zip(
@@ -89,15 +109,37 @@ def align_predictions(
                 f"target_{name}": targets,
             }
         )
-        if frame.select("subject_id", "time").is_duplicated().any():
-            repeated = int(frame.select("subject_id", "time").is_duplicated().sum())
-            raise ValueError(
-                f"{name} repeats {repeated:,} (subject, prediction_time) key(s), so "
-                f"the join would multiply rows rather than pair them. Two landmarks "
-                f"for one subject at one instant means overlapping admissions in "
-                f"stage 4."
-            )
         frames.append(frame)
+
+    # the union across both sides, so the two are trimmed identically even when only
+    # one of them carries the collision
+    contested = pl.concat(
+        [
+            frame.select("subject_id", "time").filter(
+                frame.select("subject_id", "time").is_duplicated()
+            )
+            for frame in frames
+        ]
+    ).unique()
+
+    if contested.height:
+        share = contested.height / min(frame.height for frame in frames)
+        if share > MAX_CONTESTED_SHARE:
+            raise ValueError(
+                f"{contested.height:,} (subject, prediction_time) key(s) are "
+                f"duplicated, {share:.2%} of the fold. That is too many to be "
+                f"overlapping admissions; the two sides are probably not scoring the "
+                f"same cohort."
+            )
+        print(
+            f"dropping {contested.height:,} duplicated (subject, prediction_time) "
+            f"key(s) from both sides -- overlapping admissions in stage 4",
+            flush=True,
+        )
+        frames = [
+            frame.join(contested, on=("subject_id", "time"), how="anti")
+            for frame in frames
+        ]
 
     joined = frames[0].join(frames[1], on=("subject_id", "time"), how="inner")
     if joined.height != frames[0].height or joined.height != frames[1].height:
