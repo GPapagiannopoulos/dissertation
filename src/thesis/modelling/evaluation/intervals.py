@@ -63,9 +63,18 @@ def bootstrap_interval(
 
     Returns:
         tuple[float, float]: The lower and upper bounds.
+
+    Raises:
+        ValueError: if the shapes of the input ndarrays do not match
     """
     rng = np.random.default_rng(seed)
     groups = _subject_groups(subjects)
+
+    shapes = {scores.shape, targets.shape, subjects.shape}
+    if len(shapes) != 1:
+        raise ValueError(
+            "The shapes of 'scores', 'targets', and 'subjects' do not match."
+        )
 
     draws: list[float] = []
     for _ in range(resamples):
