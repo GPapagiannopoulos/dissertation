@@ -1,5 +1,6 @@
 | model | AUPRC | AUROC | Brier | ECE | source |
 |---|---|---|---|---|---|
+| XGBoost, 600 rounds | 0.1843 | 0.8178 | 0.02971 | 0.0021 | `motor_output/comparison/newgrid/ensemble_vs_xgboost600.json` |
 | XGBoost, 300 rounds (round cap, not converged) | 0.1827 | 0.8151 | 0.02976 | 0.0029 | `motor_output/comparison/newgrid/comparison.json` |
 | LoRA ensemble, 12 configs x (by-loss + last) | 0.1821 | — | 0.02979 | 0.0010 | `motor_output/comparison/diversity_ng23.json` |
 | LoRA ensemble, 12 configs by loss | 0.1799 | — | 0.02985 | 0.0015 | `motor_output/comparison/diversity_ng12.json` |

@@ -1,8 +1,22 @@
 {
   "fold": "validation",
   "checkpoint_rule": "minimum validation loss",
-  "n_models": 22,
+  "n_models": 23,
   "models": [
+    {
+      "model": "XGBoost, 600 rounds",
+      "source": "motor_output/comparison/newgrid/ensemble_vs_xgboost600.json",
+      "auprc": 0.18425214656907896,
+      "auroc": 0.817769624131336,
+      "brier": 0.029710467904806137,
+      "ece": 0.0020958963286830112,
+      "precision_at_1pct": 0.37086524360436696,
+      "recall_at_1pct": 0.11070038910505836,
+      "precision_at_5pct": 0.2052727628234374,
+      "base_rate": 0.033501166850328445,
+      "n": 613710.0,
+      "n_positive": 20560.0
+    },
     {
       "model": "XGBoost, 300 rounds (round cap, not converged)",
       "source": "motor_output/comparison/newgrid/comparison.json",
