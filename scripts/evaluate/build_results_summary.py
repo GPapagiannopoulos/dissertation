@@ -20,11 +20,13 @@ RUNS = ROOT / "motor_output" / "runs"
 COMPARISON = ROOT / "motor_output" / "comparison"
 DEST = COMPARISON / "results_summary.json"
 NEWGRID = COMPARISON / "newgrid" / "comparison.json"
+PAIRING600 = COMPARISON / "newgrid" / "ensemble_vs_xgboost600.json"
 
 # (label, file, key) for results already scored side by side. The old-grid
 # `comparison.json` and `ablation_comparison.json` rows were removed on 2026-08-25:
 # they were measured on the 48h-start grid and cannot share a table with these.
 COMPARISONS: list[tuple[str, Path, str]] = [
+    ("XGBoost, 600 rounds", PAIRING600, "xgboost600"),
     ("XGBoost, 300 rounds (round cap, not converged)", NEWGRID, "xgboost"),
     ("MOTOR full fine-tune, seed 1, paired against it", NEWGRID, "motor"),
 ]
@@ -69,11 +71,15 @@ ENSEMBLES: list[tuple[str, Path]] = [
 
 
 def from_comparison(path: Path, key: str) -> dict[str, Any] | None:
-    """One model's metrics out of a `run_comparison` file."""
+    """One model's metrics out of a `run_comparison` file.
+
+    Falls back to the top level, because the ad-hoc pairing scripts write each
+    model as its own key rather than under `models`.
+    """
     if not path.is_file():
         return None
-    models = json.loads(path.read_text()).get("models", {})
-    return models.get(key)
+    report = json.loads(path.read_text())
+    return report.get("models", report).get(key)
 
 
 def best_of(ranking: Path) -> dict[str, Any] | None:
