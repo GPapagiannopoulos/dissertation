@@ -139,7 +139,14 @@ def main() -> None:
         raise SystemExit("Pass --runs or --bundles.")
 
     paths = list(args.bundles or []) + [best_bundle(run) for run in args.runs or []]
-    names = [path.parents[1].name for path in paths]
+    # the run folder ALONE is not unique: a run contributing two checkpoints, or two
+    # bundles sitting in one comparison folder, both collapse onto one key and the
+    # later row silently overwrites the earlier. That is how the XGBoost row was lost
+    # from `horizon_72h_comparators.json` and `horizon_7d_comparators.json`.
+    names = [
+        f"{path.parents[1].name}/{path.stem.removesuffix('_predictions')}"
+        for path in paths
+    ]
     members = [load_member(path) for path in paths]
     scores, trained_targets, subjects = align_members(members)
 

@@ -13,10 +13,14 @@ This script generates two panels:
 A) arm comparison: a single monolithic fine-tune, an ensemble of three
   monolithic fine-tunes, one monolithic run's own checkpoints, the LoRA ensemble under
   both checkpoint rules, and XGBoost, against alerting on everyone and on nobody.
-B) ensemble size sweep: each member is one training run contributing its
-  `step_014000` and `last` checkpoints. Every subset of each size is enumerated and
+B) ensemble size sweep: each member is one training run contributing the checkpoint
+  the frozen rule selects and its `last`. Every subset of each size is enumerated and
   averaged to avoid selection bias. A spread of ensemble performance is given as an
   argument for deployment.
+
+Everything here is measured on the landmark grid rebuilt 2026-08-21, which runs from
+`admittime` rather than from the 48h cutoff. The old-grid roster this file carried
+until 2026-08-26 named runs that no longer describe the data.
 
 The threshold window is fixed in advance of the intervention, using clinical judgement.
 Acting on predicted AKI means checking creatinine more often, reviewing
@@ -47,41 +51,28 @@ from thesis.modelling.ensemble.diversity import (
     load_member,
 )
 
+# the roster lives in one module so this analysis and the selective-prediction one
+# cannot drift into measuring different ensembles
+from thesis.modelling.ensemble.roster import (
+    LORA_RUNS,
+    MONOLITHIC_HEADLINE,
+    MONOLITHIC_RUNS,
+    MONOLITHIC_WINDOW,
+    ROOT,
+    RUNS,
+    XGBOOST,
+    by_loss_stem,
+    drop_contested,
+    lora_bundles,
+    monolithic_bundles,
+)
+
 # the subject-level draw already exists for the XGBoost comparison; a second copy here
 # is exactly the metric drift the project keeps one of everything to avoid
 from thesis.modelling.evaluation.intervals import _draw_rows, _subject_groups
 from thesis.modelling.evaluation.metrics import binary_metrics
 
-ROOT = Path(__file__).resolve().parents[2]
-RUNS = ROOT / "motor_output" / "runs"
 COMPARISON = ROOT / "motor_output" / "comparison"
-
-# the ten LoRA configuration runs; each contributes two checkpoints
-LORA_RUNS = [
-    "lora-sched-seed1",
-    "lora-cfg-all4-r16",
-    "lora-cfg-all4-r16-a32",
-    "lora-cfg-all4-r32",
-    "lora-cfg-all4-r32-a32",
-    "lora-cfg-all4-r8",
-    "lora-cfg-all5-r8",
-    "lora-cfg-ff-r8",
-    "lora-cfg-o-r8",
-    "lora-cfg-qkv-r8",
-]
-PAIRED_STEMS = ("step_014000", "last")
-
-# seed 0's monolithic bundles were banked under comparison/ rather than its run folder,
-# so anything walking runs/*/selection/ silently skips the headline comparator
-V3 = {
-    stem: COMPARISON / f"v3_{stem}_predictions.npz"
-    for stem in ("step_006000", "step_010000", "step_014000", "last")
-}
-MONOLITHIC_SEEDS = ["aki-seed1", "aki-seed2"]
-
-# verified 2026-08-20 to read AUPRC 0.20006 / AUROC 0.82212, matching the reported
-# XGBoost figures; the directory name refers to a stale-feature study, not to these
-XGBOOST = ROOT / "motor_output" / "stale_analysis" / "xgboost_predictions.npz"
 
 REPORTED_THRESHOLDS = (0.05, 0.10, 0.15)
 
@@ -99,8 +90,16 @@ def _parse_args() -> argparse.Namespace:
         "--sizes",
         type=int,
         nargs="+",
-        default=(1, 3, 5, 7, 10),
+        default=(1, 3, 5, 7, 10, 12),
         help="ensemble sizes for panel B, counted in training runs",
+    )
+    parser.add_argument(
+        "--monolithic-window",
+        type=int,
+        nargs=2,
+        default=MONOLITHIC_WINDOW,
+        metavar=("FIRST", "LAST"),
+        help="inclusive step window the monolithic snapshot arms average over",
     )
     parser.add_argument(
         "--pair",
@@ -117,29 +116,28 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def paired_bundles(run: str) -> list[Path]:
-    """One run's `step_014000` and `last` bundles."""
-    available = dict(checkpoint_bundles(RUNS / run))
-    return [available[stem] for stem in PAIRED_STEMS]
-
-
-def arm_definitions() -> dict[str, list[Path]]:
+def arm_definitions(window: tuple[int, int]) -> dict[str, list[Path]]:
     """Definitions for the different arms of the study.
 
     The roster checked is intentionally hardcoded to avoid silent failures.
+
+    Args:
+        window (tuple[int, int]): The monolithic arm's pre-collapse step window.
+
+    Returns:
+        dict[str, list[Path]]: One arm per key, each a list of member bundles.
     """
-    lora_paired = [path for run in LORA_RUNS for path in paired_bundles(run)]
-    monolithic_paired = [V3[stem] for stem in PAIRED_STEMS]
-    for run in MONOLITHIC_SEEDS:
-        monolithic_paired.extend(paired_bundles(run))
+    headline = dict(checkpoint_bundles(RUNS / MONOLITHIC_HEADLINE))
     return {
-        "monolithic_single": [V3["step_010000"]],
-        "monolithic_snapshot": list(V3.values()),
-        "monolithic_seeds": monolithic_paired,
+        "monolithic_single": [headline[by_loss_stem(MONOLITHIC_HEADLINE)]],
+        "monolithic_snapshot": monolithic_bundles(MONOLITHIC_HEADLINE, window),
+        "monolithic_seeds": [
+            path for run in MONOLITHIC_RUNS for path in monolithic_bundles(run, window)
+        ],
         "lora_all_last": [
             dict(checkpoint_bundles(RUNS / run))["last"] for run in LORA_RUNS
         ],
-        "lora_last2": lora_paired,
+        "lora_last2": [path for run in LORA_RUNS for path in lora_bundles(run)],
         "xgboost": [XGBOOST],
     }
 
@@ -152,9 +150,11 @@ def main() -> None:
     # the next grid point while the label still formats as "10%"
     thresholds = np.round(np.linspace(args.low, args.high, args.steps), 6)
 
-    definitions = arm_definitions()
+    definitions = arm_definitions(tuple(args.monolithic_window))
     flat = [path for paths in definitions.values() for path in paths]
-    stacked, targets, subjects = align_members([load_member(path) for path in flat])
+    stacked, targets, subjects = align_members(
+        drop_contested([load_member(path) for path in flat])
+    )
     targets = targets.astype(float)
     groups = _subject_groups(subjects)
 
@@ -175,6 +175,13 @@ def main() -> None:
         "n_subjects": len(groups),
         "prevalence": prevalence,
         "reported_thresholds": list(REPORTED_THRESHOLDS),
+        # recorded because panel B is sensitive to it: at (14000, 18000) the monolithic
+        # arm holds two checkpoints per seed and 92% of LoRA trios beat it at 10%; at
+        # (6000, 18000) it holds four and only 54% do. The wider window is the
+        # generous treatment of the comparator, so it is the default.
+        "monolithic_window": list(args.monolithic_window),
+        "lora_runs": LORA_RUNS,
+        "monolithic_runs": MONOLITHIC_RUNS,
         "arms": {},
         "references": {
             "treat_all": treat_all_net_benefit(targets, thresholds).tolist(),
@@ -186,7 +193,7 @@ def main() -> None:
     # joins the arms so it can take an ordinary paired interval like everything else
     run_members = np.stack(
         [
-            stacked[[flat.index(path) for path in paired_bundles(run)]].mean(axis=0)
+            stacked[[flat.index(path) for path in lora_bundles(run)]].mean(axis=0)
             for run in LORA_RUNS
         ]
     )
@@ -210,7 +217,7 @@ def main() -> None:
     if trio is not None:
         chosen = worst_subset(trio, budget)
         definitions["lora_worst_trio"] = [
-            path for index in chosen for path in paired_bundles(LORA_RUNS[index])
+            path for index in chosen for path in lora_bundles(LORA_RUNS[index])
         ]
         arms["lora_worst_trio"] = run_members[list(chosen)].mean(axis=0)
         report["worst_trio"] = {

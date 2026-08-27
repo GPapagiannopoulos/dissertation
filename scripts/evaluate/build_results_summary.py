@@ -19,96 +19,67 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "motor_output" / "runs"
 COMPARISON = ROOT / "motor_output" / "comparison"
 DEST = COMPARISON / "results_summary.json"
+NEWGRID = COMPARISON / "newgrid" / "comparison.json"
+PAIRING600 = COMPARISON / "newgrid" / "ensemble_vs_xgboost600.json"
 
-# (label, file, key) for results already scored side by side
+# (label, file, key) for results already scored side by side. The old-grid
+# `comparison.json` and `ablation_comparison.json` rows were removed on 2026-08-25:
+# they were measured on the 48h-start grid and cannot share a table with these.
 COMPARISONS: list[tuple[str, Path, str]] = [
-    ("XGBoost, full", COMPARISON / "comparison.json", "xgboost"),
-    (
-        "XGBoost, recency removed",
-        COMPARISON / "ablation_comparison.json",
-        "xgboost_norecency",
-    ),
-    ("MOTOR v1, bare head", COMPARISON / "comparison.json", "motor"),
+    ("XGBoost, 600 rounds", PAIRING600, "xgboost600"),
+    ("XGBoost, 300 rounds (round cap, not converged)", NEWGRID, "xgboost"),
+    ("MOTOR full fine-tune, seed 1, paired against it", NEWGRID, "motor"),
 ]
 
-# v3 was scored before the `selection/` convention, so its candidates sit here
-RANKING_FILES: list[tuple[str, Path]] = [
-    ("MOTOR v3 full fine-tune, seed 0", COMPARISON / "v3_candidates.json"),
-]
+RANKING_FILES: list[tuple[str, Path]] = []
 
-# (label, run folder) -- each contributes its highest-AUPRC scored checkpoint.
-# A folder that has not been scored yet contributes nothing, so a config queued but
-# not reached is simply absent rather than an error.
+# (label, run folder) -- each contributes the checkpoint its ranking selects BY
+# VALIDATION LOSS, which is the project's frozen rule. A folder that has not been
+# scored yet contributes nothing, so a config queued but not reached is simply
+# absent rather than an error.
 SINGLE_RUNS: list[tuple[str, str]] = [
-    ("MOTOR v3 full fine-tune, seed 1", "aki-seed1"),
-    ("MOTOR v3 full fine-tune, seed 2", "aki-seed2"),
-    ("LoRA r=8 q/v, 15k schedule, seed 0", "lora-seed0"),
-    ("LoRA r=8 q/v, 15k schedule, seed 1", "lora-seed1"),
-    ("LoRA r=8 q/v, 15k schedule, seed 2", "lora-seed2"),
-    ("LoRA r=8 q/v, 30k schedule, seed 0", "lora-seed0-30k"),
-    ("LoRA r=8 q/v, 30k schedule, seed 1", "lora-sched-seed1"),
-    ("LoRA r=8 q/v, 30k schedule, seed 2", "lora-sched-seed2"),
-    ("LoRA bagged 0.632, seed 10", "lora-bag10"),
-    ("LoRA bagged 0.632, seed 11", "lora-bag11"),
-    ("LoRA bagged 0.632, seed 12", "lora-bag12"),
-    # the target/rank sweep -- all seed 0, 30k schedule, so they differ only in
-    # which projections carry an adapter and at what rank
-    ("LoRA r=8 q/k/v/ff", "lora-cfg-all4-r8"),
-    ("LoRA r=16 q/k/v/ff", "lora-cfg-all4-r16"),
-    ("LoRA r=32 q/k/v/ff", "lora-cfg-all4-r32"),
-    ("LoRA r=8 ff only", "lora-cfg-ff-r8"),
-    ("LoRA r=8 o only", "lora-cfg-o-r8"),
-    ("LoRA r=8 q/k/v", "lora-cfg-qkv-r8"),
-    ("LoRA r=8 q/k/v/ff/o", "lora-cfg-all5-r8"),
-    # the alpha row: same four projections, alpha held at 32 instead of 4r
-    ("LoRA r=16 a=32 q/k/v/ff", "lora-cfg-all4-r16-a32"),
-    ("LoRA r=32 a=32 q/k/v/ff", "lora-cfg-all4-r32-a32"),
-    ("LoRA r=16 q/v", "lora-cfg-qv-r16"),
-    ("LoRA r=32 q/v", "lora-cfg-qv-r32"),
-    ("LoRA r=4 q/v", "lora-cfg-qv-r4"),
+    # the monolithic arm
+    ("MOTOR full fine-tune, seed 0, 30k", "ng-aki-seed0"),
+    ("MOTOR full fine-tune, seed 1, 30k", "ng-aki-seed1"),
+    ("MOTOR full fine-tune, seed 2, 30k", "ng-aki-seed2"),
+    ("MOTOR full fine-tune, seed 0, 15k", "ng-aki-seed0-15k"),
+    ("MOTOR full fine-tune, seed 0, lr 3e-6", "ng-aki-lowlr"),
+    # the rank ladder: q/k/v/ff, alpha held at 32, one 30k cosine each
+    ("LoRA r=2 a=32 q/k/v/ff", "ng-all4-r2-a32"),
+    ("LoRA r=4 a=32 q/k/v/ff", "ng-all4-r4-a32"),
+    ("LoRA r=8 a=32 q/k/v/ff", "ng-all4-r8"),
+    ("LoRA r=16 a=32 q/k/v/ff", "pilot-all4-r16-a32"),
+    ("LoRA r=32 a=32 q/k/v/ff", "ng-all4-r32-a32"),
+    # the alpha control: the same ranks with alpha scaled as 4r
+    ("LoRA r=16 a=64 q/k/v/ff", "ng-all4-r16"),
+    ("LoRA r=32 a=128 q/k/v/ff", "ng-all4-r32"),
+    # placement, all at r=8
+    ("LoRA r=8 q/k/v/ff/o", "ng-all5-r8"),
+    ("LoRA r=8 o only", "ng-o-r8"),
+    ("LoRA r=8 q/k/v", "ng-qkv-r8"),
+    ("LoRA r=8 ff only", "ng-ff-r8"),
+    ("LoRA r=8 q/v", "ng-qv-seed1"),
 ]
 
 ENSEMBLES: list[tuple[str, Path]] = [
-    ("LoRA ensemble of 3, seed-only, 15k", COMPARISON / "diversity_seed_only.json"),
-    ("LoRA ensemble of 3, bagged 0.632", COMPARISON / "diversity_bagged.json"),
-    ("LoRA ensemble of 3, seed-only, 30k", COMPARISON / "diversity_sched30k_n3.json"),
+    ("LoRA ensemble, 12 configs by loss", COMPARISON / "diversity_ng12.json"),
     (
-        "LoRA ensemble of 3, seed-only, 30k, best per member",
-        COMPARISON / "diversity_sched30k_n3_bestper.json",
-    ),
-    ("LoRA ensemble of 2, q/v + all4", COMPARISON / "diversity_qv_all4_n2.json"),
-    (
-        "LoRA ensemble of 4, 3 q/v seeds + all4",
-        COMPARISON / "diversity_qv3_all4_n4.json",
-    ),
-    ("LoRA ensemble of 2, all4 + ff", COMPARISON / "diversity_all4_ff_n2.json"),
-    (
-        "LoRA ensemble of 3, q/v + all4 + ff",
-        COMPARISON / "diversity_qv_all4_ff_n3.json",
-    ),
-    (
-        "LoRA ensemble, every swept config + q/v, step-matched",
-        COMPARISON / "diversity_all_configs.json",
-    ),
-    (
-        "LoRA ensemble, every swept config + q/v, best per member",
-        COMPARISON / "diversity_all_configs_bestper.json",
-    ),
-    # the defensible rule: each member's checkpoint chosen by validation LOSS, the
-    # reported metric is AUPRC, so selection and reporting are different quantities
-    (
-        "LoRA ensemble, every swept config + q/v, selected by loss",
-        COMPARISON / "diversity_all_configs_byloss.json",
+        "LoRA ensemble, 12 configs x (by-loss + last)",
+        COMPARISON / "diversity_ng23.json",
     ),
 ]
 
 
 def from_comparison(path: Path, key: str) -> dict[str, Any] | None:
-    """One model's metrics out of a `run_comparison` file."""
+    """One model's metrics out of a `run_comparison` file.
+
+    Falls back to the top level, because the ad-hoc pairing scripts write each
+    model as its own key rather than under `models`.
+    """
     if not path.is_file():
         return None
-    models = json.loads(path.read_text()).get("models", {})
-    return models.get(key)
+    report = json.loads(path.read_text())
+    return report.get("models", report).get(key)
 
 
 def best_of(ranking: Path) -> dict[str, Any] | None:
@@ -119,9 +90,23 @@ def best_of(ranking: Path) -> dict[str, Any] | None:
     return max(rows, key=lambda row: row["auprc"]) if rows else None
 
 
+def by_loss(ranking: Path) -> dict[str, Any] | None:
+    """The lowest-loss row of a list of scored candidates.
+
+    This is the project's frozen selection rule. Taking the highest-AUPRC row
+    instead -- as this script did until 2026-08-25 -- reports each run at a
+    checkpoint chosen on the metric being reported, which is the selection
+    optimism the rule exists to avoid.
+    """
+    if not ranking.is_file():
+        return None
+    rows = json.loads(ranking.read_text())
+    return min(rows, key=lambda row: row["loss"]) if rows else None
+
+
 def from_run(run: Path) -> dict[str, Any] | None:
-    """A run's highest-AUPRC scored checkpoint."""
-    return best_of(run / "selection" / "checkpoint_ranking.json")
+    """A run's by-loss scored checkpoint."""
+    return by_loss(run / "selection" / "checkpoint_ranking.json")
 
 
 def from_probe(path: Path) -> dict[str, Any] | None:
@@ -169,7 +154,7 @@ def collect() -> list[dict[str, Any]]:
     for label, path in RANKING_FILES:
         add(label, str(path.relative_to(ROOT)), best_of(path))
 
-    probe = ROOT / "motor_output" / "probe" / "probe_metrics.json"
+    probe = ROOT / "motor_output" / "probe-ng" / "probe_metrics.json"
     add("MOTOR frozen + linear probe", "probe", from_probe(probe))
 
     for label, name in SINGLE_RUNS:
@@ -207,7 +192,12 @@ def main() -> None:
 
     rows = collect()
     args.dest.parent.mkdir(parents=True, exist_ok=True)
-    summary = {"fold": "validation", "n_models": len(rows), "models": rows}
+    summary = {
+        "fold": "validation",
+        "checkpoint_rule": "minimum validation loss",
+        "n_models": len(rows),
+        "models": rows,
+    }
     args.dest.write_text(json.dumps(summary, indent=2))
 
     print(format_table(rows))

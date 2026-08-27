@@ -1,13 +1,13 @@
 """Subject-level bootstrap intervals, paired and unpaired.
 
-Confidence intervals resample **subjects**, not landmarks. The 12-hourly grid puts
-around nine highly correlated predictions inside one admission, so the validation
-fold's 445,814 rows carry the information of roughly 22,789 independent patients; a
+Confidence intervals resample subjects instead of landmarks. The 12-hourly grid puts
+around ten highly correlated predictions inside one admission, so the validation
+fold's 613,712 rows carry the information of roughly 26,534 independent patients; a
 row-level bootstrap would report an interval several times too narrow.
 
-The headline number is always the **paired** difference, not two per-model intervals.
-Those overlap freely even when one model wins on nearly every resample, because each
-carries the variance of the cohort; scoring both models on the same draw cancels it.
+The headline number is always the paired difference. Per-model intervals overlap even
+when one model wins on nearly every resample, because each carries the variance of
+the cohort. Scoring both models on the same draw cancels it out.
 """
 
 import numpy as np
@@ -26,6 +26,7 @@ def _subject_groups(subjects: np.ndarray) -> list[np.ndarray]:
     """
     unique, inverse = np.unique(subjects, return_inverse=True)
     order = np.argsort(inverse, kind="stable")
+    # indexes where each new subject index begins
     boundaries = np.searchsorted(inverse[order], np.arange(unique.size + 1))
     return [order[boundaries[i] : boundaries[i + 1]] for i in range(unique.size)]
 
@@ -48,9 +49,8 @@ def bootstrap_interval(
 ) -> tuple[float, float]:
     """A subject-level bootstrap interval for one metric.
 
-    Subjects are resampled with replacement and every landmark belonging to a drawn
-    subject comes along, which is what preserves the within-admission correlation the
-    interval has to account for.
+    Subjects are resampled with replacement. All of the subject landmarks are included.
+    This accounts for the inter-admission correlation between landmarks.
 
     Args:
         scores (np.ndarray): Predicted probabilities.
@@ -63,7 +63,16 @@ def bootstrap_interval(
 
     Returns:
         tuple[float, float]: The lower and upper bounds.
+
+    Raises:
+        ValueError: if the shapes of the input ndarrays do not match
     """
+    shapes = {scores.shape, targets.shape, subjects.shape}
+    if len(shapes) != 1:
+        raise ValueError(
+            "The shapes of 'scores', 'targets', and 'subjects' do not match."
+        )
+
     rng = np.random.default_rng(seed)
     groups = _subject_groups(subjects)
 
@@ -91,18 +100,11 @@ def paired_interval(
     seed: int = 0,
     alpha: float = 0.05,
 ) -> tuple[float, float, float]:
-    """A subject-level interval on the DIFFERENCE between two models.
+    """A subject-level interval on the difference between two models.
 
-    This is the interval the thesis' claim actually rests on, and it is not
-    recoverable from the two one-model intervals: those overlap freely even when one
-    model beats the other on nearly every resample, because they carry the variance
-    of the cohort itself. Scoring both models on the SAME draw cancels that variance
-    -- a draw that happens to contain easy patients is easy for both -- so what
-    survives is the difference in the models.
-
-    That is also why both arrays must be aligned row for row beforehand: the pairing
-    is the whole mechanism, and misaligned rows would silently turn this back into an
-    unpaired comparison with a spuriously tight interval.
+    One model intervals overlap freely even when one model beats the other on nearly
+    every resample, because they carry the variance of the cohort itself. Scoring both
+    models on the same draw cancels out the covariance.
 
     Args:
         left (np.ndarray): The first model's scores.
