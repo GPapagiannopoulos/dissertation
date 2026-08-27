@@ -1,16 +1,4 @@
-"""How much two ensemble members actually disagree.
-
-Individual AUPRCs say nothing about whether members are worth combining: two models
-at 0.162 that rank the same patients identically add nothing, and averaging them
-returns 0.162. So the quantities here are pairwise disagreement and the gain from
-averaging, not per-member accuracy.
-
-**Correlation of predicted probabilities is deliberately not the headline.** The fold
-is 3.55% positive, so ~96% of rows are easy negatives every member gets right, and a
-Pearson correlation over them reads ~0.99 for any pair. `flag_overlap` asks the
-question the task is actually posed as -- given a 1% alert budget, do two members
-flag the same patients?
-"""
+"""Module for measuring module disagreement between members."""
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -33,7 +21,7 @@ class Member(NamedTuple):
         scores (np.ndarray): Predicted probabilities.
         targets (np.ndarray): The binary labels.
         subjects (np.ndarray): The subject each label belongs to.
-        times (np.ndarray): Each label's prediction time, microseconds since epoch.
+        times (np.ndarray): Each label's prediction time, in microseconds since epoch.
     """
 
     scores: np.ndarray
@@ -101,10 +89,10 @@ def _step_order(stem: str) -> tuple[int, int]:
 
 
 def subject_halves(subjects: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
-    """Splits rows into two halves by SUBJECT, never by row.
+    """Splits rows into two halves by subject.
 
-    A subject contributes ~9 correlated landmarks, so a row-level split would leak the
-    same patient into both halves and make the held-out number optimistic again.
+    A subject contributes ~11 correlated landmarks, so a row-level split would leak the
+    same patient into both halves and make the held-out number overly optimistic.
 
     Args:
         subjects (np.ndarray): The subject each row belongs to.
@@ -124,9 +112,8 @@ def align_members(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Puts every member's scores on one common row order.
 
-    Members are sorted onto `(subject, time)` rather than trusted to share a row
-    order. They are produced by separate scoring passes, and a silent misalignment
-    would compare one landmark's score against another's -- which reads as diversity.
+    Members are sorted by `(subject, time)` to prevent misalignment of scores.
+    Comparison of scores that occurred in different landmarks inflates diversity.
 
     Args:
         members (Sequence[Member]): Two or more members' predictions.
@@ -194,7 +181,7 @@ def top_flagged(scores: np.ndarray, k: float) -> np.ndarray:
 
 
 def flag_overlap(left: np.ndarray, right: np.ndarray, *, k: float = 0.01) -> float:
-    """Jaccard overlap of two members' flagged sets -- the headline diversity number.
+    """Jaccard overlap of two members' flagged sets.
 
     Args:
         left (np.ndarray): One member's scores.
@@ -224,6 +211,19 @@ def rank_correlation(left: np.ndarray, right: np.ndarray) -> float:
         float: The correlation.
     """
     return float(spearmanr(left, right).statistic)
+
+
+def alert_region(scores: np.ndarray, k: float) -> np.ndarray:
+    """The rows the ensemble mean flags under a `k` alert budget.
+
+    Args:
+        scores (np.ndarray): Aligned scores, (n_members, n_labels).
+        k (float): The alert budget.
+
+    Returns:
+        np.ndarray: The flagged row indices, ascending.
+    """
+    return top_flagged(scores.mean(axis=0), k)
 
 
 def pairwise(
@@ -343,13 +343,16 @@ def diversity_report(
 
     Returns:
         dict[str, object]: `n_members`, `n_labels`, the mean and minimum pairwise
-            `flag_overlap` and `rank_correlation`, and everything `ensemble_gain`
-            returns. The MINIMUM matters as much as the mean: one genuinely
-            different member is what an ensemble needs, and a mean hides it.
+            `flag_overlap` and `rank_correlation`, the same rank correlation
+            restricted to the ensemble's alert region as
+            `mean_alert_rank_correlation` and `min_alert_rank_correlation`, and
+            everything `ensemble_gain` returns.
     """
     scores, targets, subjects = align_members(members)
+    region = scores[:, alert_region(scores, k)]
     overlaps = off_diagonal(pairwise(scores, lambda a, b: flag_overlap(a, b, k=k)))
     correlations = off_diagonal(pairwise(scores, rank_correlation))
+    alert_correlations = off_diagonal(pairwise(region, rank_correlation))
 
     return {
         "n_members": float(scores.shape[0]),
@@ -359,6 +362,8 @@ def diversity_report(
         "min_flag_overlap": float(overlaps.min()),
         "mean_rank_correlation": float(correlations.mean()),
         "min_rank_correlation": float(correlations.min()),
+        "mean_alert_rank_correlation": float(alert_correlations.mean()),
+        "min_alert_rank_correlation": float(alert_correlations.min()),
         **ensemble_gain(scores, targets, subjects, resamples=resamples),
     }
 
@@ -381,6 +386,9 @@ def format_report(report: dict[str, object], title: str) -> str:
         f"min {report['min_flag_overlap']:.4f}",
         f"  rank correlation      mean {report['mean_rank_correlation']:.4f}   "
         f"min {report['min_rank_correlation']:.4f}",
+        f"  rank corr @{report['alert_budget']:.0%}       "
+        f"mean {report['mean_alert_rank_correlation']:.4f}   "
+        f"min {report['min_alert_rank_correlation']:.4f}",
         f"  auprc  members {report['mean_member_auprc']:.4f} "
         f"(best {report['best_member_auprc']:.4f})   "
         f"ensemble {report['ensemble_auprc']:.4f}",
