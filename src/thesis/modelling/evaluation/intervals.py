@@ -67,14 +67,14 @@ def bootstrap_interval(
     Raises:
         ValueError: if the shapes of the input ndarrays do not match
     """
-    rng = np.random.default_rng(seed)
-    groups = _subject_groups(subjects)
-
     shapes = {scores.shape, targets.shape, subjects.shape}
     if len(shapes) != 1:
         raise ValueError(
             "The shapes of 'scores', 'targets', and 'subjects' do not match."
         )
+
+    rng = np.random.default_rng(seed)
+    groups = _subject_groups(subjects)
 
     draws: list[float] = []
     for _ in range(resamples):
@@ -100,18 +100,11 @@ def paired_interval(
     seed: int = 0,
     alpha: float = 0.05,
 ) -> tuple[float, float, float]:
-    """A subject-level interval on the DIFFERENCE between two models.
+    """A subject-level interval on the difference between two models.
 
-    This is the interval the thesis' claim actually rests on, and it is not
-    recoverable from the two one-model intervals: those overlap freely even when one
-    model beats the other on nearly every resample, because they carry the variance
-    of the cohort itself. Scoring both models on the SAME draw cancels that variance
-    -- a draw that happens to contain easy patients is easy for both -- so what
-    survives is the difference in the models.
-
-    That is also why both arrays must be aligned row for row beforehand: the pairing
-    is the whole mechanism, and misaligned rows would silently turn this back into an
-    unpaired comparison with a spuriously tight interval.
+    One model intervals overlap freely even when one model beats the other on nearly
+    every resample, because they carry the variance of the cohort itself. Scoring both
+    models on the same draw cancels out the covariance.
 
     Args:
         left (np.ndarray): The first model's scores.
