@@ -1,7 +1,7 @@
 """Module implementing decision-curve analysis (DCA).
 
 AUPRC and AUROC read the ordering of predictions which don't reflect clinical practice.
-A clinician does acts when the predicted risk crosses a threshold. Choosing to act at
+A clinician acts when the predicted risk crosses a threshold. Choosing to act above
 `t` means being indifferent between acting and not acting at risk `t`, so one true
 positive is worth `t / (1 - t)` false alarms. Sweeping `t` therefore sweeps every
 exchange rate a clinician might hold.
@@ -23,7 +23,7 @@ import numpy as np
 class SubsetCurves(NamedTuple):
     """Net benefit over every ensemble of one size.
 
-    The spread here is over WHICH MEMBERS were picked, not over which patients were
+    The spread here is over which members were picked, not over which patients were
     studied. Those are independent uncertainties and a subject-level bootstrap is still
     needed for the second.
 

@@ -232,7 +232,7 @@ def pairwise(
     """Applies a two-member metric across every pair.
 
     Args:
-        scores (np.ndarray): Aligned scores, (n_members, n_labels).
+        scores (np.ndarray): Aligned scores matrix, (n_members, n_labels).
         metric (Callable): Takes two score vectors, returns a float.
 
     Returns:
