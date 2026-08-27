@@ -268,42 +268,30 @@ def ensemble_gain(
 ) -> dict[str, float]:
     """What averaging the members actually buys.
 
-    The ensemble is the mean of the members' probabilities. Scored through
-    `binary_metrics` so no metric definition can drift from the rest of the project.
+    The ensemble is the arithmetic mean of the members' probabilities. It is scored
+    through 'binary_metrics'.
 
-    Given `subjects`, the gain over the best member also carries a **paired**
-    subject-level interval. Unpaired intervals on the two would overlap freely even
-    when the ensemble wins on nearly every resample, so an uncertainty quoted any
-    other way does not support the claim.
+    Given `subjects`, the gain over the best member also carries a paired
+    subject-level interval to account for covariance.
 
     Args:
-        scores (np.ndarray): Aligned scores, (n_members, n_labels).
+        scores (np.ndarray): Aligned score matrix, (n_members, n_labels).
         targets (np.ndarray): The shared labels.
         subjects (np.ndarray | None): The subject each row belongs to. Omitted, the
             interval is skipped.
         resamples (int): Bootstrap draws for that interval.
         seed (int): Seeds the draws.
 
-    Calibration is reported alongside discrimination because averaging improves it
-    too, and by more: measured over three seed-only members, ECE fell 0.0034 -> 0.0020
-    while AUPRC rose 0.1622 -> 0.1683. Members are individually well calibrated but
-    noisy, and the mean cancels the noise.
-
     Returns:
         dict[str, float]: `ensemble_auprc`, `mean_member_auprc`,
-            `best_member_auprc`, `auprc_gain`, and `gain_over_best` -- the number
-            that justifies an ensemble, since shipping the single best member is
-            always the alternative -- plus `gain_over_best_lo`/`_hi` when subjects
-            are given, and `ensemble_brier`/`ensemble_ece` against
-            `mean_member_brier`/`mean_member_ece`.
+            `best_member_auprc`,`auprc_gain`,`gain_over_best`,`gain_over_best_lo`/`_hi`,
+            `ensemble_brier`/`ensemble_ece`, `mean_member_brier`/`mean_member_ece`.
     """
     scored = [binary_metrics(row, targets) for row in scores]
     members = [metrics["auprc"] for metrics in scored]
     best = int(np.argmax(members))
 
-    # the arithmetic mean of PROBABILITIES, the deep-ensembles convention. Averaging
-    # logits instead is the geometric mean of the odds and is sharper; measured here
-    # the two agree to 1e-4 on AUPRC and ECE, so the choice is not load-bearing.
+    # the arithmetic mean of probabilities as per the deep-ensembles convention
     ensemble_scores = scores.mean(axis=0)
     ensemble = binary_metrics(ensemble_scores, targets)
 
