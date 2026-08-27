@@ -55,7 +55,8 @@ def binary_entropy(probabilities: np.ndarray) -> np.ndarray:
         probabilities (np.ndarray): Probabilities of the positive class, any shape.
 
     Returns:
-        np.ndarray: Entropy, elementwise. Zero at 0 and 1, maximal `ln 2` at a half.
+        np.ndarray: Entropy, elementwise. Approaches zero at 0 and 1, maximal
+            `ln 2` at a half.
     """
     clipped = np.clip(probabilities, EPSILON, 1.0 - EPSILON)
     return -(clipped * np.log(clipped) + (1 - clipped) * np.log(1 - clipped))
