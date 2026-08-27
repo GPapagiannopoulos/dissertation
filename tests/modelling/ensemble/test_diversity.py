@@ -11,7 +11,9 @@ import pytest
 
 from thesis.modelling.ensemble.diversity import (
     Member,
+    alert_region,
     align_members,
+    diversity_report,
     ensemble_gain,
     flag_overlap,
     load_member,
@@ -182,3 +184,49 @@ def test_the_interval_is_only_computed_when_subjects_are_given() -> None:
     assert "gain_over_best_lo" in ensemble_gain(
         scores, targets, np.arange(4), resamples=5
     )
+
+
+def test_the_alert_region_comes_from_the_ensemble_mean() -> None:
+    """The region is fixed by the members' mean, not by either member alone."""
+    scores = np.array([[0.9, 0.1, 0.4, 0.4], [0.1, 0.9, 0.4, 0.4]])
+
+    assert alert_region(scores, 0.5).tolist() == [0, 1]
+    assert top_flagged(scores[0], 0.5).tolist() == [0, 2]
+
+
+def test_the_alert_region_honours_the_budget_guard() -> None:
+    """It delegates to `top_flagged`, so the same budgets are refused."""
+    scores = np.array([[0.9, 0.1], [0.1, 0.9]])
+
+    with pytest.raises(ValueError, match="alert budget"):
+        alert_region(scores, 0.0)
+
+
+def test_the_report_separates_global_from_alert_region_rank_correlation() -> None:
+    """Members agreeing on the bulk can still rank the flagged rows oppositely."""
+    bulk = [0.10, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03]
+    targets = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+    left = make_member([0.9, 0.8, *bulk], targets)
+    right = make_member([0.8, 0.9, *bulk], targets)
+
+    report = diversity_report([left, right], k=0.2, resamples=20)
+
+    assert report["mean_rank_correlation"] > 0.9
+    assert report["mean_alert_rank_correlation"] == pytest.approx(-1.0)
+    assert report["min_alert_rank_correlation"] == pytest.approx(-1.0)
+
+
+def test_the_report_restricts_every_pair_to_one_shared_region() -> None:
+    """The region is the ensemble's, so each pair is scored on the same rows."""
+    bulk = [0.10, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03]
+    targets = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+    members = [
+        make_member([0.9, 0.8, *bulk], targets),
+        make_member([0.8, 0.9, *bulk], targets),
+        make_member([0.9, 0.8, *bulk], targets),
+    ]
+
+    report = diversity_report(members, k=0.2, resamples=20)
+
+    assert report["min_alert_rank_correlation"] == pytest.approx(-1.0)
+    assert report["mean_alert_rank_correlation"] == pytest.approx(-1.0 / 3.0)
