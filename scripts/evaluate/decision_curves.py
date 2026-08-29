@@ -60,7 +60,8 @@ from thesis.modelling.ensemble.roster import (
     MONOLITHIC_WINDOW,
     ROOT,
     RUNS,
-    XGBOOST,
+    SELECTION,
+    baseline_bundle,
     by_loss_stem,
     drop_contested,
     lora_bundles,
@@ -112,33 +113,45 @@ def _parse_args() -> argparse.Namespace:
         "--resamples", type=int, default=2000, help="subject draws; 0 skips intervals"
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--fold",
+        default="validation",
+        help="which fold's banked bundles to read; selection stays on validation",
+    )
     parser.add_argument("--dest", type=Path, default=None)
     return parser.parse_args()
 
 
-def arm_definitions(window: tuple[int, int]) -> dict[str, list[Path]]:
+def arm_definitions(
+    window: tuple[int, int], fold: str = "validation"
+) -> dict[str, list[Path]]:
     """Definitions for the different arms of the study.
 
     The roster checked is intentionally hardcoded to avoid silent failures.
 
     Args:
         window (tuple[int, int]): The monolithic arm's pre-collapse step window.
+        fold (str): Which fold's banked bundles each arm is built from. Checkpoint
+            SELECTION always happens on validation, whatever this says.
 
     Returns:
         dict[str, list[Path]]: One arm per key, each a list of member bundles.
     """
-    headline = dict(checkpoint_bundles(RUNS / MONOLITHIC_HEADLINE))
+    subdir = SELECTION[fold]
+    headline = dict(checkpoint_bundles(RUNS / MONOLITHIC_HEADLINE, subdir))
     return {
         "monolithic_single": [headline[by_loss_stem(MONOLITHIC_HEADLINE)]],
-        "monolithic_snapshot": monolithic_bundles(MONOLITHIC_HEADLINE, window),
+        "monolithic_snapshot": monolithic_bundles(MONOLITHIC_HEADLINE, window, fold),
         "monolithic_seeds": [
-            path for run in MONOLITHIC_RUNS for path in monolithic_bundles(run, window)
+            path
+            for run in MONOLITHIC_RUNS
+            for path in monolithic_bundles(run, window, fold)
         ],
         "lora_all_last": [
-            dict(checkpoint_bundles(RUNS / run))["last"] for run in LORA_RUNS
+            dict(checkpoint_bundles(RUNS / run, subdir))["last"] for run in LORA_RUNS
         ],
-        "lora_last2": [path for run in LORA_RUNS for path in lora_bundles(run)],
-        "xgboost": [XGBOOST],
+        "lora_last2": [path for run in LORA_RUNS for path in lora_bundles(run, fold)],
+        "xgboost": [baseline_bundle(fold)],
     }
 
 
@@ -150,7 +163,7 @@ def main() -> None:
     # the next grid point while the label still formats as "10%"
     thresholds = np.round(np.linspace(args.low, args.high, args.steps), 6)
 
-    definitions = arm_definitions(tuple(args.monolithic_window))
+    definitions = arm_definitions(tuple(args.monolithic_window), args.fold)
     flat = [path for paths in definitions.values() for path in paths]
     stacked, targets, subjects = align_members(
         drop_contested([load_member(path) for path in flat])
@@ -179,6 +192,7 @@ def main() -> None:
         # arm holds two checkpoints per seed and 92% of LoRA trios beat it at 10%; at
         # (6000, 18000) it holds four and only 54% do. The wider window is the
         # generous treatment of the comparator, so it is the default.
+        "fold": args.fold,
         "monolithic_window": list(args.monolithic_window),
         "lora_runs": LORA_RUNS,
         "monolithic_runs": MONOLITHIC_RUNS,
@@ -193,7 +207,9 @@ def main() -> None:
     # joins the arms so it can take an ordinary paired interval like everything else
     run_members = np.stack(
         [
-            stacked[[flat.index(path) for path in lora_bundles(run)]].mean(axis=0)
+            stacked[[flat.index(path) for path in lora_bundles(run, args.fold)]].mean(
+                axis=0
+            )
             for run in LORA_RUNS
         ]
     )
@@ -217,7 +233,9 @@ def main() -> None:
     if trio is not None:
         chosen = worst_subset(trio, budget)
         definitions["lora_worst_trio"] = [
-            path for index in chosen for path in lora_bundles(LORA_RUNS[index])
+            path
+            for index in chosen
+            for path in lora_bundles(LORA_RUNS[index], args.fold)
         ]
         arms["lora_worst_trio"] = run_members[list(chosen)].mean(axis=0)
         report["worst_trio"] = {

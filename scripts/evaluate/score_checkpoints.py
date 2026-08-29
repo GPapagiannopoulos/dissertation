@@ -50,6 +50,16 @@ def _parse_args() -> argparse.Namespace:
         "other, so scoring all of them buys precision nobody uses",
     )
     parser.add_argument(
+        "--checkpoints",
+        nargs="+",
+        default=None,
+        metavar="STEM",
+        help="score exactly these checkpoint stems (e.g. step_018000 last) and no "
+        "others, overriding --stride. This is how a frozen set is scored on the test "
+        "fold: naming the set means no other test-fold number is ever produced, so "
+        "there is no fuller ladder on disk to re-select from later",
+    )
+    parser.add_argument(
         "--dest",
         type=Path,
         default=None,
@@ -59,19 +69,29 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def candidates(run: Path, stride: int) -> list[Path]:
+def candidates(run: Path, stride: int, stems: list[str] | None = None) -> list[Path]:
     """The checkpoints to score, in step order, always including the last.
 
     Args:
         run (Path): A folder `run_training` wrote.
         stride (int): Keep every Nth periodic save.
+        stems (list[str] | None): Score exactly these stems instead of striding.
 
     Returns:
         list[Path]: Checkpoint paths, ascending by step.
 
     Raises:
-        FileNotFoundError: If the folder holds no checkpoint at all.
+        FileNotFoundError: If the folder holds no checkpoint at all, or if a named
+            stem is missing -- silently scoring a smaller set than was asked for is
+            how a frozen roster quietly becomes a different one.
     """
+    if stems is not None:
+        named = [run / f"{stem}.pt" for stem in dict.fromkeys(stems)]
+        missing = [path.name for path in named if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(f"{run} holds no {', '.join(missing)}.")
+        return named
+
     periodic = sorted(run.glob("step_*.pt"))[::stride]
     final = run / "last.pt"
     chosen = [*periodic, *([final] if final.is_file() else [])]
@@ -119,7 +139,7 @@ def main() -> None:
     dest = args.dest or args.run / "selection"
     dest.mkdir(parents=True, exist_ok=True)
 
-    chosen = candidates(args.run, args.stride)
+    chosen = candidates(args.run, args.stride, args.checkpoints)
     print(f"run   {args.run}")
     print(f"fold  {args.fold}")
     print(f"scoring {len(chosen)} checkpoints at ~12 min each", flush=True)
@@ -144,7 +164,14 @@ def main() -> None:
         )
         np.savez(dest / f"{checkpoint.stem}_predictions.npz", *bundle)
 
-        rows.append({**metrics, "checkpoint": checkpoint.name, "step": float(step)})
+        rows.append(
+            {
+                **metrics,
+                "checkpoint": checkpoint.name,
+                "step": float(step),
+                "fold": args.fold,
+            }
+        )
         print(
             f"   loss {metrics['loss']:.5f} | auprc {metrics['auprc']:.4f} "
             f"[{metrics['auprc_lo']:.4f}, {metrics['auprc_hi']:.4f}] | "

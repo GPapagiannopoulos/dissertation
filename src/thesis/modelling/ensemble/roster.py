@@ -53,6 +53,11 @@ MONOLITHIC_HEADLINE = "ng-aki-seed1"
 # the 300-round model is `newgrid/xgboost_predictions.npz` and reads 0.0014 lower
 XGBOOST = NEWGRID / "xgboost600_predictions.npz"
 
+# where each fold's banked predictions live. They are kept apart because
+# `score_checkpoints.py` defaults to writing into `selection`, and scoring the test
+# fold there would overwrite every validation bundle the reported numbers rest on.
+SELECTION = {"validation": "selection", "testing": "selection_test"}
+
 
 def by_loss_stem(run: str) -> str:
     """The checkpoint the frozen rule selects on one run's ladder.
@@ -64,9 +69,13 @@ def by_loss_stem(run: str) -> str:
         str: The checkpoint stem, e.g. `step_018000`.
 
     Raises:
-        FileNotFoundError: If the run has not been scored.
+        FileNotFoundError: If the run has not been scored on validation.
     """
-    ranking = RUNS / run / "selection" / "checkpoint_ranking.json"
+    # ALWAYS the validation ladder, whatever fold is being scored. Choosing a
+    # checkpoint on the fold you then report is the selection optimism the freeze
+    # exists to prevent, and the two ladders DO disagree: `ng-aki-seed2` selects
+    # step_018000 on validation and step_006000 on test.
+    ranking = RUNS / run / SELECTION["validation"] / "checkpoint_ranking.json"
     if not ranking.is_file():
         raise FileNotFoundError(
             f"{run} has no {ranking.name}; score it first with "
@@ -76,7 +85,7 @@ def by_loss_stem(run: str) -> str:
     return Path(min(rows, key=lambda row: row["loss"])["checkpoint"]).stem
 
 
-def lora_bundles(run: str) -> list[Path]:
+def lora_bundles(run: str, fold: str = "validation") -> list[Path]:
     """One LoRA run's by-loss and `last` bundles, deduplicated.
 
     A run whose loss never turned selects its own `last`, and the two stems collapse to
@@ -84,21 +93,26 @@ def lora_bundles(run: str) -> list[Path]:
 
     Args:
         run (str): A run folder name under `motor_output/runs`.
+        fold (str): Which fold's banked bundles to return. The STEM is still
+            chosen on validation; only the predictions come from this fold.
 
     Returns:
         list[Path]: One or two banked prediction bundles.
     """
-    available = dict(checkpoint_bundles(RUNS / run))
+    available = dict(checkpoint_bundles(RUNS / run, SELECTION[fold]))
     stems = dict.fromkeys([by_loss_stem(run), "last"])
     return [available[stem] for stem in stems]
 
 
-def monolithic_bundles(run: str, window: tuple[int, int]) -> list[Path]:
+def monolithic_bundles(
+    run: str, window: tuple[int, int], fold: str = "validation"
+) -> list[Path]:
     """One full fine-tune's pre-collapse checkpoints.
 
     Args:
         run (str): A run folder name under `motor_output/runs`.
         window (tuple[int, int]): Inclusive first and last training step to keep.
+        fold (str): Which fold's banked bundles to return.
 
     Returns:
         list[Path]: The banked bundles inside the window, in step order.
@@ -109,7 +123,7 @@ def monolithic_bundles(run: str, window: tuple[int, int]) -> list[Path]:
     low, high = window
     kept = [
         path
-        for stem, path in checkpoint_bundles(RUNS / run)
+        for stem, path in checkpoint_bundles(RUNS / run, SELECTION[fold])
         if stem.startswith("step_") and low <= int(stem.removeprefix("step_")) <= high
     ]
     if not kept:
@@ -117,9 +131,24 @@ def monolithic_bundles(run: str, window: tuple[int, int]) -> list[Path]:
     return kept
 
 
-def lora_ensemble() -> list[Path]:
-    """The project's headline LoRA ensemble: every run's by-loss checkpoint and last."""
-    return [path for run in LORA_RUNS for path in lora_bundles(run)]
+def lora_ensemble(fold: str = "validation") -> list[Path]:
+    """The headline LoRA ensemble: every run's by-loss checkpoint and its last.
+
+    Args:
+        fold (str): Which fold's banked bundles to return.
+
+    Returns:
+        list[Path]: 23 bundles -- twelve runs at two checkpoints each, less the one
+            run whose loss never turned and whose by-loss pick IS its own `last`.
+    """
+    return [path for run in LORA_RUNS for path in lora_bundles(run, fold)]
+
+
+def baseline_bundle(fold: str = "validation") -> Path:
+    """The 600-round booster's banked predictions for a fold."""
+    if fold == "validation":
+        return XGBOOST
+    return NEWGRID / f"xgboost600_{fold}_predictions.npz"
 
 
 def drop_contested(members: list[Member]) -> list[Member]:

@@ -52,11 +52,14 @@ def load_member(path: Path) -> Member:
     return Member(*arrays)
 
 
-def checkpoint_bundles(run: Path) -> list[tuple[str, Path]]:
+def checkpoint_bundles(run: Path, subdir: str = "selection") -> list[tuple[str, Path]]:
     """Every scored checkpoint of one run, ordered by training step.
 
     Args:
-        run (Path): A run folder holding `selection/*_predictions.npz`.
+        run (Path): A run folder holding `<subdir>/*_predictions.npz`.
+        subdir (str): Which scoring folder to read. `selection` holds the validation
+            pass; `selection_test` holds the test pass, kept apart so scoring test
+            cannot overwrite the validation bundles every reported number rests on.
 
     Returns:
         list[tuple[str, Path]]: `(checkpoint stem, bundle path)`. `last` sorts after
@@ -68,12 +71,11 @@ def checkpoint_bundles(run: Path) -> list[tuple[str, Path]]:
     """
     suffix = "_predictions.npz"
     found = [
-        (path.name[: -len(suffix)], path)
-        for path in (run / "selection").glob(f"*{suffix}")
+        (path.name[: -len(suffix)], path) for path in (run / subdir).glob(f"*{suffix}")
     ]
     if not found:
         raise FileNotFoundError(
-            f"{run} has no banked predictions; score it first with "
+            f"{run}/{subdir} has no banked predictions; score it first with "
             f"scripts/evaluate/score_checkpoints.py."
         )
     return sorted(found, key=lambda pair: _step_order(pair[0]))
