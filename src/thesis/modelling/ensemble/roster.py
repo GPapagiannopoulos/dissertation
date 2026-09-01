@@ -151,6 +151,41 @@ def baseline_bundle(fold: str = "validation") -> Path:
     return NEWGRID / f"xgboost600_{fold}_predictions.npz"
 
 
+def arm_definitions(
+    window: tuple[int, int] = MONOLITHIC_WINDOW, fold: str = "validation"
+) -> dict[str, list[Path]]:
+    """Every arm of the study, as the banked bundles that make it up.
+
+    The roster is intentionally hardcoded rather than globbed, and it lives here
+    rather than in one driver so the decision curves, the calibration curves and the
+    headline pairing cannot drift into measuring different ensembles.
+
+    Args:
+        window (tuple[int, int]): The monolithic arm's pre-collapse step window.
+        fold (str): Which fold's banked bundles each arm is built from. Checkpoint
+            SELECTION always happens on validation, whatever this says.
+
+    Returns:
+        dict[str, list[Path]]: One arm per key, each a list of member bundles.
+    """
+    subdir = SELECTION[fold]
+    headline = dict(checkpoint_bundles(RUNS / MONOLITHIC_HEADLINE, subdir))
+    return {
+        "monolithic_single": [headline[by_loss_stem(MONOLITHIC_HEADLINE)]],
+        "monolithic_snapshot": monolithic_bundles(MONOLITHIC_HEADLINE, window, fold),
+        "monolithic_seeds": [
+            path
+            for run in MONOLITHIC_RUNS
+            for path in monolithic_bundles(run, window, fold)
+        ],
+        "lora_all_last": [
+            dict(checkpoint_bundles(RUNS / run, subdir))["last"] for run in LORA_RUNS
+        ],
+        "lora_last2": [path for run in LORA_RUNS for path in lora_bundles(run, fold)],
+        "xgboost": [baseline_bundle(fold)],
+    }
+
+
 def drop_contested(members: list[Member]) -> list[Member]:
     """Removes landmarks that `(subject, time)` cannot identify uniquely.
 

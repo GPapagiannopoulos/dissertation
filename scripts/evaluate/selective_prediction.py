@@ -79,6 +79,12 @@ def _parse_args() -> argparse.Namespace:
         "--resamples", type=int, default=2000, help="subject draws; 0 skips intervals"
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--fold",
+        choices=("validation", "testing"),
+        default="validation",
+        help="which fold's banked bundles to read; `testing` reads selection_test",
+    )
     parser.add_argument("--dest", type=Path, default=None)
     return parser.parse_args()
 
@@ -110,7 +116,7 @@ def main() -> None:
     """Measures every signal at every budget, then bands the headline difference."""
     args = _parse_args()
 
-    paths = lora_ensemble()
+    paths = lora_ensemble(args.fold)
     members, targets, subjects = align_members(
         drop_contested([load_member(path) for path in paths])
     )
@@ -120,8 +126,8 @@ def main() -> None:
     coverages = np.asarray(args.coverages, dtype=float)
 
     print(
-        f"{len(paths)} members, {targets.size:,} landmarks, {len(groups):,} subjects, "
-        f"prevalence {targets.mean():.4%}\n"
+        f"{args.fold} fold: {len(paths)} members, {targets.size:,} landmarks, "
+        f"{len(groups):,} subjects, prevalence {targets.mean():.4%}\n"
     )
 
     signals = disagreement_signals(members, bins=args.bins)

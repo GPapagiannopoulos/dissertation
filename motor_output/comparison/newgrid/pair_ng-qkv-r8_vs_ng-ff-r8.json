@@ -1,0 +1,23 @@
+{
+  "label": "ng-qkv-r8_vs_ng-ff-r8",
+  "n_members": 2.0,
+  "n_labels": 613712.0,
+  "alert_budget": 0.01,
+  "mean_flag_overlap": 0.4392589118198874,
+  "min_flag_overlap": 0.4392589118198874,
+  "mean_rank_correlation": 0.911350238036246,
+  "min_rank_correlation": 0.911350238036246,
+  "mean_alert_rank_correlation": 0.371365967069262,
+  "min_alert_rank_correlation": 0.371365967069262,
+  "ensemble_auprc": 0.17064345934908426,
+  "mean_member_auprc": 0.16344547835840934,
+  "best_member_auprc": 0.16527759367960537,
+  "auprc_gain": 0.007197980990674924,
+  "gain_over_best": 0.0053658656694788864,
+  "ensemble_brier": 0.030029485002160072,
+  "ensemble_ece": 0.0012749673440399004,
+  "mean_member_brier": 0.030173216946423054,
+  "mean_member_ece": 0.0017582633974711622,
+  "gain_over_best_lo": 0.003763901926519106,
+  "gain_over_best_hi": 0.00724284038585296
+}

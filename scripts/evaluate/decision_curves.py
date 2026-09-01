@@ -45,27 +45,18 @@ from thesis.modelling.ensemble.decision_curve import (
     treat_all_net_benefit,
     worst_subset,
 )
-from thesis.modelling.ensemble.diversity import (
-    align_members,
-    checkpoint_bundles,
-    load_member,
-)
+from thesis.modelling.ensemble.diversity import align_members, load_member
 
 # the roster lives in one module so this analysis and the selective-prediction one
 # cannot drift into measuring different ensembles
 from thesis.modelling.ensemble.roster import (
     LORA_RUNS,
-    MONOLITHIC_HEADLINE,
     MONOLITHIC_RUNS,
     MONOLITHIC_WINDOW,
     ROOT,
-    RUNS,
-    SELECTION,
-    baseline_bundle,
-    by_loss_stem,
+    arm_definitions,
     drop_contested,
     lora_bundles,
-    monolithic_bundles,
 )
 
 # the subject-level draw already exists for the XGBoost comparison; a second copy here
@@ -120,39 +111,6 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dest", type=Path, default=None)
     return parser.parse_args()
-
-
-def arm_definitions(
-    window: tuple[int, int], fold: str = "validation"
-) -> dict[str, list[Path]]:
-    """Definitions for the different arms of the study.
-
-    The roster checked is intentionally hardcoded to avoid silent failures.
-
-    Args:
-        window (tuple[int, int]): The monolithic arm's pre-collapse step window.
-        fold (str): Which fold's banked bundles each arm is built from. Checkpoint
-            SELECTION always happens on validation, whatever this says.
-
-    Returns:
-        dict[str, list[Path]]: One arm per key, each a list of member bundles.
-    """
-    subdir = SELECTION[fold]
-    headline = dict(checkpoint_bundles(RUNS / MONOLITHIC_HEADLINE, subdir))
-    return {
-        "monolithic_single": [headline[by_loss_stem(MONOLITHIC_HEADLINE)]],
-        "monolithic_snapshot": monolithic_bundles(MONOLITHIC_HEADLINE, window, fold),
-        "monolithic_seeds": [
-            path
-            for run in MONOLITHIC_RUNS
-            for path in monolithic_bundles(run, window, fold)
-        ],
-        "lora_all_last": [
-            dict(checkpoint_bundles(RUNS / run, subdir))["last"] for run in LORA_RUNS
-        ],
-        "lora_last2": [path for run in LORA_RUNS for path in lora_bundles(run, fold)],
-        "xgboost": [baseline_bundle(fold)],
-    }
 
 
 def main() -> None:

@@ -31,6 +31,12 @@ SPLIT = ROOT / "meds_output" / "labels" / "subject_split.parquet"
 ORACLE = ROOT / "motor_output" / "oracle_fp32.npz"
 DICTIONARY = ROOT / "motor_model" / "dictionary"
 
+# how many subject-level resamples each banked interval rests on. Deliberately
+# small: a ladder is 9 rungs and these bands only have to separate checkpoints from
+# each other. Anything REPORTING a run's interval should recompute at 2,000 --
+# `build_results_summary.py` reads this constant so the two cannot disagree silently.
+INTERVAL_RESAMPLES = 200
+
 
 def _parse_args() -> argparse.Namespace:
     """Reads the run's configuration off the command line."""
@@ -159,7 +165,7 @@ def main() -> None:
             args.oracle,
             args.dictionary,
             fold=args.fold,
-            resamples=200,
+            resamples=INTERVAL_RESAMPLES,
             lora=lora,
         )
         np.savez(dest / f"{checkpoint.stem}_predictions.npz", *bundle)
