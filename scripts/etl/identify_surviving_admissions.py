@@ -3,9 +3,6 @@ r"""One-off driver for annotating the positive labels with post-normalisation su
 Run from the repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/identify_surviving_admissions.py
-
-Reads the positive diagnosis labels and the normalised shards, and writes the labels
-back out with an n_surviving_events column. An existing dest is refused.
 """
 
 import argparse

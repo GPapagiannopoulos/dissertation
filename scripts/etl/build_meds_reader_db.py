@@ -4,11 +4,6 @@ Run from the repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/build_meds_reader_db.py
 
-The meds_reader_convert console script is taken from the same virtualenv as the
-interpreter running this file, so activating the venv (or fixing PATH) is not
-required. src defaults to the output of stage 1; dest must not already exist,
-so delete it before re-running.
-
 Log the run, since the cli reports progress only on stdout::
 
     .venv-modelling/bin/python scripts/etl/build_meds_reader_db.py --num-threads 8 \\

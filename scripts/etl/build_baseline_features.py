@@ -3,16 +3,6 @@ r"""One-off driver for stage 7a: MEDS events -> the XGBoost baseline's long feat
 Run from the repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/build_baseline_features.py
-
-Reads stage 2.6's normalised shards, stage 4's landmark labels and stage 3's subject
-split, and writes one long feature table plus one spine slice per shard. An existing
-dest is refused.
-
-The baseline is deliberately fed the **same events the transformer sees** -- stage
-2.6's output, at its measured 33% coverage -- so the comparison isolates the
-architecture rather than data access. What it does not share is the tokenisation:
-where stage 5.1 turns a creatinine of 2.4 mg/dL into a bin, this keeps the float,
-which is what makes a KDIGO-shaped delta computable at all.
 """
 
 import argparse
