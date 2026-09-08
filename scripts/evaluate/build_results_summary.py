@@ -4,10 +4,8 @@ Run from the repo root:
 
     .venv-modelling/bin/python scripts/evaluate/build_results_summary.py
 
-Reads only artifacts other jobs already wrote -- checkpoint rankings, the XGBoost
-comparisons, the probe, the diversity reports -- so the summary is regenerated rather
-than maintained, and it cannot drift from the runs it describes. Everything comes
-from `binary_metrics`, so no number here is defined differently from any other.
+Reads only artifacts other jobs already wrote. Everything comes from `binary_metrics`,
+so no number here is defined differently from any other.
 """
 
 import argparse

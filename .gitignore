@@ -8,8 +8,6 @@ meds_output/
 CLAUDE.md
 athena/
 motor_model/
-scripts/tools/build_flashcards.py
-motor_pipeline_flashcards.apkg
 REPORT_*
 
 # Model artifacts. Most of motor_output/ is enormous and regenerable, so only the
