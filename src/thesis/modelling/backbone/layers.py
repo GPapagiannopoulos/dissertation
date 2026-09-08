@@ -77,7 +77,7 @@ def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch
         sin (torch.Tensor): Sine table output from 'rotary_tables',
             shaped (seq_len, dim) or broadcastable against x with
             the head axis already inserted.
-        cos (torch.Tesnor): Cosine table output from 'rotary_tables', the same shape.
+        cos (torch.Tensor): Cosine table output from 'rotary_tables', the same shape.
 
     Returns:
         torch.Tensor: x rotated shaped (..., seq_len, dim)

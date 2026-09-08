@@ -1,7 +1,7 @@
 """The assembled MOTOR encoder.
 
-This module owns the order layers run in, the tensors that are shared across all twelve
-layers, and the mapping from the released checkpoint's haiku parameter names onto the
+This module handles layer ordering, tensors shared across layers,
+and the mapping from the released checkpoint's haiku parameter names onto the
 submodules.
 """
 
@@ -21,11 +21,11 @@ from thesis.modelling.backbone.layers import (
 
 
 class MotorEncoder(torch.nn.Module):
-    """MOTOR's transformer backbone, from token indices to features.
+    """MOTOR's transformer backbone.
 
     The rotary tables and the attention mask are built once here and passed down,
     because they are the same for every block. The weights of each block are
-    however independent.
+    independent.
 
     Attributes:
         embedding (HierarchicalEmbedding): The ancestor-sum input embedding.
@@ -44,16 +44,16 @@ class MotorEncoder(torch.nn.Module):
         attention_width: int,
         eps: float = MOTOR_RMS_EPS,
     ) -> None:
-        """Builds an encoder at the given widths.
+        """Builds an encoder at the given feature counts.
 
         Args:
             vocab_size (int): How many ontology tokens the embedding table holds.
-            hidden_size (int): The model width.
-            intermediate_size (int): The feed-forward expansion's width.
-            n_heads (int): How many attention heads share the channels.
+            hidden_size (int): The model feature count.
+            intermediate_size (int): The feed-forward expansion's feature count.
+            n_heads (int): How many attention heads share the feature channels.
             n_layers (int): How many blocks the stack holds.
             attention_width (int): How many positions back a query may reach.
-            eps (float): The norms' epsilon, inside the square root.
+            eps (float): The norms' epsilon.
 
         Raises:
             ValueError: If the heads do not divide the model width evenly.
@@ -76,14 +76,14 @@ class MotorEncoder(torch.nn.Module):
 
     @property
     def compute_dtype(self) -> torch.dtype:
-        """The dtype the stack runs in, which the embedding table does not share."""
+        """The dtype the stack runs in, independent of the embedding table."""
         return self.out_norm.weight.dtype
 
     def half_stack(self) -> "MotorEncoder":
         """Casts everything other than the embedding table to float16.
 
-        An embedding row is a sum of ontology ancestors, so rounding the table first
-        rounds every summand.
+        An embedding row is a sum of ontology ancestors, so rounding the
+        embedding table first rounds every summand.
 
         Returns:
             MotorEncoder: This encoder, cast in place, for chaining.
@@ -115,7 +115,7 @@ class MotorEncoder(torch.nn.Module):
                 "rms_norm::scale",
                 "linear::w",
                 "linear::b",
-                "linear_1::w",
+                "linear_1::w",  # output projection
                 "linear_1::b",
             )
         ]
@@ -160,24 +160,21 @@ class MotorEncoder(torch.nn.Module):
 
         Args:
             indices (torch.Tensor): The sparse (read, write) pairs, shaped
-                (n_pairs, 2). See HierarchicalEmbedding. When batched, the write
-                index is flat over the whole batch, so position p of sequence b is
-                b * seq_len + p.
+                (n_pairs, 2). See HierarchicalEmbedding.
             seq_len (int): How many positions each sequence holds.
             ages (torch.Tensor): Each position's age in days, float32, shaped
-                (seq_len,) or (batch, seq_len). Drives the rotary tables, so it is a
-                real quantity and not an index.
-            normed_ages (torch.Tensor): The z-scored age per position, shaped like
-                the ages. Concatenated with its square onto every block's input.
-            valid_tokens (torch.Tensor): Which positions hold a real event, shaped
-                like the ages.
+                (seq_len,) or (batch, seq_len).
+            normed_ages (torch.Tensor): The z-scored age per position, shaped
+                (seq_len,) or (batch, seq_len).
+            valid_tokens (torch.Tensor): Which positions hold a real event, bool, shaped
+                (seq_len,) or (batch, seq_len).
             segment_ids (torch.Tensor): Which subject each position belongs to,
-                shaped like the ages. A batch of single-subject sequences is all
-                zeros.
+                shaped (seq_len,) or (batch, seq_len). A batch of single-subject
+                sequences is all zeros.
 
         Returns:
-            torch.Tensor: The features, shaped like the ages with (hidden_size,)
-                appended.
+            torch.Tensor: The features, shaped (seq_len,) or (batch, seq_len) with
+                (hidden_size,) appended.
 
         Raises:
             ValueError: If the ages are not one or two dimensional, if they disagree
@@ -203,21 +200,15 @@ class MotorEncoder(torch.nn.Module):
                     f"{tuple(tensor.shape)}."
                 )
 
-        # the embedding sums into one flat buffer either way, and the batch is only
-        # separated out afterwards; the pairs already carry flat write indices
         x = self.embedding(indices, ages.numel()).unflatten(0, ages.shape)
 
-        # invalid positions are filled with ONES, not zeros: the norm below divides
-        # by the row's own magnitude, so a zero row would give 0/0.
+        # invalid positions are filled with ones to avoid division by zero
         x = torch.where(valid_tokens.unsqueeze(-1), x, x.new_ones(()))
         x = self.in_norm(x).to(self.compute_dtype)
 
-        # the tables meet the QUERIES, which under autocast are the autocast dtype
-        # rather than the stream's; outside autocast the two are the same thing
+        # the tables meet the queries, which under autocast are the autocast dtype
         sin, cos = rotary_tables(ages, self.head_size, dtype=projected_dtype(x))
         if ages.ndim == 2:
-            # attention runs at (batch, heads, seq, dim) and every head shares one
-            # table, so the head axis is inserted here rather than in every block
             sin, cos = sin.unsqueeze(-3), cos.unsqueeze(-3)
         mask = local_attention_mask(segment_ids, self.attention_width)
         normed_ages = normed_ages.to(x.dtype)
