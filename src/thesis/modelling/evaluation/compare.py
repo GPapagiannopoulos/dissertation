@@ -1,24 +1,4 @@
-"""Scores the fine-tuned MOTOR encoder and the XGBoost baseline on one label set.
-
-Both models go through `training.binary_metrics`, so no metric definition can drift
-between them, and both are scored on the **whole** validation fold rather than the
-subsample the training loop uses for its periodic checks -- 445,814 landmarks against
-the ~11,254 a 150-batch evaluation reaches. Comparing a number measured on 2.5% of a
-fold against one measured on all of it would confound architecture with sampling.
-
-Confidence intervals resample **subjects**, not landmarks. The 12-hourly grid puts
-around nine highly correlated predictions inside one admission, so the fold's 445,814
-rows carry the information of roughly 22,789 independent patients; a row-level
-bootstrap would report an interval several times too narrow.
-
-The headline number is the **paired** difference, not the two per-model intervals.
-Those two overlap freely even when one model wins on nearly every resample, because
-each carries the variance of the cohort; scoring both models on the same draw cancels
-it. Pairing needs the two sides on the same rows, and neither pipeline knows the
-other's row numbering, so `align_predictions` joins them on `(subject_id,
-prediction_time)` -- the one key both derive independently from stage 4's landmarks --
-and refuses to proceed if the two cohorts differ or disagree about a label.
-"""
+"""Scores the fine-tuned MOTOR encoder and the XGBoost baseline on one label set."""
 
 import json
 from pathlib import Path
@@ -41,17 +21,12 @@ from thesis.modelling.finetune.head import MotorClassifier
 from thesis.modelling.finetune.lora import load_adapter, lora_classifier, lora_config
 from thesis.modelling.finetune.training import predict_stream
 
+# The metrics reported
 HEADLINE = ("auprc", "auroc", "brier", "ece", "precision_at_1pct", "recall_at_1pct")
-"""The metrics reported side by side, discrimination first then calibration."""
 
-
+# How much of a fold may be duplicated before the join is called broken
+# 3/4,000,000 landmarks have a duplicated key due to overlapping admissions
 MAX_CONTESTED_SHARE = 0.001
-"""How much of a fold may be duplicated keys before the join is called broken.
-
-Overlapping admissions are genuinely rare -- three landmarks in 4,082,007 on the
-2026-08-21 grid, needing both an overlap and admit times congruent modulo the 12-hour
-step. A percent of the fold means something else is wrong.
-"""
 
 
 def align_predictions(
@@ -62,27 +37,6 @@ def align_predictions(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Puts two models' predictions on the same rows, in the same order.
 
-    The two pipelines produce their predictions in unrelated orders -- the baseline
-    in `landmark_id` order within each shard, MOTOR in token-budget batch order --
-    and neither carries the other's row identifier. `(subject_id, prediction_time)`
-    is the one key both sides derive independently from stage 4's landmarks, so it is
-    what they are joined on.
-
-    The join is validated rather than trusted, because every failure here is silent:
-    a duplicated key multiplies rows, a missing key drops a cohort, and a
-    disagreement about a label means the two feature pipelines are not describing the
-    same landmark at all. Each of those produces a plausible number.
-
-    A key repeated on either side is dropped from BOTH, because a duplicate cannot be
-    paired: two landmarks for one subject at one instant come from overlapping
-    admissions in stage 4 -- MIMIC records an observation stay and an emergency
-    admission with the same `admittime`, and stage 5.2 keeps no `visit_id` to tell
-    them apart. Dropping is safe here only because the colliding landmarks share one
-    patient history, so MOTOR emits the same score for both; they differ only in the
-    horizon their own admission ends at. The count is printed, and more than
-    `MAX_CONTESTED_SHARE` of the fold raises instead, since at that scale the cause is
-    a broken join rather than a handful of overlapping admissions.
-
     Args:
         left (tuple): `(scores, targets, subjects, times)` for the first model.
         right (tuple): The same four arrays for the second.
@@ -90,7 +44,7 @@ def align_predictions(
 
     Returns:
         tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: The left scores, the
-            right scores, the shared targets and the subjects, all row-aligned.
+            right scores, the shared targets and the subjects, row-aligned.
 
     Raises:
         ValueError: If duplicated keys exceed `MAX_CONTESTED_SHARE` of either side, if
@@ -111,8 +65,6 @@ def align_predictions(
         )
         frames.append(frame)
 
-    # the union across both sides, so the two are trimmed identically even when only
-    # one of them carries the collision
     contested = pl.concat(
         [
             frame.select("subject_id", "time").filter(
@@ -221,30 +173,25 @@ def score_motor(
 ) -> tuple[dict[str, float], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """Scores a saved MOTOR classifier over a whole fold.
 
-    `max_batches=None` is the point of this function: the training loop's periodic
-    evaluation stops at 150 batches, and the headline AUPRC 0.202 was measured there.
-    This runs the fold to exhaustion so the two models are scored on the same labels.
-
     Args:
-        checkpoint (Path): A `best.pt` or `last.pt` from stage 6.
-        sequences (Path): Stage 5.2's output folder.
+        checkpoint (Path): The weights to load.
+        sequences (Path): Subject sequences to score on.
         split (Path): The subject split parquet.
         oracle (Path): The fp32 oracle dump the released weights come out of.
         dictionary (Path): MOTOR's msgpack dictionary.
         fold (str): Which fold to score.
         vocab_size (int): The token count the checkpoint's config declares.
-        token_budget (int): The most padded positions one batch may hold.
-        device (torch.device | None): Where to run. Defaults to cuda when present.
-        resamples (int): Bootstrap draws for the AUPRC interval.
-        seed (int): Seeds the bootstrap. The batch order is seeded separately and
-            fixed, since a different batching would score the same labels anyway.
+        token_budget (int): The maximum number of positions per batch.
+        device (torch.device | None): Device to run on. Defaults to cuda when present.
+        resamples (int): Number of bootstrap draws for the AUPRC interval.
+        seed (int): Seeds the bootstrap.
         lora (dict | None): A `lora.config_record` for an adapter checkpoint, which
             holds only the adapters and the head. None scores a full fine-tune.
 
     Returns:
-        tuple: The metrics (`binary_metrics`, the mean loss and `auprc_lo`/
-            `auprc_hi`), then the `(scores, targets, subjects, times)` that
-            `align_predictions` takes.
+        tuple: tuple containing a dictionary of 'binary metrics', mean loss,
+            and 'auprc_lo'/ 'auprc_hi', and a tuple of
+            `(scores, targets, subjects, times)`
     """
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     table = load_token_table(dictionary, vocab_size=vocab_size)
@@ -252,18 +199,13 @@ def score_motor(
     subjects = fold_subjects(split, fold).collect().lazy()
 
     state = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    # scored eagerly whatever the run used, so a checkpoint written under
-    # torch.compile has to have its `_orig_mod.` segments removed first
     weights = strip_compile_prefix(state["model"])
 
-    # The bias is overwritten by the state dict, so the prevalence passed here only
-    # has to be a legal probability.
     if lora is None:
         model = MotorClassifier(released_encoder(oracle), positive_rate=0.05)
         model.load_state_dict(weights)
     else:
-        # the backbone comes from the oracle, not the file; only the adapters and
-        # the head were saved
+        # the backbone comes from the oracle
         model = lora_classifier(oracle, 0.05, lora_config(**lora))
         load_adapter(model, weights)
     model.to(device)
@@ -311,7 +253,7 @@ def format_table(
 
     Returns:
         str: The table, one model per column, with the paired difference underneath
-            it -- that last line is the comparison; the columns are only its inputs.
+            it.
     """
     names = list(rows)
     # wide enough for a "[0.1234, 0.5678]" interval, not just for the widest name
@@ -368,13 +310,13 @@ def run_comparison(
         booster (Path): The folder `run_train_baseline` wrote.
         features (Path): The folder `run_build_features` wrote.
         checkpoint (Path): The MOTOR checkpoint to score.
-        sequences (Path): Stage 5.2's output folder.
+        sequences (Path): The subject sequences.
         split (Path): The subject split parquet.
         oracle (Path): The fp32 oracle dump.
         dictionary (Path): MOTOR's msgpack dictionary.
         dest (Path): Where to write `comparison.json`.
         fold (str): Which fold to score.
-        resamples (int): Bootstrap draws for the baseline's AUPRC interval.
+        resamples (int): Number of bootstrap draws for the baseline's AUPRC interval.
         seed (int): Seeds the bootstrap.
 
     Returns:
@@ -401,8 +343,6 @@ def run_comparison(
         seed=seed,
     )
 
-    # cheap and specific: a count mismatch is the likely failure and says so plainly,
-    # where the join would report it as a shortfall in the intersection
     if int(tree["n"]) != int(motor["n"]):
         raise ValueError(
             f"The baseline scored {int(tree['n']):,} labels and MOTOR scored "
