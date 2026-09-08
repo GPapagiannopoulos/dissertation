@@ -38,10 +38,6 @@ LORA_RUNS = [
 
 # Monolithic runs collapse around the final training step. This catastrophic forgetting
 # is detrimental to the performance of the ensemble. Therefore 'last' is not included.
-#
-# The window is the pre-collapse phase shared by all three seeds: validation loss turns
-# sharply upward at step 22,000 in every one, and step_002000 is still pre-convergence
-# at AUPRC ~0.128.
 MONOLITHIC_RUNS = ["ng-aki-seed0", "ng-aki-seed1", "ng-aki-seed2"]
 MONOLITHIC_WINDOW = (6000, 18000)
 
@@ -71,10 +67,6 @@ def by_loss_stem(run: str) -> str:
     Raises:
         FileNotFoundError: If the run has not been scored on validation.
     """
-    # ALWAYS the validation ladder, whatever fold is being scored. Choosing a
-    # checkpoint on the fold you then report is the selection optimism the freeze
-    # exists to prevent, and the two ladders DO disagree: `ng-aki-seed2` selects
-    # step_018000 on validation and step_006000 on test.
     ranking = RUNS / run / SELECTION["validation"] / "checkpoint_ranking.json"
     if not ranking.is_file():
         raise FileNotFoundError(
@@ -156,10 +148,6 @@ def arm_definitions(
 ) -> dict[str, list[Path]]:
     """Every arm of the study, as the banked bundles that make it up.
 
-    The roster is intentionally hardcoded rather than globbed, and it lives here
-    rather than in one driver so the decision curves, the calibration curves and the
-    headline pairing cannot drift into measuring different ensembles.
-
     Args:
         window (tuple[int, int]): The monolithic arm's pre-collapse step window.
         fold (str): Which fold's banked bundles each arm is built from. Checkpoint
@@ -189,13 +177,6 @@ def arm_definitions(
 def drop_contested(members: list[Member]) -> list[Member]:
     """Removes landmarks that `(subject, time)` cannot identify uniquely.
 
-    Raw MIMIC-IV records concurrent admissions for one subject, so stage 4 can grid two
-    admissions onto the same instant. Neither the labeller nor stage 5.2 mints a
-    `landmark_id`, so the two are indistinguishable to anything joining on the shared
-    key. The baseline scores them differently, because their spines carry
-    different `admittime`s. One key in the validation fold is affected. Dropping it
-    keeps every analysis on exactly the rows `align_predictions` pairs on.
-
     Args:
         members (list[Member]): Loaded bundles, all covering the same cohort.
 
@@ -204,9 +185,6 @@ def drop_contested(members: list[Member]) -> list[Member]:
     """
     trimmed, dropped = [], 0
     for member in members:
-        # trimmed on its own key column rather than the first member's, because the
-        # bundles arrive in unrelated row orders and have not been aligned yet
-        # every bundle covers the same cohort, so they lose the same landmarks
         keys = np.rec.fromarrays(
             [member.subjects.astype(np.int64), member.times.astype(np.int64)],
             names="s,t",

@@ -268,13 +268,7 @@ def ensemble_gain(
     resamples: int = 200,
     seed: int = 0,
 ) -> dict[str, float]:
-    """What averaging the members actually buys.
-
-    The ensemble is the arithmetic mean of the members' probabilities. It is scored
-    through 'binary_metrics'.
-
-    Given `subjects`, the gain over the best member also carries a paired
-    subject-level interval to account for covariance.
+    """Returns an ensemble performance summary to quantify improvement.
 
     Args:
         scores (np.ndarray): Aligned score matrix, (n_members, n_labels).

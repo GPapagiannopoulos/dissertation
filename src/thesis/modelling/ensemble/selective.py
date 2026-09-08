@@ -1,27 +1,4 @@
-"""Deferring the contested predictions inside an alert budget.
-
-Selective prediction asks a narrower question than the uncertainty decomposition
-does: given that a ward can act on a fixed number of alerts, is member disagreement
-a better reason to withhold one than the score itself already is?
-
-The framing here is dictated by a measurement, not by convention. Ambiguity --
-the members' variance in probability space -- correlates with the ensemble's own
-prediction at Spearman 0.954, because variance in probability space is bounded by
-`p(1-p)` and so carries a steep function of risk inside it. Deferring the most
-contested 10% of the fold therefore deletes the alert list and 41.6% of every
-positive in it. Three consequences shape this module:
-
-* the deferral signal must be **scale-free**, so `Var(logit p)` rather than `Var(p)`;
-* deferral happens **inside the alert list**, never over the whole fold;
-* the acted-on **count** is held fixed rather than the rate, or the operating point
-  drifts as coverage falls and the comparison measures the drift instead.
-
-`selective_curve` reports both readouts, because they answer different questions and
-cost one computation. Without backfill it is an ordinary risk/coverage curve, and the
-control to beat is the score's own ordering. With backfill the acted-on set stays the
-size the ward budgeted for, and the same control becomes near-null by construction --
-so a signal that wins there is carrying information the ranking does not have.
-"""
+"""This module handles the deferred prediction logic."""
 
 from typing import NamedTuple
 
@@ -68,15 +45,7 @@ def logit(probabilities: np.ndarray) -> np.ndarray:
 
 
 def within_band_rank(values: np.ndarray, by: np.ndarray, *, bins: int = 200):
-    """Percentile rank of `values` among the rows sharing its `by` band.
-
-    The scale-free alternative to a transform: instead of dividing out the
-    prediction's influence, compare each landmark only against others predicted to be
-    at the same risk. Bands are quantile cuts, so each holds the same number of rows.
-
-    The band count matters more than it looks. At ten bands the top band spans a
-    predicted-risk range of 0.059 and the ranking inside it is still mostly the
-    prediction; at two hundred the leak is 0.0002.
+    """Rank of `values` among rows sharing its `by` band.
 
     Args:
         values (np.ndarray): The column being ranked.
@@ -139,16 +108,7 @@ def disagreement_signals(members: np.ndarray, *, bins: int = 200) -> dict:
 
 
 def control_signals(scores: np.ndarray, targets: np.ndarray, *, seed: int = 0) -> dict:
-    """The signals a deferral rule has to beat to be worth an ensemble.
-
-    `low_score` is the one that matters. Inside an alert list, deferring the lowest
-    scores IS deferring the landmarks closest to the operating threshold, so the two
-    controls the design named collapse into one -- and it is a strong control, because
-    the bottom of an alert list genuinely does hold most of its false alarms.
-
-    `oracle` cheats, deferring true negatives first. It is the ceiling any real signal
-    is a fraction of, and measuring it first is what stops an unpromising correction
-    from being built twice.
+    """The baseline deferral rules uncertainty signals need to beat.
 
     Args:
         scores (np.ndarray): The ensemble's predictions.

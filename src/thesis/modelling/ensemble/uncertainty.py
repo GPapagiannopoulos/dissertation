@@ -1,32 +1,11 @@
-"""Splitting an ensemble's uncertainty into the epistemic and aleatoric.
-
-At one landmark the members give probabilities `p_1 .. p_M` averaging to `p_mean`.
-We can subsequently compute two types of uncertainty using BCE:
-
-1) H(p_mean): the uncertainty of the ensemble prediction (total uncertainty).
-2) mean H(p_i): average member uncertainty (aleatoric uncertainty). Each member's
-   entropy is what remains once that model is taken as correct, so the average is
-   the uncertainty that would survive even if someone named the right member.
-
-Their difference is how much naming the right member would have helped, which is the
-uncertainty that lives in the choice of model rather than in the patient
-(epistemic uncertainty).
-
-The estimate belongs to the member set, not to the data. A set of members that
-agree everywhere reports near-zero epistemic uncertainty whatever the model actually
-knows, so these numbers are only as meaningful as the diversity of the bag they come
-from.
-"""
+"""This module handles the uncertainty BALD split."""
 
 from typing import NamedTuple
 
 import numpy as np
 
-# the loss in `training.py` clips at the same point; one convention for both keeps a
-# landmark's entropy and its cross-entropy on the same footing
 EPSILON = 1e-7
 
-# floating point can push a concave-by-construction difference just below zero
 TOLERANCE = 1e-9
 
 

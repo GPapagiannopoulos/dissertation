@@ -1,17 +1,4 @@
-"""Module implementing decision-curve analysis (DCA).
-
-AUPRC and AUROC read the ordering of predictions which don't reflect clinical practice.
-A clinician acts when the predicted risk crosses a threshold. Choosing to act above
-`t` means being indifferent between acting and not acting at risk `t`, so one true
-positive is worth `t / (1 - t)` false alarms. Sweeping `t` therefore sweeps every
-exchange rate a clinician might hold.
-
-    net benefit = TP/N - (FP/N) * t / (1 - t)
-
-The units are true positives per landmark adjusted for the cost of false alarms.
-It is bounded by the extremes of alerting on everyone, and alerting on nobody. A
-beneficial model needs to at least beat the benefit of both these naive approaches.
-"""
+"""Module implementing decision-curve analysis (DCA)."""
 
 from collections.abc import Sequence
 from itertools import combinations
@@ -192,7 +179,7 @@ def alert_rate(scores: np.ndarray, thresholds: Sequence[float]) -> np.ndarray:
     """The fraction of landmarks alerted at each threshold.
 
     Reported beside the curve because a threshold that wins on net benefit while
-    alerting on a quarter of the ward is not deployable, and the curve alone hides it.
+    alerting on a quarter of the ward is not deployable.
 
     Args:
         scores (np.ndarray): Predicted probabilities, shaped (n,).
@@ -207,12 +194,7 @@ def alert_rate(scores: np.ndarray, thresholds: Sequence[float]) -> np.ndarray:
 
 
 def fraction_beating(curves: np.ndarray, reference: np.ndarray) -> np.ndarray:
-    """How often a subset's curve sits strictly above a reference curve.
-
-    Answers the member-choice question directly, with no resampling: of every ensemble
-    you could have assembled from the runs you trained, what share beats the
-    comparator? A bootstrap cannot answer this, because the uncertainty is over which
-    members were picked rather than over which patients were seen.
+    """The fraction of subsets whose net benefits beats a reference, per threshold.
 
     Args:
         curves (np.ndarray): Subset curves, shaped (n_subsets, n_thresholds).
@@ -238,10 +220,6 @@ def fraction_beating(curves: np.ndarray, reference: np.ndarray) -> np.ndarray:
 
 def worst_subset(result: SubsetCurves, index: int) -> tuple[int, ...]:
     """The member indices of the subset with the lowest benefit at one threshold.
-
-    Bootstrapping every subset is prohibitive, so the honest shortcut is to give a
-    normal paired interval to the WORST one: if even that clears the comparator, so
-    does every other subset a practitioner might have ended up with.
 
     Args:
         result (SubsetCurves): The enumerated subsets.
