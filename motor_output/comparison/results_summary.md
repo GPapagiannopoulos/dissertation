@@ -60,6 +60,7 @@
 | LoRA r=8 ff only | 1 | 0.16533 [0.15747, 0.17505] | 0.79822 [0.79225, 0.80283] | 0.03042 | 0.00073 | 0.3432 | 200 |
 | LoRA r=8 q/v | 1 | 0.16489 [0.15754, 0.17406] | 0.79909 [0.79356, 0.80437] | 0.03043 | 0.00232 | 0.3384 | 200 |
 | MOTOR full fine-tune, seed 2, 30k | 1 | 0.16383 [0.15503, 0.17296] | 0.79838 [0.79252, 0.80355] | 0.03070 | 0.01076 | 0.3356 | 200 |
+| MOTOR full fine-tune, seed 0, lr 3e-6 | 1 | 0.15584 [0.14834, 0.16415] | 0.79501 | 0.03061 | 0.00231 | 0.3187 | 200 |
 | MOTOR frozen + linear probe | 1 | 0.09793 [0.09279, 0.10320] | 0.73587 [0.72910, 0.74269] | 0.03170 | 0.00277 | 0.1913 | 2,000 |
 
 Intervals rest on different numbers of subject-level resamples, so the column is reported: a band at 200 draws is a ladder's own and is coarser than one at 2,000. Point estimates are unaffected.

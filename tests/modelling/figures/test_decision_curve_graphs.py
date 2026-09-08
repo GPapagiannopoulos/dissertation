@@ -179,7 +179,7 @@ def test_a_curve_of_the_wrong_length_is_refused(axes, draw) -> None:
 
 
 def make_report() -> dict:
-    """A report shaped exactly as `scripts/evaluate/decision_curves.py` writes one."""
+    """A report shaped exactly as `scripts/evaluate/clinical/decision_curves.py`."""
     return {
         "thresholds": THRESHOLDS.tolist(),
         "arms": {

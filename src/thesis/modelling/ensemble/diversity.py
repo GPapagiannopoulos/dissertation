@@ -76,7 +76,7 @@ def checkpoint_bundles(run: Path, subdir: str = "selection") -> list[tuple[str, 
     if not found:
         raise FileNotFoundError(
             f"{run}/{subdir} has no banked predictions; score it first with "
-            f"scripts/evaluate/score_checkpoints.py."
+            f"scripts/evaluate/scoring/score_checkpoints.py."
         )
     return sorted(found, key=lambda pair: _step_order(pair[0]))
 

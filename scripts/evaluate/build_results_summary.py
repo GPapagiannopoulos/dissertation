@@ -37,7 +37,7 @@ EXPLORE = {
 TEST_INTERVALS = NEWGRID_DIR / "test_fold_intervals.json"
 TEST_PAIRED = NEWGRID_DIR / "paired_lora_vs_monolithic_test.json"
 TEST_XGBOOST = NEWGRID_DIR / "ensemble_vs_xgboost600_test.json"
-SCORER = ROOT / "scripts" / "evaluate" / "score_checkpoints.py"
+SCORER = ROOT / "scripts" / "evaluate" / "scoring" / "score_checkpoints.py"
 # the probe was scored on test AFTER the freeze, as a capacity floor. It is not a run
 # folder, so nothing walking `runs/*/selection_test` finds it.
 TEST_PROBE = ROOT / "motor_output" / "probe-ng" / "probe_metrics_test.json"
@@ -596,7 +596,8 @@ def main() -> None:
     else:
         document += [
             f"No `{TEST_INTERVALS.name}` yet — run "
-            "`scripts/evaluate/test_fold_intervals.py` to compute the arm intervals.",
+            "`scripts/evaluate/comparison/test_fold_intervals.py` to compute "
+            "the arm intervals.",
             "",
         ]
     if pairings:

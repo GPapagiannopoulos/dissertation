@@ -44,7 +44,7 @@ score () {
     return 0
   fi
   echo "== ${run}: scoring $* on ${FOLD}"
-  "${PY}" "${ROOT}/scripts/evaluate/score_checkpoints.py" \
+  "${PY}" "${ROOT}/scripts/evaluate/scoring/score_checkpoints.py" \
     --run "${RUNS}/${run}" \
     --checkpoints $* \
     --fold "${FOLD}" \
@@ -78,7 +78,7 @@ BANK="${ROOT}/motor_output/comparison/newgrid/xgboost600_${FOLD}_predictions.npz
 if [ -e "${BANK}" ]; then
   echo "== already banked, skipping"
 else
-  "${PY}" "${ROOT}/scripts/evaluate/bank_baseline_predictions.py" \
+  "${PY}" "${ROOT}/scripts/evaluate/scoring/bank_baseline_predictions.py" \
     --booster "${RUNS}/ng-xgb-seed0-600" \
     --fold "${FOLD}" \
     --dest "${BANK}"

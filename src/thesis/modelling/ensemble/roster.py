@@ -71,7 +71,7 @@ def by_loss_stem(run: str) -> str:
     if not ranking.is_file():
         raise FileNotFoundError(
             f"{run} has no {ranking.name}; score it first with "
-            f"scripts/evaluate/score_checkpoints.py."
+            f"scripts/evaluate/scoring/score_checkpoints.py."
         )
     rows = json.loads(ranking.read_text())
     return Path(min(rows, key=lambda row: row["loss"])["checkpoint"]).stem

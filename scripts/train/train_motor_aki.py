@@ -65,7 +65,8 @@ def _parse_args() -> argparse.Namespace:
         help="batches per in-loop evaluation. A PROGRESS SIGNAL, not a selection: "
         "400 costs ~55s per evaluation (under 10%% of the run) and gives a steadier "
         "line than 150 did, but no subsample ranks checkpoints -- "
-        "scripts/evaluate/score_checkpoints.py does that against the whole fold",
+        "scripts/evaluate/scoring/score_checkpoints.py does that against "
+        "the whole fold",
     )
     parser.add_argument(
         "--patience",
