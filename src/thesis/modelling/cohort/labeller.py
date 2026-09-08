@@ -123,26 +123,13 @@ def build_landmark_grid(
 ) -> pl.LazyFrame:
     """Generates the prediction landmark grid for each visit.
 
-    The grid runs over the open interval (admittime, censor), where the censor is
-    the earlier of discharge and diagnosis. Both ends are excluded, for different
-    reasons:
+    The grid runs over the open interval (admittime, censor), where the censor is the
+    earlier of discharge and diagnosis. Both ends are excluded: a prediction made at
+    diagnosis has nothing left to predict, and one made at `admittime` is structurally
+    negative under the HA-AKI gate in `diagnose_hospital_acquired_aki`.
 
-    - The censor, because a prediction made at the moment of diagnosis has nothing
-      left to predict and one made at discharge has nothing left to act on.
-    - `admittime` itself, because such a landmark is structurally negative. The
-      HA-AKI gate in `diagnose_hospital_acquired_aki` admits only diagnoses more
-      than `_COMMUNITY_ACQUIRED_CUTOFF_HOURS` after admission (measured minimum
-      onset: 48.02h), so a landmark at admittime forecasting 48h can never see one.
-      Keeping it would add one guaranteed negative per admission.
-
-    The grid deliberately does NOT start at the cutoff. The gate is already enforced
-    upstream on the labels, so starting there would delete the landmarks between one
-    delta and the cutoff -- which are genuinely predictive, since a landmark at
-    admittime + 12h forecasting 48h reaches onsets in (48.02h, 60h].
-
-    Independence from the horizon is deliberate and load-bearing: the grid is a
-    function of the admission window alone, so all horizons hold the same landmarks
-    and `apply_time_horizons` can relabel banked predictions without a forward pass.
+    The grid is a function of the admission window alone and never of the horizon, so
+    every horizon holds the same landmarks.
 
     Args:
         windows_with_onset (pl.LazyFrame): a LazyFrame containing the admission windows

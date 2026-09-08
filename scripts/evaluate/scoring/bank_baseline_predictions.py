@@ -1,4 +1,4 @@
-"""Bank one fitted booster's per-landmark predictions for a fold.
+r"""Bank one fitted booster's per-landmark predictions for a fold.
 
 Run from the repo root with the modelling interpreter:
 
@@ -7,18 +7,14 @@ Run from the repo root with the modelling interpreter:
         --fold test \
         --dest motor_output/comparison/newgrid/xgboost600_test_predictions.npz
 
-`run_comparison` predicts the baseline and then discards the per-landmark scores, so
-every pairing against XGBoost used to need a fresh inference pass over the fold. This
-writes the same `(scores, targets, subjects, times)` bundle the transformer arm banks,
-which puts both arms on one footing: any later comparison, decision curve or ensemble
-is npz arithmetic with no model loaded.
+Writes the same `(scores, targets, subjects, times)` bundle the transformer arm banks,
+so any later comparison, decision curve or ensemble is npz arithmetic with no model
+loaded.
 
-**Check the round window it prints.** `predict_fold` scores at the booster's
-`best_iteration`, and that attribute is documented not to survive a save/load
-round-trip reliably. If it is absent the model is scored at every round instead, which
-is the safe direction but a DIFFERENT model -- and scoring two folds at two different
-round counts would make them incomparable without anything raising. Re-bank a fold
-whose numbers are already known before trusting this on a fold whose numbers are not.
+Check the round window it prints. `predict_fold` scores at the booster's
+`best_iteration`, which is documented not to survive a save/load round-trip reliably;
+if it is absent the model is scored at every round instead, and two folds scored at
+two different round counts are incomparable without anything raising.
 """
 
 import argparse

@@ -1,10 +1,11 @@
-"""Measure how much a set of ensemble members disagree.
+r"""Measure how much a set of ensemble members disagree.
 
 Run from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/evaluate/ensembles/measure_diversity.py \
         --runs motor_output/runs/lora-seed0 motor_output/runs/lora-seed1 \
-               motor_output/runs/lora-seed2 --label seed-only
+               motor_output/runs/lora-seed2 \
+        --label seed-only
 
 Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """

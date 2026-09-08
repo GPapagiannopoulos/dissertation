@@ -1,4 +1,4 @@
-"""Paired subject-level confidence intervals between named arms.
+r"""Paired subject-level confidence intervals between named arms.
 
 Run from the repo root with the modelling interpreter:
 
@@ -10,23 +10,16 @@ Run from the repo root with the modelling interpreter:
         --dest motor_output/comparison/paired_snapshot.json
 
 An arm is the equal-weight mean of its bundles, so a single npz is a single model and
-a list is an ensemble. Every arm is scored on the SAME draw of subjects, which is the
-whole mechanism: a draw holding easy patients is easy for all of them, so the cohort's
-own variance cancels and what survives is the difference between the arms. Two
-one-model intervals cannot do this -- they overlap freely even when one arm wins on
-every resample.
-
+a list is an ensemble. Every arm is scored on the same draw of subjects, so the
+cohort's own variance cancels and what survives is the difference between the arms.
 Subjects are resampled, never rows: the 12-hourly grid puts ~9 correlated landmarks
-inside one admission, so a row-level bootstrap reports an interval several times too
-narrow. Needs no GPU -- it reads the prediction bundles `score_checkpoints.py` banked.
+inside one admission.
 
-`--arm-stems` builds a UNIFORM arm -- the same checkpoint stems from every run -- and
-its fallback to `last` only fires when a run never wrote that stem. The by-loss roster
-is not uniform (nine config runs take `step_014000`, `ff-r8` takes `last`), so that arm
-has to be spelled out with `--arm` and explicit paths. The headline
-ensemble-vs-monolithic figure was produced that way, by the earlier one-off at
-`motor_output/comparison/paired_ensemble_vs_monolithic.py`, which this driver
-generalises.
+`--arm-stems` builds a uniform arm -- the same checkpoint stems from every run -- and
+its fallback to `last` only fires when a run never wrote that stem. A non-uniform
+roster has to be spelled out with `--arm` and explicit paths.
+
+Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """
 
 import argparse

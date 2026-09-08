@@ -1,4 +1,4 @@
-"""Snapshot ensembles: the average of a model's checkpoint predictions.
+r"""Snapshot ensembles: the average of a model's checkpoint predictions.
 
 Run from the repo root with the modelling interpreter:
 
@@ -12,8 +12,6 @@ Each run is swept over its last k banked checkpoints, so k=1 is the single final
 model and larger k averages further back in training. `--cross-k` then builds the
 cross-run ensembles: every run's last k checkpoints in one bag.
 
-Averaging a run's own checkpoints costs nothing -- they were written by a training
-run that already happened -- so any gain here is free.
 Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """
 

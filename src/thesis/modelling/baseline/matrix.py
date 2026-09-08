@@ -3,19 +3,14 @@
 The long table holds one row per `(landmark, code)`; XGBoost wants one row per
 landmark, with every code a column. That pivot is the whole module.
 
-There are ~8,900 codes carrying three features each, so a dense frame would
-be ~26,800 columns over 2,965,363 rows. Instead each shard becomes a `scipy`
-CSR block and is handed straight to XGBoost through a `DataIter`, which bins it to
-`max_bin` buckets on arrival.
+A dense frame would run to ~26,800 columns, so each shard becomes a `scipy` CSR
+block handed to XGBoost through a `DataIter`, which bins it to `max_bin` buckets on
+arrival. `build_dmatrix` takes a `cache` folder and builds an
+`ExtMemQuantileDMatrix`, whose pages live on disk; an in-memory `QuantileDMatrix`
+over the training fold does not fit on this host.
 
-Binning alone was not enough here. The training fold's ~0.9 billion nonzeros make an
-in-memory `QuantileDMatrix` peak at 8.2 GiB on a 14 GB host -- measured twice, killed
-before boosting round zero both times -- so `build_dmatrix` takes a `cache` folder and
-builds an `ExtMemQuantileDMatrix`, whose pages live on disk. The cap that stops such a
-run from taking the desktop with it belongs outside this module, on the process.
-
-A code a landmark has never seen contributes no entry at all, and XGBoost learns
-a default branch direction for such rows rather than imputing.
+A code a landmark has never seen contributes no entry at all, and XGBoost learns a
+default branch direction for such rows rather than imputing.
 """
 
 from collections.abc import Iterable, Sequence
@@ -207,15 +202,12 @@ def shard_matrix(
 class ShardIterator(xgb.DataIter):
     """Feeds the matrix builder one shard at a time.
 
-    This is what keeps the full CSR off the heap: each block is quantised to
-    `max_bin` buckets as it arrives and the raw float32 entries are released.
+    This is what keeps the full CSR off the heap: each block is quantised to `max_bin`
+    buckets as it arrives and the raw float32 entries are released.
 
-    Quantising a block does not, on its own, make the matrix fit. The binned index
-    is smaller than the CSR but still proportional to the ~0.9 billion nonzeros the
-    training fold carries, and a `QuantileDMatrix` holds all of it in memory --
-    measured at an 8.2 GiB peak on a 14 GB host, killed before boosting round zero.
-    Passing `cache` spills those pages to disk instead, which is the only
-    configuration of this pipeline that fits here.
+    Quantising does not, on its own, make the matrix fit. The binned index is still
+    proportional to the training fold's ~0.9 billion nonzeros, and a `QuantileDMatrix`
+    holds all of it in memory. Passing `cache` spills those pages to disk instead.
     """
 
     def __init__(

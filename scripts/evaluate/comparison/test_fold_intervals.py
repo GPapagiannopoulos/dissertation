@@ -8,14 +8,11 @@ Writes `motor_output/comparison/newgrid/test_fold_intervals.json`, which
 `build_results_summary.py` reads to render its test-fold table.
 
 Every metric is collected on each draw, so five intervals cost one pass rather than
-five -- `binary_metrics` computes them all regardless. The RNG construction and draw
-order match `bootstrap_interval` exactly, so a single-metric rerun through the library
-reproduces these numbers.
+five. The RNG construction and draw order match `bootstrap_interval` exactly, so a
+single-metric rerun through the library reproduces these numbers.
 
 Selects nothing: every checkpoint stem comes from `roster.by_loss_stem`, which reads
-the VALIDATION ladder. Needs no GPU -- it reads the bundles `score_checkpoints.py`
-banked under each run's `selection_test/`. About 15 minutes per arm at 2,000
-resamples over the 616,193-landmark fold.
+the validation ladder. Needs no GPU. About 15 minutes per arm at 2,000 resamples.
 """
 
 import json

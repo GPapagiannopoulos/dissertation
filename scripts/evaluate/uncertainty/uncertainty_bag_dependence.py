@@ -1,22 +1,23 @@
-"""Is the epistemic share a property of the data, or of the member set?
-
-`uncertainty.py::decompose` splits an ensemble's predictive entropy into
-`total = H(p_mean)`, `aleatoric = mean H(p_i)` and their difference. The module
-docstring warns that the estimate belongs to the bag rather than to the data; this
-measures how much, by sweeping bag SIZE on a fixed fold and by mixing model families.
-
-Two intervals are reported and they answer different questions:
-
-* the **subset spread** -- how much the share moves depending on WHICH members of a
-  given size you happen to pick. Quantiles across subsets, not a bootstrap.
-* the **subject bootstrap** -- how much a named bag's share moves under resampling
-  PATIENTS, which is the ordinary sampling uncertainty every other number here carries.
+r"""Is the epistemic share a property of the data, or of the member set?
 
 Run from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python \
         scripts/evaluate/uncertainty/uncertainty_bag_dependence.py \
-        --fold testing --dest motor_output/comparison/newgrid/uncertainty_bags_test.json
+        --fold testing \
+        --dest motor_output/comparison/newgrid/uncertainty_bags_test.json
+
+`uncertainty.py::decompose` splits an ensemble's predictive entropy into
+`total = H(p_mean)`, `aleatoric = mean H(p_i)` and their difference. That estimate
+belongs to the bag rather than to the data; this measures how much, by sweeping bag
+size on a fixed fold and by mixing model families.
+
+Two intervals are reported, answering different questions:
+
+* the subset spread -- how much the share moves depending on which members of a given
+  size you pick. Quantiles across subsets, not a bootstrap.
+* the subject bootstrap -- how much a named bag's share moves under resampling
+  patients.
 """
 
 import argparse

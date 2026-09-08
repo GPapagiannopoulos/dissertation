@@ -3,23 +3,21 @@
 Same convention as `decision_curves.py`: each function draws onto an axes handed to
 it, so composition stays with the caller and nothing needs a display. Nothing here
 computes a number -- the curves arrive already built by
-`evaluation/metrics.py::calibration_curve`, which is where the binning is asserted.
+`evaluation/metrics.py::calibration_curve`.
 
-Three choices worth keeping consistent across the report:
+Three choices to keep consistent across the report:
 
-* **Both axes are logarithmic.** The bins are equal-count, so at 3.4% prevalence nine
-  of ten sit below a predicted risk of 0.05 while the tenth runs to 1.0. On linear
-  axes every bin but the last collapses onto the origin and the diagram shows nothing.
-* **Perfect calibration is the diagonal**, drawn thin and grey. It is a reference, not
-  a competitor, and must not be read as another arm.
+* Both axes are logarithmic. The bins are equal-count, so at this prevalence nine of
+  ten sit below a predicted risk of 0.05 while the tenth runs to 1.0; on linear axes
+  every bin but the last collapses onto the origin.
+* Perfect calibration is the diagonal, drawn thin and grey. It is a reference, not a
+  competitor.
 * Colours and display names are imported from `decision_curves.py` rather than
   redefined, so an arm keeps one colour and one label across every figure.
 
-When the report carries a flexible curve, BOTH are drawn: the smooth line with its
-band is Van Calster's moderate-calibration statement, and the binned markers are the
-decomposition of the reported ECE. Showing them together is the point -- it lets a
-reader see that the grouping is not doing the work, which a binned diagram alone
-cannot establish.
+When the report carries a flexible curve, both are drawn: the smooth line with its
+band is the moderate-calibration statement, and the binned markers are the
+decomposition of the reported ECE.
 """
 
 from collections.abc import Mapping

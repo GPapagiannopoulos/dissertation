@@ -1,14 +1,7 @@
 """Tests for the per-admission landmark grid, the heart of stage 4.
 
 Every landmark is one prediction_time: the moment forecast from and the cutoff
-features may be drawn up to. The grid runs over the OPEN interval
-(admittime, censor), where the censor is the first of discharge and diagnosis.
-
-Both ends are excluded, for different reasons. The censor, because a prediction
-made at the moment of diagnosis has nothing left to predict and one made at
-discharge has nothing left to act on. admittime itself, because the HA-AKI gate
-upstream admits only onsets beyond 48h (measured minimum 48.02h), so a landmark
-there forecasting 48h is structurally negative.
+features may be drawn up to.
 """
 
 from collections.abc import Callable

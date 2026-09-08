@@ -6,17 +6,11 @@ Run from the repo root with the modelling environment's interpreter:
         --probe motor_output/probe-ng
 
 Two phases, mirroring `run_linear_probe.py`. Phase one runs the frozen released
-encoder over the TEST fold and caches each labelled position's 768-wide output;
-phase two applies the head already saved in `probe.pt` and scores it.
+encoder over the test fold and caches each labelled position's 768-wide output; phase
+two applies the head already saved in `probe.pt` and scores it.
 
-**Nothing is fitted here.** The head, its weight decay and its epoch were all
-selected on validation and are loaded as-is. Re-fitting or re-sweeping on the test
-fold would be the selection optimism the project's freeze exists to prevent, and it
-would make this number incomparable to every other test-fold arm.
-
-The probe was NOT part of the arm set frozen in REPORT_HANDOVER.md section 7; it is
-scored here as a capacity floor for the results table and must be reported as added
-after the freeze. It competes with nothing, so it moves no claim either way.
+Nothing is fitted here. The head, its weight decay and its epoch were all selected on
+validation and are loaded as-is.
 
 Needs a GPU for phase one, roughly 15 minutes, and writes ~0.95 GB of features.
 """

@@ -1,4 +1,4 @@
-"""Pair the LoRA ensemble against the XGBoost baseline on one fold.
+r"""Pair the LoRA ensemble against the XGBoost baseline on one fold.
 
 Run from the repo root with the modelling interpreter:
 
@@ -7,19 +7,13 @@ Run from the repo root with the modelling interpreter:
         --fold testing \
         --dest motor_output/comparison/newgrid/ensemble_vs_xgboost600_test.json
 
-This is the headline comparison of the project, and it is banked-npz arithmetic: both
-arms were scored once and their per-landmark predictions saved, so this needs no model,
-no GPU and no inference pass.
+Every metric is differenced on the same draw of subjects, so the variance of the
+cohort itself cancels and what survives is the difference between the models. The
+draw is over subjects, never landmarks, because the 12-hourly grid puts ~23
+correlated predictions inside one admission.
 
-Every metric is differenced on the SAME draw of subjects. Two one-model intervals
-overlap freely even when one model wins on nearly every resample, because they carry
-the variance of the cohort itself; pairing cancels that, and what survives is the
-difference between the models. The 12-hourly grid puts ~23 correlated predictions
-inside one admission, so the draw is over SUBJECTS -- a landmark-level bootstrap would
-report an interval several times too narrow.
-
-Members and the arm rosters come from `ensemble.roster`, so this cannot drift from the
-decision-curve or diversity analyses.
+Members and the arm rosters come from `ensemble.roster`. Needs no model, no GPU and
+no inference pass.
 """
 
 import argparse

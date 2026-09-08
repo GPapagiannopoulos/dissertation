@@ -1,9 +1,10 @@
-"""Calculates the benefit of greedy selection with an interval.
+r"""Calculates the benefit of greedy selection with an interval.
 
 Run from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/evaluate/ensembles/band_greedy_selection.py \
-        --fold testing --seeds 10 \
+        --fold testing \
+        --seeds 10 \
         --dest motor_output/comparison/newgrid/greedy_banded_test.json
 """
 

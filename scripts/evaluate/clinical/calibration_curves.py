@@ -1,4 +1,4 @@
-"""Reliability curves for every arm, with subject-level bands.
+r"""Reliability curves for every arm, with subject-level bands.
 
 Run from the repo root with the modelling interpreter:
 
@@ -6,24 +6,17 @@ Run from the repo root with the modelling interpreter:
         --fold testing \
         --dest motor_output/comparison/newgrid/calibration_test.json
 
-ECE is one number, and one number is weak evidence for a calibration claim: two arms
-can miss by the same total while one is confidently wrong at the top of the ranking
-and the other is diffusely wrong among rows nobody acts on. This resolves the same
-quantity by bin, so the claim can name WHERE each arm misses.
-
 The curve is the decomposition of the reported ECE, not a second opinion on it. Bins
-are cut equal-COUNT on each arm's own scores, exactly as
-`expected_calibration_error` cuts them, and the driver asserts that summing the curve
-reproduces the arm's reported ECE. Equal-width bins would be the conventional
-presentation and are wrong here: at 3.4% prevalence they put over 99% of rows in the
-first bin.
+are cut equal-COUNT on each arm's own scores, exactly as `expected_calibration_error`
+cuts them, and the driver asserts that summing the curve reproduces the arm's reported
+ECE. Equal-width bins would put over 99% of rows in the first bin at this prevalence.
 
-Bin edges are cut ONCE on the full fold and held fixed across bootstrap draws. A draw
+Bin edges are cut once on the full fold and held fixed across bootstrap draws. A draw
 that recuts its own quantiles moves the bins as well as the rates, and the band then
 measures bin drift rather than uncertainty about calibration.
 
-Members and the arm rosters come from `ensemble.roster`, so this cannot drift from the
-decision-curve or pairing analyses. Needs no GPU: it reads banked predictions.
+Members and the arm rosters come from `ensemble.roster`. Needs no GPU: it reads
+banked predictions.
 """
 
 import argparse

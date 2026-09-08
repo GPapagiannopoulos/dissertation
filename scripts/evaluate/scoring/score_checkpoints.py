@@ -5,12 +5,9 @@ Run from the repo root with the modelling environment's interpreter:
     .venv-modelling/bin/python scripts/evaluate/scoring/score_checkpoints.py \
         --run motor_output/runs/aki-seed0-v3
 
-This is where model selection happens, and it is deliberately not in the training
-loop. The in-loop evaluation reads a fixed ~1,600-patient slice, and measured on
-the 15,000-step run it ranked step 3,000 above step 10,000 (0.12939 vs 0.12970)
-where the full fold puts them the other way round by ten times that margin
-(0.13341 vs 0.13052). No metric choice repairs a sample that small, and enlarging
-it in-loop costs more than this pass does.
+Model selection happens here, deliberately not in the training loop: the in-loop
+evaluation reads a fixed ~1,600-patient slice, which is too small a sample to order
+checkpoints and cannot be enlarged in-loop for less than this pass costs.
 
 Every candidate's predictions are banked so the chosen one can be paired against
 another model without a second forward pass.

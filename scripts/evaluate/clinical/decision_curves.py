@@ -1,32 +1,22 @@
-"""Decision curve analysis over every arm, plus the ensemble-size curve.
+r"""Decision curve analysis over every arm, plus the ensemble-size curve.
 
 Run from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/evaluate/clinical/decision_curves.py \
         --dest motor_output/comparison/decision_curves.json
 
-Net benefit assesses whether at the threshold a clinician would actually act on,
-is this model worth consulting at all?
+Two panels:
 
-This script generates two panels:
-
-A) arm comparison: a single monolithic fine-tune, an ensemble of three
-  monolithic fine-tunes, one monolithic run's own checkpoints, the LoRA ensemble under
-  both checkpoint rules, and XGBoost, against alerting on everyone and on nobody.
+A) arm comparison: a single monolithic fine-tune, an ensemble of three monolithic
+   fine-tunes, one monolithic run's own checkpoints, the LoRA ensemble under both
+   checkpoint rules, and XGBoost, against alerting on everyone and on nobody.
 B) ensemble size sweep: each member is one training run contributing the checkpoint
-  the frozen rule selects and its `last`. Every subset of each size is enumerated and
-  averaged to avoid selection bias. A spread of ensemble performance is given as an
-  argument for deployment.
+   the frozen rule selects and its `last`. Every subset of each size is enumerated
+   and averaged to avoid selection bias.
 
-Everything here is measured on the landmark grid rebuilt 2026-08-21, which runs from
-`admittime` rather than from the 48h cutoff. The old-grid roster this file carried
-until 2026-08-26 named runs that no longer describe the data.
-
-The threshold window is fixed in advance of the intervention, using clinical judgement.
-Acting on predicted AKI means checking creatinine more often, reviewing
-nephrotoxic drugs, holding contrast, and offering more IV fluids. These are low risk
-interventions, and clinicians have a low barrier to offer them. On that basis a band of
-5%-15% was selected.
+The 5%-15% threshold band is fixed in advance from the intervention, not from the
+curves: acting on predicted AKI means checking creatinine more often, reviewing
+nephrotoxic drugs, holding contrast and offering more IV fluids, all low risk.
 
 Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """

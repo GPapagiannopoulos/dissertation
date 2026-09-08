@@ -1,4 +1,4 @@
-"""Render the calibration figure for the report.
+r"""Render the calibration figure for the report.
 
 Run from the repo root with the modelling interpreter, after `calibration_curves.py`
 has written its report:
@@ -10,13 +10,11 @@ has written its report:
 Writes PNG at 600 dpi, matching `plot_decision_curves.py`.
 
 `--arms` exists because six overlapping reliability curves are unreadable. The default
-draws the three the report's calibration claim is about; pass more to inspect, fewer
-to publish.
+draws the three the report's calibration claim is about.
 
 This driver only loads, composes and saves. Every number it draws was computed and
 asserted by `evaluation/metrics.py`, and the composition lives in
-`modelling/figures/calibration.py` -- so a figure can be wrong about how it renders,
-never about what it renders.
+`modelling/figures/calibration.py`.
 """
 
 import argparse

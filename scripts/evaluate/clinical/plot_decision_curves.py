@@ -1,4 +1,4 @@
-"""Render the decision curve figures for the report.
+r"""Render the decision curve figures for the report.
 
 Run from the repo root with the modelling interpreter, after `decision_curves.py`
 has written its report:
@@ -7,15 +7,11 @@ has written its report:
         --report motor_output/comparison/decision_curves.json \
         --dest-dir motor_output/figures
 
-Writes PNG at 600 dpi, which LaTeX's graphicx takes directly. A vector format
-would stay sharp at any magnification and would be smaller for line art, but raster
-was asked for, and 600 dpi is the density at which line plots stop showing stair
-steps in print.
+Writes PNG at 600 dpi, which LaTeX's graphicx takes directly.
 
 This driver only loads, composes and saves. Every number it draws was computed and
 asserted by `ensemble/decision_curve.py`, and the composition lives in
-`ensemble/graphs/decision_curves.py` -- so a figure can be wrong about how it renders,
-never about what it renders.
+`modelling/figures/decision_curves.py`.
 """
 
 import argparse

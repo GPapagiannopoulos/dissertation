@@ -1,4 +1,4 @@
-"""Explore ensemble compositions over banked predictions.
+r"""Explore ensemble compositions over banked predictions.
 
 Five experiments, all pure npz arithmetic on checkpoints already scored:
 
@@ -12,7 +12,8 @@ Five experiments, all pure npz arithmetic on checkpoints already scored:
 Run from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/evaluate/ensembles/explore_ensembles.py \
-        --fold test --dest motor_output/comparison/newgrid/explore_test.json
+        --fold test \
+        --dest motor_output/comparison/newgrid/explore_test.json
 """
 
 import argparse

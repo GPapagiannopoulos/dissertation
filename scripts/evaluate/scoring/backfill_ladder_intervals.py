@@ -1,9 +1,11 @@
-"""Add the missing metric intervals to a run's banked checkpoint ladder.
+r"""Add the missing metric intervals to a run's banked checkpoint ladder.
 
 Run from the repo root with the modelling interpreter:
 
-    .venv-modelling/bin/python scripts/evaluate/scoring/backfill_ladder_intervals.py \
-        --runs motor_output/runs/ng-* --selection selection_test
+    .venv-modelling/bin/python \
+        scripts/evaluate/scoring/backfill_ladder_intervals.py \
+        --runs motor_output/runs/ng-* \
+        --selection selection_test
 """
 
 import argparse

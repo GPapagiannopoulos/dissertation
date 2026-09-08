@@ -1,20 +1,18 @@
-"""Greedy forward selection of ensemble members (Caruana et al., 2004).
+r"""Greedy forward selection of ensemble members (Caruana et al., 2004).
 
 Run from the repo root:
 
     .venv-modelling/bin/python scripts/evaluate/ensembles/select_ensemble.py \
         --runs motor_output/runs/lora-cfg-* motor_output/runs/lora-sched-seed1
 
-Averaging every member is not optimal: a member with high error and low ambiguity
-subtracts from the mean. Greedy selection picks members one at a time, with
-replacement, so a strong member can be picked repeatedly and effectively weighted.
+Members are picked one at a time, with replacement, so a strong member can be picked
+repeatedly and effectively weighted.
 
-Selecting and reporting on the same rows is optimistic, so testing on a held-out set
-is used for validation: subjects are split in half, selection runs on one half and the
-ensemble is scored on the other. Both directions are reported, plus the
-select-on-everything bag as the upper bound it is.
+Selecting and reporting on the same rows is optimistic, so subjects are split in half,
+selection runs on one half and the ensemble is scored on the other. Both directions
+are reported, plus the select-on-everything bag as the upper bound it is.
 
-Needs no GPU -- it reads the prediction bundles `score_checkpoints.py` banked.
+Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """
 
 import argparse

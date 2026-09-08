@@ -1,4 +1,4 @@
-"""Re-score banked predictions against a different prediction horizon.
+r"""Re-score banked predictions against a different prediction horizon.
 
 Run from the repo root:
 
@@ -7,17 +7,13 @@ Run from the repo root:
         --labels meds_output/labels/landmark_labels_72h.parquet
 
 Needs no GPU and no forward pass. The landmark grid does not depend on the horizon --
-it comes from the admission windows at a fixed spacing, and `apply_time_horizons`
-only rewrites `boolean_value` -- so a model's scores at 72h are the same numbers it
-already produced at 48h. Only the targets move.
+it comes from the admission windows at a fixed spacing, and `apply_time_horizons` only
+rewrites `boolean_value` -- so a model's scores at 72h are the numbers it already
+produced at 48h. Only the targets move.
 
-What that measures is ZERO-SHOT horizon transfer: a model trained to forecast 48h is
-asked to rank 72h or 7d risk. Ranking should transfer, since anyone at high 48h risk
-is at high 72h risk; calibration should not, because prevalence rises with the
-window. Both are reported.
-
-AUPRC is not comparable across horizons -- it moves with the base rate -- so `lift`
-(AUPRC / base rate) and AUROC are the cross-horizon numbers.
+That measures zero-shot horizon transfer. AUPRC is not comparable across horizons
+because it moves with the base rate, so `lift` (AUPRC / base rate) and AUROC are the
+cross-horizon numbers.
 """
 
 import argparse

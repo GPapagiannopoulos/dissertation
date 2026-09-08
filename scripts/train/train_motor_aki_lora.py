@@ -1,9 +1,11 @@
-"""Stage 8 driver: fine-tune the AKI head and LoRA adapters over a frozen backbone.
+r"""Stage 8 driver: fine-tune the AKI head and LoRA adapters over a frozen backbone.
 
 Run it from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/train/train_motor_aki_lora.py \
-        --dest motor_output/runs/lora-seed0 --seed 0 --max-hours 9
+        --dest motor_output/runs/lora-seed0 \
+        --seed 0 \
+        --max-hours 9
 
 Everything but the model construction is the full fine-tune's: the same stream, the
 same collate, the same loop and the same metrics, so the two arms are comparable by

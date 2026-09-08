@@ -1,19 +1,16 @@
 """Handwritten mappings for MIMIC codes that OMOP has no concept for.
 
-This module is a bridge for MIMIC-native codes, that cannot reach OMOP.
-and being hand-written it is the least authoritative layer, so it runs last.
+Being hand-written this is the least authoritative layer, so it runs last.
 
-Only three families are mapped, because they are the only ones whose targets
-MOTOR kept. Insurance, marital status, language, hospital service, transfers and
-both location families have OMOP concepts but none survive in MOTOR's
-vocabulary, so mapping them would produce targets that tokenize to nothing.
+Only three families are mapped, because they are the only ones whose targets MOTOR
+kept. Insurance, marital status, language, hospital service, transfers and both
+location families have OMOP concepts but none survive in MOTOR's vocabulary, so
+mapping them would produce targets that tokenize to nothing. Values deliberately
+left out are recorded in the UNMAPPED_* tuples below.
 
-Values deliberately left out are recorded in the UNMAPPED_* tuples below, so a
-future reader can tell a considered omission from an oversight.
-
-Caveat: our Athena download excludes the Race, Ethnicity and Gender vocabularies,
-so the concept codes below follow the standard OMOP/OMB coding rather than a
-lookup against local files. Re-pull those three (small) vocabularies to verify.
+Caveat: our Athena download excludes the Race, Ethnicity and Gender vocabularies, so
+the concept codes below follow the standard OMOP/OMB coding rather than a lookup
+against local files.
 """
 
 # MIMIC records one race value per admission and conflates two OMOP axes: Race

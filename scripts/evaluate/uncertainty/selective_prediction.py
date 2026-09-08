@@ -1,4 +1,4 @@
-"""Risk and coverage inside an alert budget, using member disagreement to defer.
+r"""Risk and coverage inside an alert budget, using member disagreement to defer.
 
 Run from the repo root with the modelling interpreter:
 
@@ -7,22 +7,12 @@ Run from the repo root with the modelling interpreter:
 
 A ward acts on a fixed number of alerts a day. This asks whether the ensemble's
 internal disagreement is a better reason to withhold one of them than the score the
-ensemble already produced -- and it is deliberately built so that the answer can be
-no.
+ensemble already produced.
 
-Three design choices come straight from what the uncertainty work measured, and each
-one exists to stop this analysis flattering itself:
-
-* Deferring globally is not tested, because ambiguity tracks the prediction at
-  Spearman 0.954 and deferring the fold's most contested 10% deletes the alert list
-  along with 41.6% of its positives. Deferral happens inside the alert list only.
-* The headline control is the score's own ordering. Inside an alert list, deferring
-  the lowest scores is the same thing as deferring the landmarks nearest the operating
-  threshold, so the two controls the design named are one control -- and it needs no
-  ensemble, which is the bar a 23-member ensemble has to clear to be worth running.
-* The oracle is measured first. Stage 9's fitted correction had a real signal and a
-  ceiling smaller than the cost of estimating it, and the hour that cost was spent
-  before anyone measured the ceiling.
+Deferral happens inside the alert list only, never globally: ambiguity tracks the
+prediction closely enough that deferring the fold's most contested rows would delete
+the alert list along with most of its positives. The control is the score's own
+ordering, which needs no ensemble at all.
 
 Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """

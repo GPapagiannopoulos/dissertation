@@ -1,4 +1,4 @@
-"""Does epistemic uncertainty carry anything the predicted risk does not?
+r"""Does epistemic uncertainty carry anything the predicted risk does not?
 
 Run from the repo root with the modelling interpreter:
 
@@ -8,17 +8,15 @@ Run from the repo root with the modelling interpreter:
         --stems step_014000 last \
         --dest motor_output/comparison/uncertainty_control.json
 
-This is the control that decides whether the uncertainty work is worth doing. It seeks
-to answer:
+Two questions:
 
 1. How much of the epistemic column is a function of the prediction alone?
 2. At a fixed predicted risk, does the residual predict anything?
 
-At ten bands the halves of the top band differ in predicted risk by 0.059 and the
-apparent effect is roughly four times the real one; at two hundred the leak falls to
-0.0002. The reported gap is the average over bands, with a subject-level bootstrap
-around it, split into the high-risk region and the rest because the effect is not
-uniform.
+The bands must be narrow. At ten bands the halves of the top band differ enough in
+predicted risk to inflate the apparent effect several-fold; at two hundred the leak is
+negligible. The reported gap is the average over bands with a subject-level bootstrap
+around it, split into the high-risk region and the rest.
 
 Needs no GPU: it reads the prediction bundles `score_checkpoints.py` already banked.
 """
