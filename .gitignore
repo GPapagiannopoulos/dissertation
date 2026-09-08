@@ -9,6 +9,8 @@ CLAUDE.md
 athena/
 motor_model/
 REPORT_*
+scripts/tools/build_flashcards.py
+motor_pipeline_flashcards.apkg
 
 # Model artifacts. Most of motor_output/ is enormous and regenerable, so only the
 # irreplaceable, small parts are versioned: the banked prediction bundles every

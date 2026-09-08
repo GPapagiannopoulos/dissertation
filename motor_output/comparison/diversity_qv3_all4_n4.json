@@ -1,0 +1,21 @@
+{
+  "label": "qv3-plus-all4-N4",
+  "n_members": 4.0,
+  "n_labels": 445814.0,
+  "alert_budget": 0.01,
+  "mean_flag_overlap": 0.4178429131526809,
+  "min_flag_overlap": 0.3864095786036386,
+  "mean_rank_correlation": 0.8921445885731968,
+  "min_rank_correlation": 0.8770047016119779,
+  "ensemble_auprc": 0.1790813576176424,
+  "mean_member_auprc": 0.16709867602643225,
+  "best_member_auprc": 0.1744018605263047,
+  "auprc_gain": 0.01198268159121016,
+  "gain_over_best": 0.00467949709133772,
+  "ensemble_brier": 0.03164111450314522,
+  "ensemble_ece": 0.0013729333181495874,
+  "mean_member_brier": 0.03194804675877094,
+  "mean_member_ece": 0.0037124329990903524,
+  "gain_over_best_lo": 0.001711416838011403,
+  "gain_over_best_hi": 0.007506033498995025
+}

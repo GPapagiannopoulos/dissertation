@@ -1,0 +1,115 @@
+{
+  "manifest_version": 1,
+  "run": "lora-72h-all5-r8",
+  "written": "2026-08-18T00:15:07+00:00",
+  "provenance": "runtime",
+  "parameters": {
+    "sequences": "/home/george/PycharmProjects/dissertation/meds_output/sequences_72h",
+    "split": "/home/george/PycharmProjects/dissertation/meds_output/labels/subject_split.parquet",
+    "seed": 0,
+    "total_steps": 30000,
+    "max_hours": 5.5,
+    "token_budget": 8192,
+    "adapter_lr": 0.0002,
+    "head_lr": 0.0001,
+    "warmup": 300,
+    "accumulate": 4,
+    "eval_every": 500,
+    "eval_batches": 400,
+    "checkpoint_every": 4,
+    "patience": 0,
+    "min_delta": 0.0,
+    "epochs": 8,
+    "lora_r": 8,
+    "lora_alpha": 32,
+    "lora_dropout": 0.0,
+    "lora_targets": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "ff_proj",
+      "o_proj"
+    ],
+    "bag_fraction": null,
+    "no_compile": false,
+    "compiled": true,
+    "arm": "lora",
+    "dest": "/home/george/PycharmProjects/dissertation/motor_output/runs/lora-72h-all5-r8"
+  },
+  "git": {
+    "commit": "d04420f85e307fc5cb773c2b273700ca08dfbefc",
+    "branch": "feat/gp/peft",
+    "dirty": true
+  },
+  "environment": {
+    "python": "3.13.14",
+    "platform": "Linux-6.19.10-300.fc44.x86_64-x86_64-with-glibc2.43",
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": 92000,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memory_mib": 7834,
+      "capability": "8.9"
+    },
+    "cpu_count": 16,
+    "host_ram_gb": 14.9
+  },
+  "checkpoints": [
+    {
+      "name": "last.pt",
+      "bytes": 5059467
+    },
+    {
+      "name": "step_002000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_004000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_006000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_008000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_010000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_012000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_014000.pt",
+      "bytes": 5068427
+    },
+    {
+      "name": "step_016000.pt",
+      "bytes": 5068427
+    }
+  ],
+  "results": {
+    "steps": 17200,
+    "stop_reason": "wall_clock",
+    "wall_clock_s": 19799.5,
+    "wall_clock": "5:29:59",
+    "active_clock_s": 19799.5,
+    "active_clock": "5:29:59",
+    "seconds_per_step": 1.1511,
+    "peak_gib": 3.19,
+    "final_train_loss": 0.153902623097517,
+    "evaluations": 34,
+    "evaluation_labels": 32271.0,
+    "best_evaluation": {
+      "step": 14500,
+      "loss": 0.1597529921650329,
+      "auprc": 0.20299700502009818
+    },
+    "suspected_stalls": []
+  }
+}

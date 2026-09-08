@@ -1,0 +1,107 @@
+{
+  "manifest_version": 1,
+  "run": "aki-seed0-v3",
+  "written": "2026-08-12T09:59:55+00:00",
+  "provenance": "reconstructed",
+  "parameters": {
+    "accumulate": 4,
+    "token_budget": 8192,
+    "epochs": 8,
+    "compiled": false,
+    "head_lr": 0.0001,
+    "seed": 0,
+    "encoder_lr": 1e-05,
+    "warmup": 306,
+    "total_steps": 15001,
+    "warmup_resolution": 50,
+    "peak_observed_at_step": 300,
+    "eval_every": 500,
+    "evaluation_labels": 11254.0,
+    "eval_batches": 150,
+    "_supplied_keys": [
+      "accumulate",
+      "compiled",
+      "epochs",
+      "eval_batches",
+      "head_lr",
+      "seed",
+      "token_budget"
+    ]
+  },
+  "git": {
+    "commit": "934b22133d3ef03c82ac5d199e23656b9eb7df3e",
+    "branch": "feat/gp/motor-port",
+    "dirty": true
+  },
+  "environment": {
+    "python": "3.13.14",
+    "platform": "Linux-6.19.10-300.fc44.x86_64-x86_64-with-glibc2.43",
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "cudnn": 92000,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memory_mib": 7834,
+      "capability": "8.9"
+    },
+    "cpu_count": 16,
+    "host_ram_gb": 14.9
+  },
+  "checkpoints": [
+    {
+      "name": "best.pt",
+      "bytes": 541967360
+    },
+    {
+      "name": "last.pt",
+      "bytes": 541967040
+    },
+    {
+      "name": "step_002000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_004000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_006000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_008000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_010000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_012000.pt",
+      "bytes": 541977001
+    },
+    {
+      "name": "step_014000.pt",
+      "bytes": 541977001
+    }
+  ],
+  "results": {
+    "steps": 15000,
+    "stop_reason": "step_budget",
+    "wall_clock_s": 24127.5,
+    "wall_clock": "6:42:07",
+    "active_clock_s": 24127.5,
+    "active_clock": "6:42:07",
+    "seconds_per_step": 1.6085,
+    "peak_gib": 5.43,
+    "final_train_loss": 0.1276537722328772,
+    "evaluations": 30,
+    "evaluation_labels": 11254.0,
+    "best_evaluation": {
+      "step": 3000,
+      "loss": 0.12939248954463814,
+      "auprc": 0.20056390400360216
+    },
+    "suspected_stalls": []
+  }
+}

@@ -1,0 +1,136 @@
+{
+ "resamples": 2000,
+ "seed": 0,
+ "n_subjects": 26534,
+ "arms": {
+  "byloss8": [
+   "motor_output/runs/ng-all4-r16/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all4-r32/selection/last_predictions.npz",
+   "motor_output/runs/ng-all4-r32-a32/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all4-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all5-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-o-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-qkv-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/pilot-all4-r16-a32/selection/step_018000_predictions.npz"
+  ],
+  "plus_last": [
+   "motor_output/runs/ng-all4-r16/selection/last_predictions.npz",
+   "motor_output/runs/ng-all4-r16/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all4-r32-a32/selection/last_predictions.npz",
+   "motor_output/runs/ng-all4-r32-a32/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all4-r32/selection/last_predictions.npz",
+   "motor_output/runs/ng-all4-r8/selection/last_predictions.npz",
+   "motor_output/runs/ng-all4-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-all5-r8/selection/last_predictions.npz",
+   "motor_output/runs/ng-all5-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-o-r8/selection/last_predictions.npz",
+   "motor_output/runs/ng-o-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/ng-qkv-r8/selection/last_predictions.npz",
+   "motor_output/runs/ng-qkv-r8/selection/step_018000_predictions.npz",
+   "motor_output/runs/pilot-all4-r16-a32/selection/last_predictions.npz",
+   "motor_output/runs/pilot-all4-r16-a32/selection/step_018000_predictions.npz"
+  ],
+  "orr8": [
+   "motor_output/runs/ng-o-r8/selection/step_018000_predictions.npz"
+  ],
+  "qkvr8": [
+   "motor_output/runs/ng-qkv-r8/selection/step_018000_predictions.npz"
+  ]
+ },
+ "point": {
+  "byloss8": {
+   "auprc": 0.18041618026173073,
+   "auroc": 0.8085720003453291,
+   "brier": 0.029832612723112106,
+   "ece": 0.0012784999233334342,
+   "precision_at_1pct": 0.3744500570311227
+  },
+  "plus_last": {
+   "auprc": 0.18196329155992857,
+   "auroc": 0.8093638370471296,
+   "brier": 0.02979763224720955,
+   "ece": 0.0015424152607940867,
+   "precision_at_1pct": 0.37282059638259735
+  },
+  "orr8": {
+   "auprc": 0.16333312628800598,
+   "auroc": 0.7954446711676139,
+   "brier": 0.030164530500769615,
+   "ece": 0.0009846531606297016,
+   "precision_at_1pct": 0.33615773179077724
+  },
+  "qkvr8": {
+   "auprc": 0.16527759367960537,
+   "auroc": 0.7943739359998563,
+   "brier": 0.030149372294545174,
+   "ece": 0.0022761227255601317,
+   "precision_at_1pct": 0.34349030470914127
+  }
+ },
+ "deltas": {
+  "plus_last-byloss8": {
+   "auprc": {
+    "value": 0.0015471112981978452,
+    "lo": 0.00021905794337770125,
+    "hi": 0.002805349840274311,
+    "p_left_wins": 0.9895
+   },
+   "auroc": {
+    "value": 0.0007918367018004968,
+    "lo": 0.0001309567257723132,
+    "hi": 0.0014910986900715925,
+    "p_left_wins": 0.99
+   },
+   "brier": {
+    "value": -3.498047590255737e-05,
+    "lo": -6.801439449191093e-05,
+    "hi": -1.5150755643844665e-06,
+    "p_left_wins": 0.018
+   },
+   "ece": {
+    "value": 0.0002639153374606525,
+    "lo": -0.0008782829363052007,
+    "hi": 0.001381762988819274,
+    "p_left_wins": 0.6815
+   },
+   "precision_at_1pct": {
+    "value": -0.0016294606485253715,
+    "lo": -0.007794497612684037,
+    "hi": 0.004659570488481557,
+    "p_left_wins": 0.293
+   }
+  },
+  "qkvr8-orr8": {
+   "auprc": {
+    "value": 0.001944467391599397,
+    "lo": -0.0016811909603785529,
+    "hi": 0.005577116261139369,
+    "p_left_wins": 0.8635
+   },
+   "auroc": {
+    "value": -0.001070735167757575,
+    "lo": -0.0034847568371953823,
+    "hi": 0.0012706378509083156,
+    "p_left_wins": 0.1925
+   },
+   "brier": {
+    "value": -1.5158206224441528e-05,
+    "lo": -8.265306241810322e-05,
+    "hi": 5.2468292415142054e-05,
+    "p_left_wins": 0.3355
+   },
+   "ece": {
+    "value": 0.00129146956493043,
+    "lo": 0.0007236489075071964,
+    "hi": 0.0017186826910862215,
+    "p_left_wins": 1.0
+   },
+   "precision_at_1pct": {
+    "value": 0.007332572918364033,
+    "lo": -0.004434737772591707,
+    "hi": 0.020525986197970393,
+    "p_left_wins": 0.89
+   }
+  }
+ }
+}
