@@ -1,0 +1,104 @@
+{
+ "fold": "testing",
+ "left": "lora_last2 (23, by-loss + last)",
+ "right": "lora_all_last (12, all last)",
+ "n_labels": 616193,
+ "n_subjects": 26526,
+ "resamples": 2000,
+ "seed": 0,
+ "members": {
+  "lora_last2": [
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/last_predictions.npz"
+  ],
+  "lora_all_last": [
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/last_predictions.npz"
+  ]
+ },
+ "point": {
+  "auprc": {
+   "lora_last2": 0.18616748708152203,
+   "lora_all_last": 0.1849243387341491
+  },
+  "auroc": {
+   "lora_last2": 0.8150883954990855,
+   "lora_all_last": 0.8149926081182236
+  },
+  "brier": {
+   "lora_last2": 0.02998850314059952,
+   "lora_all_last": 0.03002911304718594
+  },
+  "ece": {
+   "lora_last2": 0.0008046936127213454,
+   "lora_all_last": 0.0026695572621512967
+  },
+  "precision_at_1pct": {
+   "lora_last2": 0.3774748458292762,
+   "lora_all_last": 0.3765011359948069
+  }
+ },
+ "deltas": {
+  "auprc": {
+   "value": 0.0012431483473729354,
+   "lo": 0.0002278765657383157,
+   "hi": 0.0022178463880868104,
+   "p_left_wins": 0.992
+  },
+  "auroc": {
+   "value": 9.578738086191141e-05,
+   "lo": -0.0003614943922617825,
+   "hi": 0.0005641041979688204,
+   "p_left_wins": 0.649
+  },
+  "brier": {
+   "value": -4.060990658641753e-05,
+   "lo": -6.806581613755472e-05,
+   "hi": -1.3133497354881005e-05,
+   "p_left_wins": 0.0015
+  },
+  "ece": {
+   "value": -0.0018648636494299512,
+   "lo": -0.0023741851688901905,
+   "hi": -0.0006002947661264239,
+   "p_left_wins": 0.002
+  },
+  "precision_at_1pct": {
+   "value": 0.0009737098344693162,
+   "lo": -0.003288432547042154,
+   "hi": 0.006375362401770009,
+   "p_left_wins": 0.7
+  }
+ }
+}

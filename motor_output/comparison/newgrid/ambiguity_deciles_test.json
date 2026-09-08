@@ -1,0 +1,89 @@
+{
+ "fold": "testing",
+ "arm": "lora_last2",
+ "n_members": 23,
+ "n_labels": 616193,
+ "prevalence": 0.03384653834107171,
+ "deciles": [
+  {
+   "decile": 1,
+   "n": 61620,
+   "mean_ambiguity": 3.268083100777036e-07,
+   "mean_prediction": 0.0007244196785570696,
+   "prevalence": 0.00043816942551119765,
+   "share_of_positives": 0.001294591484464902
+  },
+  {
+   "decile": 2,
+   "n": 61620,
+   "mean_ambiguity": 3.6139722794288705e-06,
+   "mean_prediction": 0.0036603096594047084,
+   "prevalence": 0.003667640376501136,
+   "share_of_positives": 0.01083621020329881
+  },
+  {
+   "decile": 3,
+   "n": 61620,
+   "mean_ambiguity": 1.0686091844277154e-05,
+   "mean_prediction": 0.0074317054466564916,
+   "prevalence": 0.006897111327491074,
+   "share_of_positives": 0.020377828922132718
+  },
+  {
+   "decile": 4,
+   "n": 61619,
+   "mean_ambiguity": 2.1948263784165494e-05,
+   "mean_prediction": 0.011284975623217765,
+   "prevalence": 0.010500008114380305,
+   "share_of_positives": 0.031022247794399695
+  },
+  {
+   "decile": 5,
+   "n": 61619,
+   "mean_ambiguity": 4.0608797496568364e-05,
+   "mean_prediction": 0.015762647952210173,
+   "prevalence": 0.015141433648712248,
+   "share_of_positives": 0.044735327963176065
+  },
+  {
+   "decile": 6,
+   "n": 61619,
+   "mean_ambiguity": 7.371452005571006e-05,
+   "mean_prediction": 0.021360792717226816,
+   "prevalence": 0.02186014054106688,
+   "share_of_positives": 0.06458573072497123
+  },
+  {
+   "decile": 7,
+   "n": 61619,
+   "mean_ambiguity": 0.00013723781990872911,
+   "mean_prediction": 0.029010180013914668,
+   "prevalence": 0.03054252746717733,
+   "share_of_positives": 0.09023782125047948
+  },
+  {
+   "decile": 8,
+   "n": 61619,
+   "mean_ambiguity": 0.00027742553944648003,
+   "mean_prediction": 0.040537897650177686,
+   "prevalence": 0.04107499310277674,
+   "share_of_positives": 0.12135596471039509
+  },
+  {
+   "decile": 9,
+   "n": 61619,
+   "mean_ambiguity": 0.0006833777775089441,
+   "mean_prediction": 0.06193205452197373,
+   "prevalence": 0.06288644736201496,
+   "share_of_positives": 0.18579785193709245
+  },
+  {
+   "decile": 10,
+   "n": 61619,
+   "mean_ambiguity": 0.004359573150503128,
+   "mean_prediction": 0.14466553658782347,
+   "prevalence": 0.1454583813434168,
+   "share_of_positives": 0.42975642500958955
+  }
+ ]
+}

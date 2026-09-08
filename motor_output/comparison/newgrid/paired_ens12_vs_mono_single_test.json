@@ -1,0 +1,87 @@
+{
+ "fold": "testing",
+ "left": "lora_ens_12 (12, by-loss)",
+ "resamples": 2000,
+ "seed": 0,
+ "n_labels": 616193,
+ "n_subjects": 26526,
+ "members": {
+  "lora_ens_12": [
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32/selection_test/last_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/step_018000_predictions.npz",
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/step_018000_predictions.npz"
+  ],
+  "monolithic_single": [
+   "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_018000_predictions.npz"
+  ]
+ },
+ "point": {
+  "lora_ens_12": {
+   "auprc": 0.18460198176463138,
+   "auroc": 0.813865029745921,
+   "brier": 0.03005166684570967,
+   "ece": 0.0022955986348743495,
+   "precision_at_1pct": 0.3714703018500487,
+   "recall_at_1pct": 0.10975258918296893,
+   "precision_at_5pct": 0.2044790652385589,
+   "base_rate": 0.03384653834107171,
+   "n": 616193.0,
+   "n_positive": 20856.0
+  },
+  "monolithic_single": {
+   "auprc": 0.16881129082725427,
+   "auroc": 0.7998461424786597,
+   "brier": 0.030529859389741693,
+   "ece": 0.0058155134056827006,
+   "precision_at_1pct": 0.34712755598831546,
+   "recall_at_1pct": 0.10256041426927504,
+   "precision_at_5pct": 0.19045764362220058,
+   "base_rate": 0.03384653834107171,
+   "n": 616193.0,
+   "n_positive": 20856.0
+  }
+ },
+ "paired": {
+  "lora_ens_12-monolithic_single": {
+   "auprc": {
+    "value": 0.015790690937377116,
+    "lo": 0.011639690614717695,
+    "hi": 0.019661762296845013,
+    "p_left_wins": 1.0
+   },
+   "auroc": {
+    "value": 0.014018887267261304,
+    "lo": 0.011527858572673525,
+    "hi": 0.0164212414446155,
+    "p_left_wins": 1.0
+   },
+   "brier": {
+    "value": -0.0004781925440320231,
+    "lo": -0.000571925938045023,
+    "hi": -0.000384695860807337,
+    "p_left_wins": 0.0
+   },
+   "ece": {
+    "value": -0.003519914770808351,
+    "lo": -0.004577306065084809,
+    "hi": -0.0021262282112010384,
+    "p_left_wins": 0.0
+   },
+   "precision_at_1pct": {
+    "value": 0.02434274586173324,
+    "lo": 0.013224508658661187,
+    "hi": 0.03843958802349046,
+    "p_left_wins": 1.0
+   }
+  }
+ }
+}

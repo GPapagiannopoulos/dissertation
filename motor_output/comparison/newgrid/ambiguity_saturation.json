@@ -1,0 +1,451 @@
+{
+ "note": "ambiguity = mean_member_brier - ensemble_brier, exact via Gram matrix",
+ "max_subsets": 400,
+ "seed": 0,
+ "folds": {
+  "testing": {
+   "by_loss": [
+    {
+     "n_runs": 1,
+     "n_subsets": 12,
+     "n_members": 1,
+     "mean_ambiguity": 0.0,
+     "min_ambiguity": 0.0,
+     "max_ambiguity": 0.0,
+     "share_of_full": 0.0
+    },
+    {
+     "n_runs": 2,
+     "n_subsets": 66,
+     "n_members": 2,
+     "mean_ambiguity": 0.00013891889701464472,
+     "min_ambiguity": 0.00010691274922620519,
+     "max_ambiguity": 0.00018698717044726698,
+     "share_of_full": 0.5454545454545451
+    },
+    {
+     "n_runs": 3,
+     "n_subsets": 220,
+     "n_members": 3,
+     "mean_ambiguity": 0.0001852251960195263,
+     "min_ambiguity": 0.00014745354664071758,
+     "max_ambiguity": 0.00023533994560345035,
+     "share_of_full": 0.727272727272727
+    },
+    {
+     "n_runs": 4,
+     "n_subsets": 400,
+     "n_members": 4,
+     "mean_ambiguity": 0.00020813892546918625,
+     "min_ambiguity": 0.00016971052081492157,
+     "max_ambiguity": 0.00025225972237563317,
+     "share_of_full": 0.8172417534471509
+    },
+    {
+     "n_runs": 5,
+     "n_subsets": 400,
+     "n_members": 5,
+     "mean_ambiguity": 0.0002218491809446338,
+     "min_ambiguity": 0.00018361817703450205,
+     "max_ambiguity": 0.000259819974991274,
+     "share_of_full": 0.8710740349375343
+    },
+    {
+     "n_runs": 6,
+     "n_subsets": 400,
+     "n_members": 6,
+     "mean_ambiguity": 0.00023174703389246251,
+     "min_ambiguity": 0.00019437976148210714,
+     "max_ambiguity": 0.00026482853465505194,
+     "share_of_full": 0.909937206159407
+    },
+    {
+     "n_runs": 7,
+     "n_subsets": 400,
+     "n_members": 7,
+     "mean_ambiguity": 0.00023788621615067974,
+     "min_ambiguity": 0.00020394211553016002,
+     "max_ambiguity": 0.0002657485620596355,
+     "share_of_full": 0.9340422411120346
+    },
+    {
+     "n_runs": 8,
+     "n_subsets": 400,
+     "n_members": 8,
+     "mean_ambiguity": 0.00024257579407139282,
+     "min_ambiguity": 0.00021068044183456588,
+     "max_ambiguity": 0.0002650448406855306,
+     "share_of_full": 0.9524555142381995
+    },
+    {
+     "n_runs": 9,
+     "n_subsets": 220,
+     "n_members": 9,
+     "mean_ambiguity": 0.00024696692802603546,
+     "min_ambiguity": 0.0002190586009454868,
+     "max_ambiguity": 0.0002629268270686177,
+     "share_of_full": 0.9696969696969707
+    },
+    {
+     "n_runs": 10,
+     "n_subsets": 66,
+     "n_members": 10,
+     "mean_ambiguity": 0.00025005401462636115,
+     "min_ambiguity": 0.00022865737820207703,
+     "max_ambiguity": 0.0002609048504399053,
+     "share_of_full": 0.9818181818181838
+    },
+    {
+     "n_runs": 11,
+     "n_subsets": 12,
+     "n_members": 11,
+     "mean_ambiguity": 0.00025257981275389994,
+     "min_ambiguity": 0.00024024005520020646,
+     "max_ambiguity": 0.00025755214953345667,
+     "share_of_full": 0.9917355371900838
+    },
+    {
+     "n_runs": 12,
+     "n_subsets": 1,
+     "n_members": 12,
+     "mean_ambiguity": 0.0002546846445268488,
+     "min_ambiguity": 0.0002546846445268488,
+     "max_ambiguity": 0.0002546846445268488,
+     "share_of_full": 1.0
+    }
+   ],
+   "by_loss_plus_last": [
+    {
+     "n_runs": 1,
+     "n_subsets": 12,
+     "n_members": 2,
+     "mean_ambiguity": 0.0001501948581734949,
+     "min_ambiguity": 0.0,
+     "max_ambiguity": 0.0002628743027998665,
+     "share_of_full": 0.2677993079301176
+    },
+    {
+     "n_runs": 2,
+     "n_subsets": 66,
+     "n_members": 4,
+     "mean_ambiguity": 0.0003723214542797481,
+     "min_ambiguity": 0.00020539063499240735,
+     "max_ambiguity": 0.0004974056915409125,
+     "share_of_full": 0.6638538029609257
+    },
+    {
+     "n_runs": 3,
+     "n_subsets": 220,
+     "n_members": 6,
+     "mean_ambiguity": 0.0004477308005003634,
+     "min_ambiguity": 0.0002830467424734494,
+     "max_ambiguity": 0.0005614170449837527,
+     "share_of_full": 0.798309609071252
+    },
+    {
+     "n_runs": 4,
+     "n_subsets": 400,
+     "n_members": 8,
+     "mean_ambiguity": 0.0004864390954772619,
+     "min_ambiguity": 0.0003557679888102341,
+     "max_ambiguity": 0.0005960707577246137,
+     "share_of_full": 0.8673269824489352
+    },
+    {
+     "n_runs": 5,
+     "n_subsets": 400,
+     "n_members": 9,
+     "mean_ambiguity": 0.0005092806654974487,
+     "min_ambiguity": 0.00039845869401025635,
+     "max_ambiguity": 0.0006035511799442912,
+     "share_of_full": 0.9080537870668234
+    },
+    {
+     "n_runs": 6,
+     "n_subsets": 400,
+     "n_members": 11,
+     "mean_ambiguity": 0.0005221133486793131,
+     "min_ambiguity": 0.00043172126868952195,
+     "max_ambiguity": 0.0006059869704797562,
+     "share_of_full": 0.9309346214494495
+    },
+    {
+     "n_runs": 7,
+     "n_subsets": 400,
+     "n_members": 13,
+     "mean_ambiguity": 0.0005315692851418276,
+     "min_ambiguity": 0.00045324504728038156,
+     "max_ambiguity": 0.0005991630206329986,
+     "share_of_full": 0.9477946742587635
+    },
+    {
+     "n_runs": 8,
+     "n_subsets": 400,
+     "n_members": 16,
+     "mean_ambiguity": 0.0005426069974064481,
+     "min_ambiguity": 0.00048546031174515406,
+     "max_ambiguity": 0.0005997641734684098,
+     "share_of_full": 0.9674750530782746
+    },
+    {
+     "n_runs": 9,
+     "n_subsets": 220,
+     "n_members": 17,
+     "mean_ambiguity": 0.0005482887307455944,
+     "min_ambiguity": 0.0004958131973511843,
+     "max_ambiguity": 0.0005937827000160522,
+     "share_of_full": 0.9776056545820175
+    },
+    {
+     "n_runs": 10,
+     "n_subsets": 66,
+     "n_members": 19,
+     "mean_ambiguity": 0.0005533130239247879,
+     "min_ambiguity": 0.000519071247150461,
+     "max_ambiguity": 0.0005884930659197604,
+     "share_of_full": 0.9865640320696928
+    },
+    {
+     "n_runs": 11,
+     "n_subsets": 12,
+     "n_members": 21,
+     "mean_ambiguity": 0.0005574234557929075,
+     "min_ambiguity": 0.0005379556339021306,
+     "max_ambiguity": 0.0005758734540235056,
+     "share_of_full": 0.9938929834263683
+    },
+    {
+     "n_runs": 12,
+     "n_subsets": 1,
+     "n_members": 23,
+     "mean_ambiguity": 0.0005608485672886367,
+     "min_ambiguity": 0.0005608485672886367,
+     "max_ambiguity": 0.0005608485672886367,
+     "share_of_full": 1.0
+    }
+   ]
+  },
+  "validation": {
+   "by_loss": [
+    {
+     "n_runs": 1,
+     "n_subsets": 12,
+     "n_members": 1,
+     "mean_ambiguity": 0.0,
+     "min_ambiguity": 0.0,
+     "max_ambiguity": 0.0,
+     "share_of_full": 0.0
+    },
+    {
+     "n_runs": 2,
+     "n_subsets": 66,
+     "n_members": 2,
+     "mean_ambiguity": 0.00013637434402063777,
+     "min_ambiguity": 0.00010536412182225556,
+     "max_ambiguity": 0.00018246258258494425,
+     "share_of_full": 0.5454545454545452
+    },
+    {
+     "n_runs": 3,
+     "n_subsets": 220,
+     "n_members": 3,
+     "mean_ambiguity": 0.0001818324586941837,
+     "min_ambiguity": 0.00014515150977788879,
+     "max_ambiguity": 0.00022745911668271834,
+     "share_of_full": 0.727272727272727
+    },
+    {
+     "n_runs": 4,
+     "n_subsets": 400,
+     "n_members": 4,
+     "mean_ambiguity": 0.00020432926386140606,
+     "min_ambiguity": 0.00016653442072060145,
+     "max_ambiguity": 0.0002471436441476766,
+     "share_of_full": 0.817252882446267
+    },
+    {
+     "n_runs": 5,
+     "n_subsets": 400,
+     "n_members": 5,
+     "mean_ambiguity": 0.00021789905306139972,
+     "min_ambiguity": 0.00018048934204188292,
+     "max_ambiguity": 0.00025505548971717926,
+     "share_of_full": 0.8715277774285405
+    },
+    {
+     "n_runs": 6,
+     "n_subsets": 400,
+     "n_members": 6,
+     "mean_ambiguity": 0.0002275079235668727,
+     "min_ambiguity": 0.000190127937346303,
+     "max_ambiguity": 0.0002599187511248967,
+     "share_of_full": 0.9099602416250405
+    },
+    {
+     "n_runs": 7,
+     "n_subsets": 400,
+     "n_members": 7,
+     "mean_ambiguity": 0.000233519302326241,
+     "min_ambiguity": 0.00020012592350833035,
+     "max_ambiguity": 0.00026076512077144324,
+     "share_of_full": 0.9340038686891615
+    },
+    {
+     "n_runs": 8,
+     "n_subsets": 400,
+     "n_members": 8,
+     "mean_ambiguity": 0.00023814574364067727,
+     "min_ambiguity": 0.0002068505530200002,
+     "max_ambiguity": 0.0002597922966226505,
+     "share_of_full": 0.9525081809361636
+    },
+    {
+     "n_runs": 9,
+     "n_subsets": 220,
+     "n_members": 9,
+     "mean_ambiguity": 0.00024244327825891177,
+     "min_ambiguity": 0.00021570391911121837,
+     "max_ambiguity": 0.00025759635669764724,
+     "share_of_full": 0.96969696969697
+    },
+    {
+     "n_runs": 10,
+     "n_subsets": 66,
+     "n_members": 10,
+     "mean_ambiguity": 0.00024547381923714786,
+     "min_ambiguity": 0.00022527286950931903,
+     "max_ambiguity": 0.0002556570913329246,
+     "share_of_full": 0.9818181818181808
+    },
+    {
+     "n_runs": 11,
+     "n_subsets": 12,
+     "n_members": 11,
+     "mean_ambiguity": 0.0002479533527647958,
+     "min_ambiguity": 0.00023636243181636733,
+     "max_ambiguity": 0.0002528230311420747,
+     "share_of_full": 0.9917355371900816
+    },
+    {
+     "n_runs": 12,
+     "n_subsets": 1,
+     "n_members": 12,
+     "mean_ambiguity": 0.0002500196307045027,
+     "min_ambiguity": 0.0002500196307045027,
+     "max_ambiguity": 0.0002500196307045027,
+     "share_of_full": 1.0
+    }
+   ],
+   "by_loss_plus_last": [
+    {
+     "n_runs": 1,
+     "n_subsets": 12,
+     "n_members": 2,
+     "mean_ambiguity": 0.0001515877974459679,
+     "min_ambiguity": 0.0,
+     "max_ambiguity": 0.0002749680047057432,
+     "share_of_full": 0.27127046484100953
+    },
+    {
+     "n_runs": 2,
+     "n_subsets": 66,
+     "n_members": 4,
+     "mean_ambiguity": 0.00037184512626694453,
+     "min_ambiguity": 0.0001982418519940331,
+     "max_ambiguity": 0.0005057518032985878,
+     "share_of_full": 0.6654269139786949
+    },
+    {
+     "n_runs": 3,
+     "n_subsets": 220,
+     "n_members": 6,
+     "mean_ambiguity": 0.00044662812081803767,
+     "min_ambiguity": 0.0002762924722841823,
+     "max_ambiguity": 0.0005691574439585954,
+     "share_of_full": 0.7992531060328979
+    },
+    {
+     "n_runs": 4,
+     "n_subsets": 400,
+     "n_members": 8,
+     "mean_ambiguity": 0.0004850610922961463,
+     "min_ambiguity": 0.0003453511837691499,
+     "max_ambiguity": 0.0005980160684997595,
+     "share_of_full": 0.8680299483232805
+    },
+    {
+     "n_runs": 5,
+     "n_subsets": 400,
+     "n_members": 9,
+     "mean_ambiguity": 0.0005078869881005108,
+     "min_ambiguity": 0.00039259015622317237,
+     "max_ambiguity": 0.0006036040926331535,
+     "share_of_full": 0.9088775064354002
+    },
+    {
+     "n_runs": 6,
+     "n_subsets": 400,
+     "n_members": 11,
+     "mean_ambiguity": 0.0005204378645657606,
+     "min_ambiguity": 0.000423650438289173,
+     "max_ambiguity": 0.0006046263693698876,
+     "share_of_full": 0.9313376394425043
+    },
+    {
+     "n_runs": 7,
+     "n_subsets": 400,
+     "n_members": 13,
+     "mean_ambiguity": 0.0005295617238985362,
+     "min_ambiguity": 0.0004461909446425139,
+     "max_ambiguity": 0.0005993841274013682,
+     "share_of_full": 0.9476650325707554
+    },
+    {
+     "n_runs": 8,
+     "n_subsets": 400,
+     "n_members": 16,
+     "mean_ambiguity": 0.0005407807202093785,
+     "min_ambiguity": 0.00047800559017828004,
+     "max_ambiguity": 0.0005987023693745579,
+     "share_of_full": 0.9677417300066196
+    },
+    {
+     "n_runs": 9,
+     "n_subsets": 220,
+     "n_members": 17,
+     "mean_ambiguity": 0.0005463513104035597,
+     "min_ambiguity": 0.0004891157949846354,
+     "max_ambiguity": 0.0005945162638074956,
+     "share_of_full": 0.9777104518752312
+    },
+    {
+     "n_runs": 10,
+     "n_subsets": 66,
+     "n_members": 19,
+     "mean_ambiguity": 0.0005513338881815937,
+     "min_ambiguity": 0.0005132862740961047,
+     "max_ambiguity": 0.0005874359499392638,
+     "share_of_full": 0.9866269096160698
+    },
+    {
+     "n_runs": 11,
+     "n_subsets": 12,
+     "n_members": 21,
+     "mean_ambiguity": 0.0005554101910169488,
+     "min_ambiguity": 0.0005341711673883228,
+     "max_ambiguity": 0.0005741795231072487,
+     "share_of_full": 0.9939215638270966
+    },
+    {
+     "n_runs": 12,
+     "n_subsets": 1,
+     "n_members": 23,
+     "mean_ambiguity": 0.0005588068628658593,
+     "min_ambiguity": 0.0005588068628658593,
+     "max_ambiguity": 0.0005588068628658593,
+     "share_of_full": 1.0
+    }
+   ]
+  }
+ }
+}
