@@ -8,45 +8,12 @@ import numpy as np
 import polars as pl
 import torch
 
-# Sequences are padded up to a power of two rather than to the longest in the batch,
-# so the encoder sees a handful of distinct lengths instead of one per batch.
+# Sequences are padded up to a power of two rather than to the longest in the batch
 PAD_VALUE: float = 0.0
 
 LABEL_METADATA: tuple[str, ...] = ("labels", "label_subjects", "label_times")
-"""Batch keys that are supervision or provenance, not `MotorClassifier.forward` args.
-
-Every other key in a collated batch is splatted into the model, so anything added here
-has to be taken out first -- `forward` names its arguments and an unexpected one is a
-`TypeError` at the top of the step. Both loops in `training.py` pop this tuple.
-
-`label_subjects` and `label_times` exist because a metric needs no provenance but a
-confidence interval does: the bootstrap resamples SUBJECTS, and pairing this model's
-predictions against another's needs a key both sides share.
-
-`label_clocks` is deliberately NOT here: it is a model input, so it stays in the dict
-and splats into `forward` alongside the encoder's own arguments.
-"""
 
 CLOCK_FEATURES: tuple[str, ...] = ("log1p_hours_since_event",)
-"""The per-label scalars handed to the head alongside the pooled features.
-
-MOTOR's head reads the hidden state at the last charted event at or before the
-landmark, and nothing in the encoder's input says how long ago that was. Measured on
-the validation fold, the gap runs to a **median 4.60 hours**, p90 21.9 and p99 94.
-The XGBoost baseline gets this as `hours_since`, per code, and an ablation that
-removed it cost the tree **0.0310 AUPRC [0.0261, 0.0359]** -- 79% of its margin over
-the fine-tuned encoder. This is that signal, in the weakest form that does not
-require touching the pretrained backbone.
-
-The value is `log1p(hours)` rather than hours. The raw gap spans 0 to 792, which
-alongside activations of order 1 would dominate the head's first gradient purely by
-scale; the log compresses it to roughly 0-6.7 while keeping the ordering intact and
-keeping zero at zero.
-
-Adding `hours_since_admission` would need the labeller's `admittime` carried into
-stage 5.2's label shards, which they do not currently hold -- a stage 5.2 change, not
-a head change.
-"""
 
 
 def padded_length(longest: int) -> int:
@@ -132,9 +99,6 @@ def collate(
         .collect()
     )
 
-    # the time of the position each label was pinned to, which is what the encoder's
-    # last visible event actually is; the difference against `prediction_time` is the
-    # staleness the head is otherwise blind to
     pinned = ordered.select("sequence_id", "position", "time").unique(
         subset=["sequence_id", "position"], maintain_order=False
     )
@@ -154,8 +118,6 @@ def collate(
             f"does not hold, so no event time could be found for them."
         )
 
-    # clipped at zero because the landmark is placed by a BACKWARD asof join and can
-    # never precede its own event; a negative here would mean that join had flipped
     hours = (
         (pl.col("prediction_time") - pl.col("time")).dt.total_seconds() / 3600.0
     ).clip(lower_bound=0.0)
@@ -180,10 +142,6 @@ def collate(
         "label_subjects": torch.from_numpy(
             placed["subject_id"].to_numpy().astype(np.int64)
         ),
-        # microseconds since the epoch, because a batch is tensors and a tensor holds
-        # no datetime. The unit is fixed rather than inherited so that two frames
-        # stored at different precisions still produce the same integer for one
-        # instant -- this column is a JOIN KEY across models, not a duration.
         "label_times": torch.from_numpy(
             placed["prediction_time"].dt.epoch("us").to_numpy().astype(np.int64)
         ),

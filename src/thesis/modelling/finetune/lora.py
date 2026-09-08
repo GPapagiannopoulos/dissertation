@@ -1,11 +1,4 @@
-"""Stage 8: LoRA adapters over the frozen MOTOR backbone.
-
-Everything but the model construction is shared with the full fine-tune: the data
-stream, the collate, the head, the loop and the metrics are the same objects.
-
-At the released configuration this trains 296,834 of 135,481,346 parameters (0.219%)
-over 24 adapters, and a checkpoint is 1.13 MB against the full fine-tune's 517 MB.
-"""
+"""LoRA configuration module."""
 
 from pathlib import Path
 from typing import Any
@@ -23,11 +16,6 @@ LORA_DEFAULTS: dict[str, Any] = {
     "target_modules": ("q_proj", "v_proj"),
     "bias": "none",
 }
-"""The configuration the experimental design registered, before any tuning.
-
-Targets match by name suffix, so two strings reach all twelve blocks. Dropout is a
-knob rather than a decision: the PEFT arm needs diversity between ensemble members.
-"""
 
 
 def lora_config(**overrides: Any) -> LoraConfig:
@@ -49,10 +37,6 @@ def lora_config(**overrides: Any) -> LoraConfig:
 def config_record(config: LoraConfig) -> dict[str, Any]:
     """The fields `lora_config` needs to rebuild this configuration, JSON-safe.
 
-    `alpha` is the reason this exists: it scales the adapter by alpha/r and is not
-    recoverable from the saved tensors, so a checkpoint that does not carry it can
-    only be rebuilt by guessing.
-
     Args:
         config (LoraConfig): The configuration a run trained under.
 
@@ -69,9 +53,6 @@ def config_record(config: LoraConfig) -> dict[str, Any]:
 
 def apply_lora(model: MotorClassifier, config: LoraConfig) -> MotorClassifier:
     """Freezes the backbone in place and injects adapters into it.
-
-    The encoder is wrapped rather than the classifier, so the head keeps the name
-    `run_training` gives its own learning rate to and stays out of the freeze.
 
     Args:
         model (MotorClassifier): A classifier holding the weights it starts from.
@@ -92,8 +73,7 @@ def apply_lora(model: MotorClassifier, config: LoraConfig) -> MotorClassifier:
 
     model.encoder = get_peft_model(model.encoder, config)
 
-    # a freeze that silently fails is a full fine-tune reported as LoRA, which shows
-    # up in no metric
+    # a freeze that fails is a full fine-tune reported as LoRA
     leaked = [
         name
         for name, parameter in model.encoder.named_parameters()
@@ -110,7 +90,7 @@ def apply_lora(model: MotorClassifier, config: LoraConfig) -> MotorClassifier:
 def lora_classifier(
     oracle: Path, positive_rate: float, config: LoraConfig | None = None
 ) -> MotorClassifier:
-    """Builds the released backbone, a fresh head, and adapters over the two.
+    """Builds the released backbone, a head, and adapters.
 
     Args:
         oracle (Path): `motor_output/oracle_fp32.npz`.
@@ -121,14 +101,12 @@ def lora_classifier(
         MotorClassifier: The pretrained backbone, frozen and adapted, under a
             zero-initialised head.
     """
-    # weights in, THEN wrap: `load_haiku` walks module names, and wrapping moves
-    # every one of them under `base_model.model.*` and `base_layer`
     model = MotorClassifier(released_encoder(oracle), positive_rate=positive_rate)
     return apply_lora(model, config if config is not None else lora_config())
 
 
 def trainable_summary(model: torch.nn.Module) -> dict[str, float]:
-    """Counts what will actually move, for the run's log line and its manifest.
+    """Reeturns a summary of trainable weights.
 
     Args:
         model (torch.nn.Module): Any model, adapted or not.
@@ -162,7 +140,7 @@ def trainable_summary(model: torch.nn.Module) -> dict[str, float]:
 
 
 def adapter_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
-    """The trainable tensors alone -- the adapters and the head.
+    """Returns the adapter state as a tensor dictionary.
 
     Args:
         model (torch.nn.Module): An adapted classifier, compiled or not.
@@ -194,12 +172,9 @@ def adapter_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
 def load_adapter(model: torch.nn.Module, state: dict[str, torch.Tensor]) -> None:
     """Loads an adapter checkpoint into a model built the same way.
 
-    The frozen backbone is absent from the file by design, so this loads
-    non-strictly and checks the other direction: every key has to land.
-
     Args:
         model (torch.nn.Module): A classifier at the same configuration the state
-            was saved from, **before** `torch.compile`.
+            was saved from before compilation.
         state (dict[str, torch.Tensor]): An `adapter_state` mapping.
 
     Raises:

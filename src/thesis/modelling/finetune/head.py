@@ -1,26 +1,4 @@
-"""The binary prediction head over MOTOR's features.
-
-The head reads three things at each labelled position, concatenated:
-
-1. **The hidden state at that position** -- what the encoder was always giving it.
-2. **A masked mean over the previous `pool_window` positions.** The encoder emits one
-   vector per event, and reading only the last one asks a single summary -- written
-   largely to describe *that* event, often something routine -- to carry the whole
-   prediction. Pooling widens the read without adding a mechanism.
-3. **`CLOCK_FEATURES`**, the elapsed time since that event. The encoder has no
-   representation of it: the landmark sits a median 4.60 hours after the event whose
-   state is read, and a prediction one minute later is otherwise indistinguishable
-   from one 94 hours later.
-
-None of this touches the backbone. The pooled vectors are the encoder's own outputs
-and the clock is a scalar arriving beside them, so the pretrained weights see exactly
-the input distribution they saw before -- which is the whole reason this is a head
-change rather than a synthetic token in the sequence.
-
-**The pooling window reaches backwards only.** Positions after the label are events
-that happened after the moment being predicted from; averaging them in is leakage,
-and it would read as a strong result rather than as an error.
-"""
+"""The binary prediction head over MOTOR's features."""
 
 import math
 
@@ -30,21 +8,10 @@ from thesis.modelling.backbone.model import MotorEncoder
 from thesis.modelling.finetune.batching import CLOCK_FEATURES
 
 DEFAULT_POOL_WINDOW: int = 32
-"""How many positions back the mean reaches, the label's own position included.
-
-Fixed rather than tuned. The validation fold has been inspected many times already
-and every hyperparameter chosen on it makes the final number more optimistic; the
-head can down-weight the pooled half to nothing if the window is wrong, so the cost
-of a poor choice is bounded. Sweeping it is also not cheap -- the probe caches one
-vector per label, so each candidate window needs its own extraction pass.
-"""
 
 
 class MotorClassifier(torch.nn.Module):
     """A MOTOR encoder with a linear head read at the labelled positions.
-
-    The head runs in float32 whatever the stack runs in, so the logits reaching the
-    loss are not the ones that lose precision.
 
     Attributes:
         encoder (MotorEncoder): The backbone, whose features the head reads.
@@ -64,16 +31,11 @@ class MotorClassifier(torch.nn.Module):
         """Wraps an encoder, optionally starting the head at a base rate.
 
         Args:
-            encoder (MotorEncoder): A built backbone. Its width sets the head's.
-            positive_rate (float | None): The training set's prevalence. Given, the
-                weight starts at zero and the bias at its logit, so the untrained
-                model predicts the base rate rather than a saturated random one.
-            pool_window (int): Positions covered by the masked mean, the label's own
-                included. **Zero disables pooling**, which with `n_clock_features` at
-                zero reproduces the original 768-wide head exactly -- the only way a
-                checkpoint saved before this change still loads.
+            encoder (MotorEncoder): A built backbone.
+            positive_rate (float | None): The training set's prevalence.
+            pool_window (int): Positions covered by the masked mean.
             n_clock_features (int): Width of the `label_clocks` tensor `collate`
-                emits. Zero drops the clock.
+                emits
 
         Raises:
             ValueError: If the positive rate is not strictly between zero and one,
@@ -115,20 +77,6 @@ class MotorClassifier(torch.nn.Module):
     ) -> torch.Tensor:
         """The masked mean over each label's preceding window.
 
-        Two things can make a slot in the window unreal, and both must be excluded
-        rather than averaged in as zero. A slot can run off the **start** of the
-        sequence, when the label sits fewer than `pool_window` positions in; and a
-        slot can be **padding**, since `collate` pads to the next power of two. The
-        encoder's output at a padding position is not zero -- it is whatever twelve
-        pretrained layers make of filler -- so including it adds a constant piece of
-        nonsense rather than diluting toward nothing.
-
-        Dividing by the count of real slots rather than by `pool_window` matters more
-        than it looks: a fixed divisor would shrink the pooled vector in proportion
-        to how few events a patient has, and sparse records belong to less-monitored,
-        mostly negative patients. That is not noise, it is a distortion correlated
-        with the label.
-
         Args:
             flat (torch.Tensor): Encoder features as (batch * seq_len, hidden).
             valid (torch.Tensor): `valid_tokens`, flattened to (batch * seq_len,).
@@ -157,8 +105,6 @@ class MotorClassifier(torch.nn.Module):
         mask = in_range & valid.index_select(0, gather.reshape(-1)).view(gather.shape)
 
         weights = mask.unsqueeze(-1).to(window.dtype)
-        # the label's own position is always real, so the count is never zero; the
-        # clamp is belt and braces rather than a live branch
         return (window * weights).sum(1) / weights.sum(1).clamp(min=1.0)
 
     def forward(
@@ -174,12 +120,9 @@ class MotorClassifier(torch.nn.Module):
     ) -> torch.Tensor:
         """Scores one batch at its labelled positions.
 
-        Every argument but the last two is `MotorEncoder.forward`'s, so a batch from
-        `collate` splats in once its `LABEL_METADATA` has been taken out.
-
         Args:
             indices (torch.Tensor): The (read, write) embedding pairs.
-            seq_len (int): How many positions each sequence holds.
+            seq_len (int): The number of positions in the sequence.
             ages (torch.Tensor): Each position's age in days.
             normed_ages (torch.Tensor): The z-scored ages.
             valid_tokens (torch.Tensor): Which positions hold a real event.
@@ -223,8 +166,6 @@ class MotorClassifier(torch.nn.Module):
 
         picked = flat.index_select(0, label_indices)
 
-        # autocast would cast the head back down and hand the loss a low-precision
-        # logit, which is exactly what running the head separately is meant to avoid
         with torch.autocast(picked.device.type, enabled=False):
             dtype = self.head.weight.dtype
             parts = [picked.to(dtype)]
