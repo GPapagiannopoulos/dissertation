@@ -117,24 +117,16 @@ def build_context(
 ) -> pl.LazyFrame:
     """Derives the handful of features the last-observation pass cannot express.
 
-    Emitted in the **long schema** as pseudo-codes under `CTX/`, so they ride the
-    same CSR path as everything else rather than needing a dense block hstacked on.
-    Only `last_value` is populated; `hours_since` and `n_obs` are null and so cost no
-    matrix entry at all.
+    Emitted in the long schema as pseudo-codes under `CTX/`, so they ride the same CSR
+    path as everything else rather than needing a dense block hstacked on. Only
+    `last_value` is populated; `hours_since` and `n_obs` are null.
 
-    Three of the five exist because AKI is *defined* on a creatinine trajectory, and
-    a last observation cannot express a trajectory. The admission baseline is the
-    minimum in the first `baseline_hours` of the stay, matching the KDIGO arm of the
-    EDA work rather than a rolling seven-day floor.
+    This is the one function that reads the raw shard rather than `visible_events`,
+    because age is measured from `MEDS_BIRTH`, which tokenisation drops.
 
-    This is the one function that reads the **raw** shard rather than
-    `visible_events`, because age is measured from `MEDS_BIRTH` -- the same trap
-    stage 5.2 hit, where tokenising first leaves every age null.
-
-    Only `admittime` and `prediction_time` are read off the spine. `diagtime`,
-    `dischtime`, `horizon_time`, `horizon_hours` and `died_in_hospital` all sit in
-    the same frame and are all **future** information; `diagtime` in particular is
-    the moment the AKI was diagnosed and would be a perfect leak.
+    Only `admittime` and `prediction_time` may be read off the spine. `diagtime`,
+    `dischtime`, `horizon_time`, `horizon_hours` and `died_in_hospital` sit in the same
+    frame and are all future information.
 
     Args:
         spine (pl.LazyFrame): The landmarks, from `build_spine`.
@@ -229,20 +221,15 @@ def run_build_features(
 ) -> Path:
     """Materialises the long feature table, shard by shard.
 
-    Shards are processed one at a time, as in every stage since 2.6: peak memory
-    stays at one shard, and a crash at shard 137 leaves 137 readable outputs. Stage
-    2.6's shards are subject-disjoint, so a landmark's whole history lives in the one
-    shard its subject does and no landmark is ever split across two outputs.
+    Shards are processed one at a time, so peak memory stays at one shard and a crash
+    leaves the earlier outputs readable. Stage 2.6's shards are subject-disjoint, so a
+    landmark's whole history lives in the one shard its subject does.
 
-    `landmark_id` is assigned **once, globally**, before the loop -- unlike stage
-    5.2's `sequence_id`, which numbers densely per call and needs a running offset.
-    Numbering here is a single sorted `with_row_index` over all 2,965,363 landmarks,
-    so the shards could be built in parallel without reworking anything.
+    `landmark_id` is assigned once, globally, before the loop, so the shards could be
+    built in parallel without reworking anything.
 
-    The spine is written per shard rather than once, because the matrix builder needs
-    a shard's roster of landmarks -- including any carrying no visible code at all,
-    which vanish from the long table. Scanning `spine/*.parquet` recovers the global
-    view for free.
+    The spine is written per shard because the matrix builder needs a shard's roster of
+    landmarks, including any carrying no visible code at all.
 
     Args:
         events (Path): Stage 2.6's shard folder, i.e. <normalized>/data.

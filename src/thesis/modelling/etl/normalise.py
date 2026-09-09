@@ -1,8 +1,7 @@
 """Stage 2.6: rewrites the MEDS shards onto the codes MOTOR holds.
 
-This module applies the mapping created in coverage.py to the events.
-The concept map is a lookup of 44k rows, one per distinct code and the
-events are ~680M rows. It is implemented as a join of the two.
+Applies the mapping built in `coverage.py` to the events. The concept map is a 44k
+row lookup and the events are ~680M rows, so it is implemented as a join.
 
 Design choices:
 
@@ -12,9 +11,8 @@ Design choices:
    appear in no concept map, but MEDS_BIRTH is every subject's time origin and
    MEDS_DEATH is a label source. They enter the lookup as identity rows, which keeps
    the exemption inside the data the join reads instead of in a second branch.
-3. Duplicates are deliberately kept. Several source codes climb to one token, so a
-   subject can carry the same token twice at one timestamp. The repetition is
-   a useful signal
+3. Duplicates are kept. Several source codes climb to one token, so a subject can
+   carry the same token twice at one timestamp.
 """
 
 import json

@@ -2,14 +2,12 @@
 
 ``chartevents.csv.gz`` (~3.3 GB gzip, ~433M rows) cannot be streamed by Polars:
 gzip is not splittable, so ``scan_csv`` inflates the whole file at once and
-exhausts memory. This module instead reads the raw CSV in bounded pyarrow
-batches, filters each batch down to the ``itemid`` values of interest, and sinks
-a small Parquet that the feature-engineering criteria can ``scan_parquet``
-cheaply.
+exhausts memory. This module instead reads the raw CSV in bounded pyarrow batches,
+filters each batch down to the ``itemid`` values of interest, and sinks a small
+Parquet that the feature-engineering criteria can ``scan_parquet`` cheaply.
 
-The multithreaded PyArrow default holds many decoded blocks in memory and
-causes an OOM crash. With these settings the weight extraction peaks at
-~2.8 GB
+PyArrow's multithreaded default holds many decoded blocks in memory and runs out;
+single-threaded reads at this batch size peak at ~2.8 GB.
 """
 
 from collections.abc import Collection

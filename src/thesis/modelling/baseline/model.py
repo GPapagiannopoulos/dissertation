@@ -1,13 +1,10 @@
 """Fits the XGBoost baseline the fine-tuned MOTOR encoder is measured against.
 
-The point of this model is to be a *fair* comparator, not a weak one. It reads the
-same stage 2.6 events the transformer does, at the same 33% coverage, and it is given
-the untokenised float where the transformer sees a numeric bin -- a small advantage,
-deliberately left in its favour, because a handicapped baseline proves nothing.
+It reads the same stage 2.6 events the transformer does, at the same coverage, and is
+given the untokenised float where the transformer sees a numeric bin.
 
-What it cannot do is the whole point of the comparison: every landmark is an
-independent row, so the trees never see the order of a patient's events, only the
-last-observation summary this pipeline hands them.
+Every landmark is an independent row, so the trees never see the order of a patient's
+events, only the last-observation summary this pipeline hands them.
 """
 
 import json
@@ -75,7 +72,8 @@ def train_baseline(
         index (pl.DataFrame): The frame `build_code_index` returned.
         params (dict | None): Booster parameters. Defaults to `DEFAULT_PARAMS`.
         num_boost_round (int): The ceiling; early stopping is what usually ends it.
-        early_stopping_rounds (int): Rounds without an AUPRC gain before stopping.
+        early_stopping_rounds (int): Rounds without a log-loss improvement before
+            stopping. xgboost early-stops on the LAST entry of `eval_metric`.
         base_score (float | None): The prior probability, i.e. the training base
             rate. Mirrors the head's bias initialisation.
         seed (int): Seeds row and column subsampling.
@@ -170,7 +168,8 @@ def run_train_baseline(
         features (Path): The folder `run_build_features` wrote.
         dest (Path): The folder to create, which must not already exist.
         num_boost_round (int): The ceiling on boosting rounds.
-        early_stopping_rounds (int): Rounds without an AUPRC gain before stopping.
+        early_stopping_rounds (int): Rounds without a log-loss improvement before
+            stopping. xgboost early-stops on the LAST entry of `eval_metric`.
         seed (int): Seeds row and column subsampling.
         nthread (int | None): Worker threads.
         max_bin (int): Buckets per feature. Lowering it shrinks the per-node
@@ -216,10 +215,15 @@ def run_train_baseline(
     booster.save_model(dest / "booster.json")
     index.write_parquet(dest / "code_index.parquet")
     (dest / "history.json").write_text(json.dumps(history))
+    # xgboost early-stops on the LAST entry of `eval_metric`, so that is the metric
+    # `best_score` holds -- `logloss` under DEFAULT_PARAMS, not the leading `aucpr`.
+    # Naming it is what stops the number being read as a catastrophic AUPRC.
+    best_metric = list(history["valid"])[-1]
     (dest / "summary.json").write_text(
         json.dumps(
             {
                 "best_iteration": int(booster.best_iteration),
+                "best_metric": best_metric,
                 "best_score": float(booster.best_score),
                 "n_codes": int(index.height),
                 "base_rate": prevalence,
@@ -230,8 +234,8 @@ def run_train_baseline(
         )
     )
     print(
-        f"best iteration {booster.best_iteration} at valid-aucpr "
-        f"{booster.best_score:.4f}",
+        f"best iteration {booster.best_iteration} at "
+        f"valid-{best_metric} {booster.best_score:.4f}",
         flush=True,
     )
     return dest
@@ -247,14 +251,11 @@ def predict_fold(
     """Scores one fold, returning the pieces a paired comparison needs.
 
     Rows come back in `landmark_id` order within each shard, and the subject ids ride
-    along because a bootstrap over this task must resample **subjects**: the 12-hourly
-    grid puts ~9 highly correlated landmarks in one admission, so resampling rows
-    would report an interval several times too narrow.
+    along because a bootstrap over this task must resample subjects rather than rows.
 
-    The prediction times ride along for a different reason: `(subject_id,
-    prediction_time)` is the only key this model and MOTOR share. `landmark_id` is
-    this pipeline's own numbering and stage 5.2 never saw it, so pairing the two
-    models on anything else would mean trusting two independent sort orders to agree.
+    The prediction times ride along because `(subject_id, prediction_time)` is the only
+    key this model and MOTOR share; `landmark_id` is this pipeline's own numbering and
+    stage 5.2 never saw it.
 
     Args:
         booster (xgb.Booster): The fitted model.

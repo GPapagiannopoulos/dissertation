@@ -4,11 +4,6 @@ Run from the repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/run_base_meds.py
 
-The meds_etl_mimic console script is taken from the same virtualenv as the
-interpreter running this file, so activating the venv (or fixing PATH) is not
-required. Output is written to a fresh directory under the project root; there
-is no overwrite by design, so delete it before re-running.
-
 Because this is a multi-hour, memory-hungry job, run it detached and capped::
 
     tmux new -s meds

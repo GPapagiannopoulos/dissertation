@@ -1,18 +1,7 @@
-"""Feeding stage 5.2's materialised sequences to the encoder, one shard at a time.
+"""This module is responsible for the movement of data.
 
-The whole of `meds_output/sequences/` is 257,632,502 rows over eight columns, which
-is roughly 11 GB once materialised -- more than this host has. So nothing here ever
-globs the shards into one frame. A shard holds ~1.1M rows and ~50 MB, and it is the
-unit of everything below: one shard is read, cut to the fold, batched, handed over,
-and dropped before the next is opened.
-
-Batches are built to a TOKEN budget rather than a sequence count. Attention over a
-padded length L costs and stores O(batch * L^2), so at a fixed batch size a bucket of
-128-position sequences would use an eighth of the memory of a 1024-position one and
-run far below the card's capacity. Holding batch * L constant instead keeps every
-batch at roughly one shape's worth of memory, and since most subjects are far shorter
-than the 1024 cap -- the median labelled subject has ~403 events -- that is where most
-of the throughput comes from.
+It handles the batching of sequences, the moving of data to different
+devices, and the retrieval of different subject folds.
 """
 
 import queue
@@ -26,8 +15,6 @@ import torch
 
 from thesis.modelling.finetune.batching import collate
 
-# One batch never exceeds this many padded positions. 8 * 1024 was measured at
-# 4.9 GiB peak on an 8 GiB card under autocast, leaving room for evaluation.
 DEFAULT_TOKEN_BUDGET: int = 8192
 
 
@@ -44,9 +31,6 @@ def sequence_lengths(sequences: pl.LazyFrame) -> pl.LazyFrame:
     return (
         sequences.group_by("sequence_id")
         .agg((pl.col("position").max() + 1).alias("length"))
-        # the next power of two, as padded_length computes it, but in Polars: the
-        # collate derives the same number from the batch, and a disagreement would
-        # put a batch in a bucket it does not fit
         .with_columns(
             padded=pl.when(pl.col("length") <= 1)
             .then(1)
@@ -62,21 +46,13 @@ def assign_batches(
 ) -> pl.DataFrame:
     """Groups sequences of like length into batches of a fixed token budget.
 
-    Sequences are shuffled before they are cut into batches, so a batch is a random
-    sample of its bucket rather than whichever subjects happen to sit together in the
-    shard. Buckets are kept apart because a batch is one rectangular grid: mixing a
-    128-position sequence into a 1024-position batch would pad it eightfold and pay
-    for positions the mask then throws away.
-
     Args:
         lengths (pl.DataFrame): One row per sequence, as `sequence_lengths` returns.
-        token_budget (int): The most padded positions one batch may hold. A bucket
-            whose sequences are longer than this still yields batches of one.
+        token_budget (int): The most padded positions one batch may hold.
         seed (int): Seeds the shuffle, so an epoch is reproducible.
 
     Returns:
-        pl.DataFrame: Columns `sequence_id` and `batch_index`, the latter numbered
-            densely from zero.
+        pl.DataFrame: Columns `sequence_id` and `batch_index`.
 
     Raises:
         ValueError: If the token budget is not positive.
@@ -84,16 +60,11 @@ def assign_batches(
     if token_budget < 1:
         raise ValueError(f"A batch holds at least one position, got {token_budget}.")
 
-    # a seeded shuffle permutes ROWS, so it only reproduces if the rows arrive in the
-    # same order -- and they do not: `sequence_lengths` ends in a group_by, whose
-    # output order Polars does not fix. Without this sort the same seed gives
-    # different batches on every run, which would put noise into a seed comparison.
+    # 'lengths' might arrive shuffled, so need to sort first
     shuffled = lengths.sort("sequence_id").sample(fraction=1.0, shuffle=True, seed=seed)
 
     return (
         shuffled.with_columns(
-            # a sequence longer than the whole budget still has to go somewhere, so
-            # the capacity floors at one rather than at zero
             capacity=pl.max_horizontal(
                 pl.lit(1), (pl.lit(token_budget) // pl.col("padded"))
             )
@@ -108,11 +79,7 @@ def assign_batches(
 
 
 def _labelled_sequences(labels: pl.LazyFrame) -> pl.LazyFrame:
-    """The ids of the sequences carrying at least one label.
-
-    A chunk with no label contributes nothing to the loss, and 37% of them have
-    none, so they are dropped before anything is read rather than run and discarded.
-    """
+    """The ids of the sequences carrying at least one label."""
     return labels.select("sequence_id").unique()
 
 
@@ -128,12 +95,10 @@ def shard_batches(
     """Turns one shard into collated batches.
 
     Args:
-        sequences (pl.LazyFrame): One shard of stage 5.2's sequences.
+        sequences (pl.LazyFrame): One shard of sequences.
         labels (pl.LazyFrame): The matching shard of placed labels.
         expansion (pl.LazyFrame): `build_ancestor_expansion`'s table.
-        subjects (pl.LazyFrame): One column, `subject_id`, naming the fold. The cut
-            is a join rather than a filter, as in stage 2.6, so there is no predicate
-            to keep in step with the membership test.
+        subjects (pl.LazyFrame): One column, `subject_id`
         token_budget (int): Passed to `assign_batches`.
         seed (int): Seeds this shard's shuffle.
 
@@ -179,25 +144,15 @@ def iter_epoch(
     seed: int = 0,
     prefetch: int = 3,
 ) -> Iterator[dict[str, torch.Tensor | int]]:
-    """Streams one epoch's batches, shard by shard, prefetched off the main thread.
-
-    Shard ORDER is shuffled per epoch and sequences are shuffled inside a shard, so
-    the model does not see the dataset in the same order twice. This is a shuffle
-    buffer one shard deep, not a global shuffle: a global one would need the whole
-    11 GB resident, and a shard already spans ~760 subjects.
-
-    The Polars work -- two joins, a group-by and a partition per shard -- runs on a
-    worker thread and lands in a bounded queue, so it overlaps the GPU step instead
-    of stalling it. The queue is bounded because an unbounded one would happily read
-    every shard into memory, which is the thing this module exists to avoid.
+    """Streams one epoch's batches by shard.
 
     Args:
-        root (Path): Stage 5.2's output folder, holding `sequences/` and `labels/`.
+        root (Path): Path to parent directory of `sequences/` and `labels/`.
         expansion (pl.LazyFrame): `build_ancestor_expansion`'s table.
-        subjects (pl.LazyFrame): One column, `subject_id`, naming the fold.
-        token_budget (int): The most padded positions one batch may hold.
+        subjects (pl.LazyFrame): One column, `subject_id`.
+        token_budget (int): The maximum number of positions per batch.
         seed (int): Seeds the shard order and every shard's shuffle.
-        prefetch (int): How many batches may sit ready ahead of the consumer.
+        prefetch (int): Number of batches to pre-emptively prepare.
 
     Yields:
         dict[str, torch.Tensor | int]: One batch, as `collate` returns it.
@@ -225,16 +180,10 @@ def iter_epoch(
     stop = threading.Event()
 
     def offer(item: object) -> bool:
-        """Puts one item, giving up if the consumer has walked away.
-
-        A plain `put` on a bounded queue blocks forever once the consumer stops
-        reading, which is exactly what a bounded evaluation does. The producer would
-        then sit on a shard's frames for the rest of the run, one leaked thread per
-        evaluation.
-        """
+        """Offers an object to the consumer."""
         while not stop.is_set():
             try:
-                ready.put(item, timeout=0.2)
+                ready.put(item, timeout=0.2)  # deadlock guard
             except queue.Full:
                 continue
             return True
@@ -274,17 +223,16 @@ def iter_epoch(
                 raise item
             yield item
     finally:
-        # closing the generator early -- a bounded evaluation, or an exception --
-        # must release the worker rather than leave it holding a shard
+        # release worker in case of error
         stop.set()
         worker.join(timeout=5.0)
 
 
 def fold_subjects(split: Path, fold: str) -> pl.LazyFrame:
-    """The subject ids belonging to one fold of the stage 3 split.
+    """The subject ids belonging to one fold.
 
     Args:
-        split (Path): `meds_output/labels/subject_split.parquet`.
+        split (Path): Path to the subject split parquet file.
         fold (str): "training", "validation" or "testing".
 
     Returns:
@@ -311,12 +259,6 @@ def fold_subjects(split: Path, fold: str) -> pl.LazyFrame:
 
 def bag_subjects(subjects: pl.LazyFrame, fraction: float, seed: int) -> pl.LazyFrame:
     """One ensemble member's share of the training subjects.
-
-    Subsampling **without** replacement, not a bootstrap: a subject drawn twice would
-    duplicate their sequence rows through `iter_epoch`'s join, and two rows sharing a
-    `sequence_id` and `position` collide in `collate`'s scatter. At the default
-    fraction this draws the same expected share as a bootstrap's distinct subjects,
-    which Buhlmann & Yu showed performs comparably.
 
     Args:
         subjects (pl.LazyFrame): One `subject_id` column, as `fold_subjects` returns.

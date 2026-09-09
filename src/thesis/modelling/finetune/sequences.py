@@ -1,9 +1,4 @@
-"""Module assembling tokenised events into the sequences the encoder reads.
-
-The tokeniser gives each event a row of the embedding table. This module gives it a
-place in a sequence: an age, a position, and the sequence it belongs to. Everything
-here is a pure LazyFrame transform, so the caller decides whether to materialise.
-"""
+"""Module assembling tokenised events into the sequences the encoder reads."""
 
 from pathlib import Path
 
@@ -11,13 +6,11 @@ import polars as pl
 
 from thesis.modelling.backbone.tokenizer import assign_leaf_tokens, load_token_table
 
-# femr's batch creator stores an integer age in minutes and divides by this to get the
-# days the model actually sees. Reproduced exactly rather than computed from the
-# timestamps directly, so the truncation happens in the same place.
+# Reproducing femr's batch creator that stores age in minutes and divides by it
+# to get the days
 MINUTES_PER_DAY = 1440
 
-# The MEDS code marking a subject's time origin. It carries no OMOP concept and so
-# survives normalisation but never tokenisation.
+# The MEDS code marking a subject's time origin.
 BIRTH_CODE = "MEDS_BIRTH"
 
 SEQUENCE_SCHEMA: dict[str, pl.DataType] = {
@@ -51,35 +44,21 @@ def build_sequences(
 ) -> pl.LazyFrame:
     """Turns tokenised events into positioned, aged sequences.
 
-    A subject's timeline is one sequence when it fits in `length`, and is cut into
-    overlapping chunks when it does not. Attention reaches `attention_width` positions
-    back, so a chunk that begins `stride` positions into the previous one gives every
-    position past its first `stride` a full window. Events in the overlap therefore
-    appear in two sequences, which is why this returns more rows than it is given.
-
-    Subjects with no birth are dropped by the inner join. An event with no age has no
-    place on the rotary clock, and a null age would reach the encoder as a NaN table.
+    Subjects with no birth are dropped by the inner join, otherwise
+    they would get converted to NaN by the rotary operation.
 
     Args:
         events (pl.LazyFrame): Tokenised events carrying `subject_id`, `time` and the
-            `index` column `assign_leaf_tokens` emits. Rows are expected in the
-            shards' own order, which breaks ties inside a timestamp.
+            `index` column `assign_leaf_tokens` emits.
         births (pl.LazyFrame): One row per subject, `subject_id` and `birth`.
-            `MEDS_BIRTH` carries no OMOP concept and so does not survive
-            tokenisation; the origin has to arrive separately.
         length (int): The longest sequence to emit, in positions.
         stride (int): How far apart consecutive chunks start. Equal to `length` for
-            no overlap; `length // 2` gives every chunk past the first a full
-            attention window.
-        age_mean (float): The dictionary's mean age in days.
-        age_std (float): The dictionary's age standard deviation, in days.
+            no overlap
+        age_mean (float): The vocabulary's mean age in days.
+        age_std (float): The vocabulary's age standard deviation, in days.
 
     Returns:
-        pl.LazyFrame: One row per (sequence, position), sorted by both. `position` is
-            the place in the sequence the encoder sees; `subject_position` is the
-            place in the subject's whole timeline, which is what labels join on.
-            `time` is carried through so a landmark can be placed against it and so
-            an age in the written artifact can be audited against its timestamp.
+        pl.LazyFrame: One row per (sequence, position).
 
     Raises:
         ValueError: If the length or stride are not positive, if the stride exceeds
@@ -98,9 +77,6 @@ def build_sequences(
 
     positioned = (
         events.join(births, on="subject_id", how="inner")
-        # a Polars sort is not stable, so the arrival order is made an explicit key:
-        # events sharing a timestamp would otherwise be positioned differently on
-        # every run, and the artifact would not be reproducible
         .with_row_index("arrival")
         .sort("subject_id", "time", "arrival")
         .with_columns(
@@ -110,9 +86,6 @@ def build_sequences(
         )
     )
 
-    # the chunks a subject needs, and then the ones each position falls inside: a
-    # position belongs to every chunk that starts at or before it and has not yet
-    # ended
     n_chunks = (
         (pl.col("n_events").cast(pl.Int64) - length + stride - 1) // stride
     ).clip(0) + 1
@@ -145,19 +118,10 @@ def build_sequences(
 
 
 def place_labels(sequences: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
-    """Attaches each landmark to the position whose features it must be read from.
+    """Attaches each landmark to the sequence position the classifier must read.
 
-    An event in a chunk overlap sits in two sequences at two positions. The landmark
-    takes the larger position, which is the chunk holding more of the subject's
-    history before it.
-
-
-    Notes:
-        A landmark earlier than the subject's first tokenised event is dropped. It
-            has no position to read, and there is nothing to predict from.
-        Landmarks that pin to the same position are both kept. A 12-hour
-            grid outruns the record whenever no event is charted in between, so two
-            predictions sharing one history may disagree on the outcome.
+    For events in a chunk overlap, we select the largest position. Landmarks
+    before the first tokenised event are dropped.
 
     Args:
         sequences (pl.LazyFrame): The frame `build_sequences` returns.
@@ -184,7 +148,6 @@ def place_labels(sequences: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
             right_on="time",
             strategy="backward",
         )
-        # a landmark before the subject's first event matches no position
         .join(
             sequences.select(
                 "subject_id", "subject_position", "sequence_id", "position"
@@ -203,14 +166,7 @@ def place_labels(sequences: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def subject_birth_times(events: pl.LazyFrame) -> pl.LazyFrame:
-    """Lifts each subject's time origin out of the raw event stream.
-
-    This has to run before tokenisation. `MEDS_BIRTH` carries no OMOP concept, so
-    it is in no MOTOR vocabulary and `assign_leaf_tokens` drops it.
-
-    A subject holds exactly one birth in a well-formed MEDS dataset. The minimum is
-    taken anyway, so a duplicated origin gives one deterministic answer rather than
-    multiplying every one of that subject's events through the join.
+    """Returns the time origin for each subject_id.
 
     Args:
         events (pl.LazyFrame): Raw MEDS events, before tokenisation.
@@ -226,14 +182,7 @@ def subject_birth_times(events: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def restrict_to_labelled(events: pl.LazyFrame, labels: pl.LazyFrame) -> pl.LazyFrame:
-    """Keeps only the events a prediction could ever be made from.
-
-    Events after a subject's last landmark are dropped because attention is causal.
-    No position can influence a prediction made before it, so they would
-    be encoded and never read.
-
-    Subjects carrying no landmark are also dropped. An unmatched subject has no
-    landmark to compare against, and the comparison decides it either way.
+    """Filters out events and subjects without a corresponding landmark.
 
     Args:
         events (pl.LazyFrame): Raw MEDS events.
@@ -263,22 +212,14 @@ def run_build_sequences(
     length: int,
     stride: int,
 ) -> Path:
-    """Materialises the tokenised sequences and their placed labels, shard by shard.
-
-    Shards are processed one at a time, as in stage 2.6: peak memory stays at one
-    shard, and a crash at shard 137 leaves 137 readable outputs.
-
-    `sequence_id` is dense within a call to `build_sequences`, so every shard would
-    otherwise restart at zero and two subjects in different shards would share an id.
-    A running offset makes it unique across the dataset, which is why the shards
-    cannot be processed in parallel without reworking this.
+    """Materialises the tokenised sequences and their labels.
 
     Args:
-        events (Path): Stage 2.6's shard folder, i.e. <normalized>/data.
-        labels (Path): The landmark labels parquet.
-        dest (Path): The folder to create, which must not already exist.
+        events (Path): Path to normalised MEDS shard folder.
+        labels (Path): Path to the landmark labels parquet file.
+        dest (Path): Path to the folder to create.
         dictionary (Path): MOTOR's msgpack dictionary.
-        vocab_size (int): The token count the checkpoint's config declares.
+        vocab_size (int): The checkpoint's token count.
         length (int): The longest sequence to emit.
         stride (int): How far apart consecutive chunks start.
 

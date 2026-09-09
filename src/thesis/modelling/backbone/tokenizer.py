@@ -27,12 +27,12 @@ class TokenTable:
 
 
 def _validate_bin_contiguity(numeric_tokens: pl.DataFrame) -> None:
-    """Asserts each code's value bins meet edge to edge, as the asof join assumes.
+    """Asserts each code's value bins meet edge to edge.
 
-    The algorithm fails over non-continuous bins.
+    The algorithm fails over non-continuous bins as the join_asof does not validate
+    contiguity and will misalign the frames.
     The open ends are deliberately not checked. Bins lost to vocab_size are cut
-    from the top of a code's range, leaving a shorter but still contiguous run, and
-    values above it fall back to the code's own token.
+    from the top of a code's range, leaving a shorter but still contiguous run.
 
     Args:
         numeric_tokens (pl.DataFrame): The bin lookup, one row per numeric token.
@@ -77,7 +77,7 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
 
     Returns:
         TokenTable: A custom container holding the mapping of code to
-            row in the vocabulary, and useful summary statistics for age
+            row in the vocabulary, and summary statistics for age.
 
     Raises:
         ValueError: If the vocab_size is negative, or if the length of the
@@ -127,7 +127,7 @@ def load_token_table(dictionary_path: Path, *, vocab_size: int) -> TokenTable:
                 continue
 
     # the asof join in leaf assignment binary-searches this frame within each code,
-    # so it is ordered here rather than trusted to arrive ordered
+    # so we need an ordered frame
     numeric_tokens = pl.DataFrame(
         data={
             "code": pl.Series(numeric_code, dtype=pl.String),
@@ -162,14 +162,7 @@ def assign_leaf_tokens(events: pl.LazyFrame, table: TokenTable) -> pl.LazyFrame:
     the index of the code in the vocabulary so that the embedding is
     recoverable.
 
-    The bin wins over the recorded text, which wins over the bare code, because
-    that is the order of specificity. femr instead switches on the event's value
-    type and never falls back, so we are **deliberately more generous in two
-    places**: an event carrying a numeric value on a code holding no bins takes
-    that code's token here and no token at all in femr, and a value femr's linear
-    bin scan would miss lands in the bin below it here. Both hand the model a
-    token in a context pretraining never produced. Kept on purpose pending the
-    first fine-tuning trials; revisit if the results look off.
+    Join order represents the priority given in the original model.
 
     Args:
         events (pl.LazyFrame): MEDS events carrying `code`, `numeric_value` and
@@ -226,16 +219,13 @@ def assign_leaf_tokens(events: pl.LazyFrame, table: TokenTable) -> pl.LazyFrame:
 def build_ancestor_expansion(table: TokenTable) -> pl.LazyFrame:
     """Constructs an ancestor expansion table based on the vocabulary.
 
-    In MOTOR an event's vector is the sum of several embedding rows, and which
-    rows depends on the kind of token it resolved to. Because that set is a
-    property of the token and not of the event, it is precomputed here once and
-    joined per batch.
+    The vector of an event is a property of the token so it can be precomputed.
 
     A bare code contributes its own row plus one for every ancestor the
     vocabulary holds. A value bin or a recorded text value contributes its
     own row only.
 
-    Ancestors outside the vocabulary are dropped rather than climbed.
+    Ancestors outside the vocabulary are dropped.
 
     Args:
         table (TokenTable): Custom object holding the representation of

@@ -9,15 +9,15 @@
   "min_rank_correlation": 0.8323106470413169,
   "mean_alert_rank_correlation": 0.49599487367391054,
   "min_alert_rank_correlation": 0.29815945118237697,
-  "ensemble_auprc": 0.18210592495069466,
-  "mean_member_auprc": 0.1632681000795572,
+  "ensemble_auprc": 0.1821059247017755,
+  "mean_member_auprc": 0.16326810007955717,
   "best_member_auprc": 0.17304518140710584,
-  "auprc_gain": 0.01883782487113747,
-  "gain_over_best": 0.009060743543588823,
+  "auprc_gain": 0.018837824622218335,
+  "gain_over_best": 0.00906074329466966,
   "ensemble_brier": 0.029786840081214905,
-  "ensemble_ece": 0.0010415371051502246,
+  "ensemble_ece": 0.0010415372914141326,
   "mean_member_brier": 0.030345647312376812,
   "mean_member_ece": 0.004849865875644272,
-  "gain_over_best_lo": 0.0060731353890381085,
-  "gain_over_best_hi": 0.011836940443347845
+  "gain_over_best_lo": 0.006073135595877313,
+  "gain_over_best_hi": 0.011836938817977571
 }

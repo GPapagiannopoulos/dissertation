@@ -1,28 +1,6 @@
-"""The linear probe: how much AKI signal is in MOTOR's frozen representation?
+"""This module contains the linear probe.
 
-A probe freezes the backbone completely and fits only a linear layer on top. It
-answers a question the fine-tune cannot: is the shortfall against XGBoost a
-failure of the *representation* MOTOR builds, or of the way we adapt it?
-
-Two properties make it worth the hour it costs:
-
-- **It cannot overfit.** 769 parameters against 2.07M training landmarks. The
-  divergence the fine-tune showed after step 10,000 -- train loss falling to
-  0.0927 while validation loss climbed back to 0.1355 -- is structurally
-  impossible here.
-- **The expensive half is paid once.** With frozen weights a patient's 768-number
-  summary never changes, so the forward passes are cached to disk and the head
-  can then be re-fit in minutes, as many times as the question needs.
-
-The head is selected on **validation loss**, not AUPRC. AUPRC over a sample rests
-on the ranking of a few hundred positives and wobbles by ~0.02; log loss uses
-every label and is far steadier. Selecting on the wobbly number is what left the
-fine-tune's `best.pt` at step 4,000 reading 0.2017 on a subsample and 0.1610 on
-the full fold.
-
-Read the result as a **floor**, never as a rival. A probe is deliberately the
-weakest way to use a backbone, so a low number says the signal is not linearly
-available in one vector -- not that the backbone is worthless.
+The probe is used as a baseline for the contributions of fine-tuning.
 """
 
 import json
@@ -38,15 +16,8 @@ from thesis.modelling.evaluation.metrics import binary_metrics
 from thesis.modelling.finetune.batching import LABEL_METADATA
 from thesis.modelling.finetune.data import batch_to
 
+# precision of cached features
 FEATURE_DTYPE = np.float16
-"""Stored precision for the cached features.
-
-2,069,780 training landmarks at 768 channels is 3.2 GB in float16 and 6.4 GB in
-float32. The host has 14 GB and the XGBoost baseline routinely holds 9.5 of it,
-so the wider dtype is not affordable and buys nothing: these are activations that
-were computed under bfloat16 autocast, which carries fewer mantissa bits than
-float16 does.
-"""
 
 
 class ProbeArrays(NamedTuple):
@@ -70,21 +41,18 @@ class ProbeArrays(NamedTuple):
 
 
 def fold_label_count(sequences: Path, split: Path, fold: str) -> int:
-    """How many labels one fold holds, for sizing the feature cache.
-
-    The labels are 26 MB across all 200 shards, so this is cheap to read whole --
-    unlike the sequences, which nothing in this pipeline ever globs.
+    """Label count for a fold.
 
     Args:
-        sequences (Path): Stage 5.2's output folder.
-        split (Path): The subject split parquet.
+        sequences (Path): Path to the sequences directory.
+        split (Path): Path to the subject split parquet file.
         fold (str): Which fold to count.
 
     Returns:
         int: The number of labelled positions the fold contributes.
 
     Raises:
-        ValueError: If the fold holds no label, which means it is misspelled.
+        ValueError: If the fold holds no labels.
     """
     count = int(
         pl.scan_parquet(sequences / "labels" / "*.parquet")
@@ -113,18 +81,11 @@ def extract_features(
 ) -> ProbeArrays:
     """Runs the frozen encoder and keeps its output at every labelled position.
 
-    This is `predict_stream` with the head removed: the same walk over the same
-    batches, but the 768-wide vector is kept instead of being collapsed to a
-    logit. Rows are written straight into `destination`, which the caller opens as
-    a memory map, so peak memory stays at one batch rather than at the fold's
-    3.2 GB.
-
     Args:
-        encoder (torch.nn.Module): The backbone, put in eval mode here.
+        encoder (torch.nn.Module): The backbone in eval mode.
         batches (Iterable): Batches as `collate` returns them.
         destination (np.ndarray): A pre-sized (n_labels, hidden) array to fill.
-            Sized from `fold_label_count`.
-        device (torch.device): Where to run.
+        device (torch.device): Device on which to run.
         amp_dtype (torch.dtype): The autocast dtype, matching how the fine-tune
             ran so the two are measured on comparable activations.
 
@@ -191,12 +152,7 @@ def _minibatches(
     device: torch.device,
     rng: np.random.Generator | None = None,
 ) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
-    """Streams the cached table to the device, optionally shuffled.
-
-    The features are a memory map on disk, so this is what keeps the fit from
-    pulling 3.2 GB into RAM. Rows are gathered in sorted order within a batch
-    because a memory map serves a sorted gather far faster than a scattered one.
-    """
+    """Streams the cached table to the device, optionally shuffled."""
     order = np.arange(features.shape[0])
     if rng is not None:
         rng.shuffle(order)
@@ -245,15 +201,6 @@ def fit_probe(
     verbose: bool = True,
 ) -> tuple[torch.nn.Linear, dict[str, float]]:
     """Fits one linear head on cached features, selecting on validation loss.
-
-    The bias starts at the training base rate's logit and the weight at zero, so
-    the untrained head predicts prevalence rather than a saturated guess -- the
-    same initialisation `MotorClassifier` uses, for the same reason.
-
-    Selection is on **validation log loss**, computed over every label in the
-    fold. That is the correction this module exists to embody: the fine-tune
-    selected on AUPRC over an 11,254-label subsample, whose ~0.02 sampling noise
-    made the maximum of 40 evaluations optimistic by ~0.04.
 
     Args:
         train (ProbeArrays): The training fold's cached features.
@@ -348,9 +295,6 @@ def run_fit_probe(
     seed: int = 0,
 ) -> dict[str, float]:
     """Sweeps regularisation strength and keeps the best head by validation loss.
-
-    The sweep is affordable precisely because the features are cached: each
-    setting is a few minutes on a table, not a re-run of the backbone.
 
     Args:
         train (ProbeArrays): The training fold's cached features.

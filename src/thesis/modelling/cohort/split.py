@@ -140,16 +140,12 @@ def assign_folds(
 ) -> pl.DataFrame:
     """Assigns individuals of each stratum to a cohort.
 
-    The function uses hashing to assign subjects to their respective
-    cohorts. Hashing is used because unlike random.shuffle it isn't
-    dependent on the original order, it is computable per subject,
-    and it offers decorrelation from the id structure. We are not using
-    the native polars pl.col().hash() method because it is not guaranteed
-    stable across releases.
+    Subjects are hashed rather than shuffled: a hash does not depend on the input order,
+    is computable per subject, and decorrelates from the id structure. Polars'
+    `pl.col().hash()` is not used because it is not guaranteed stable across releases.
 
-    Splitting into cohorts is done at the subject level because MOTOR
-    featurizes an admission from the patient's entire prior timeline.
-    Including a patient in numerous cohorts is data leakage.
+    Splitting is at the subject level because MOTOR featurizes an admission from the
+    patient's entire prior timeline, so a patient in more than one cohort is leakage.
     """
     if any(fraction < 0 for fraction in fractions.values()):
         raise ValueError("Negative fraction detected in dictionary.")

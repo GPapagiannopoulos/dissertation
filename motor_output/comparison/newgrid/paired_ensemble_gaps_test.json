@@ -1,0 +1,185 @@
+{
+  "fold": "testing",
+  "n_labels": 616193,
+  "n_subjects": 26526,
+  "resamples": 2000,
+  "seed": 0,
+  "monolithic_window": [
+    6000,
+    18000
+  ],
+  "members": {
+    "lora_ens_23": [
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/last_predictions.npz"
+    ],
+    "lora_ens_12": [
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r2-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r4-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/pilot-all4-r16-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32-a32/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r16/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all4-r32/selection_test/last_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-all5-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-o-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qkv-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-ff-r8/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-qv-seed1/selection_test/step_018000_predictions.npz"
+    ],
+    "mono_ens_12": [
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed0/selection_test/step_006000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed0/selection_test/step_010000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed0/selection_test/step_014000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed0/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_006000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_010000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_014000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_018000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed2/selection_test/step_006000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed2/selection_test/step_010000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed2/selection_test/step_014000_predictions.npz",
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed2/selection_test/step_018000_predictions.npz"
+    ],
+    "mono_single": [
+      "/home/george/PycharmProjects/dissertation/motor_output/runs/ng-aki-seed1/selection_test/step_018000_predictions.npz"
+    ]
+  },
+  "point": {
+    "lora_ens_23": {
+      "auprc": 0.18616744971914823,
+      "auroc": 0.815088395056121,
+      "brier": 0.02998850314787296,
+      "ece": 0.0008046940193046012,
+      "precision_at_1pct": 0.3774748458292762,
+      "recall_at_1pct": 0.11152665899501342,
+      "precision_at_5pct": 0.2059071729957806,
+      "base_rate": 0.03384653834107171,
+      "n": 616193.0,
+      "n_positive": 20856.0
+    },
+    "lora_ens_12": {
+      "auprc": 0.18460198263747574,
+      "auroc": 0.8138650321218208,
+      "brier": 0.03005166684615814,
+      "ece": 0.0022955987549743606,
+      "precision_at_1pct": 0.3714703018500487,
+      "recall_at_1pct": 0.10975258918296893,
+      "precision_at_5pct": 0.2044790652385589,
+      "base_rate": 0.03384653834107171,
+      "n": 616193.0,
+      "n_positive": 20856.0
+    },
+    "mono_ens_12": {
+      "auprc": 0.18194675974124797,
+      "auroc": 0.8104298032301553,
+      "brier": 0.030101315362790176,
+      "ece": 0.0025106178407092827,
+      "precision_at_1pct": 0.36936059720869846,
+      "recall_at_1pct": 0.10912926735711546,
+      "precision_at_5pct": 0.20123336579032783,
+      "base_rate": 0.03384653834107171,
+      "n": 616193.0,
+      "n_positive": 20856.0
+    },
+    "mono_single": {
+      "auprc": 0.16881129082725427,
+      "auroc": 0.7998461424786597,
+      "brier": 0.030529859389741697,
+      "ece": 0.0058155131506700064,
+      "precision_at_1pct": 0.34712755598831546,
+      "recall_at_1pct": 0.10256041426927504,
+      "precision_at_5pct": 0.19045764362220058,
+      "base_rate": 0.03384653834107171,
+      "n": 616193.0,
+      "n_positive": 20856.0
+    }
+  },
+  "paired": {
+    "lora_ens_23-lora_ens_12": {
+      "auprc": {
+        "value": 0.0015654670816724892,
+        "lo": 0.0004213540296647146,
+        "hi": 0.002770777567191883,
+        "wins": 0.992
+      },
+      "auroc": {
+        "value": 0.0012233629343001429,
+        "lo": 0.0006387683675080858,
+        "hi": 0.0017751240055976308,
+        "wins": 1.0
+      },
+      "brier": {
+        "value": -6.316369828518117e-05,
+        "lo": -9.126051530984544e-05,
+        "hi": -3.3695165113819164e-05,
+        "wins": 0.0
+      },
+      "ece": {
+        "value": -0.0014909047356697594,
+        "lo": -0.0019899840445742442,
+        "hi": -0.0006660121379656305,
+        "wins": 0.0005
+      },
+      "precision_at_1pct": {
+        "value": 0.006004543979227506,
+        "lo": -0.0004892627755644669,
+        "hi": 0.011189906298607442,
+        "wins": 0.9605
+      }
+    },
+    "mono_ens_12-mono_single": {
+      "auprc": {
+        "value": 0.013135468913993698,
+        "lo": 0.009646525478449058,
+        "hi": 0.016290504355465717,
+        "wins": 1.0
+      },
+      "auroc": {
+        "value": 0.010583660751495638,
+        "lo": 0.008486240587069673,
+        "hi": 0.012553852392105887,
+        "wins": 1.0
+      },
+      "brier": {
+        "value": -0.00042854402695152033,
+        "lo": -0.000502355093333089,
+        "hi": -0.0003535238182594989,
+        "wins": 0.0
+      },
+      "ece": {
+        "value": -0.0033048953099607237,
+        "lo": -0.004431400597838974,
+        "hi": -0.00209207719830094,
+        "wins": 0.0
+      },
+      "precision_at_1pct": {
+        "value": 0.022233041220383,
+        "lo": 0.011890750982022984,
+        "hi": 0.03466234838152112,
+        "wins": 1.0
+      }
+    }
+  }
+}

@@ -3,13 +3,6 @@
 Run from repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/build_labels.py
-
-Reads the admission windows and the deaths from the normalised shards and the
-AKI onsets from the surviving-positives labels, then writes one row per
-prediction landmark.
-
-Writes roughly 3M rows at the default 12h spacing and 48h horizon. Existing
-destination paths are refused.
 """
 
 import argparse

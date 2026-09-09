@@ -57,7 +57,7 @@ for seed in "$@"; do
         echo "=== seed ${seed}: already scored, skipping"
     else
         echo "=== seed ${seed}: scoring checkpoints on the validation fold"
-        "${PYTHON}" "${ROOT}/scripts/evaluate/score_checkpoints.py" \
+        "${PYTHON}" "${ROOT}/scripts/evaluate/scoring/score_checkpoints.py" \
             --run "${dest}" --stride "${STRIDE}"
     fi
 

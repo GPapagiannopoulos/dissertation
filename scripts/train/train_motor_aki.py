@@ -1,12 +1,11 @@
-"""Stage 6 driver: fine-tune the MOTOR backbone on the AKI landmark task.
+r"""Stage 6 driver: fine-tune the MOTOR backbone on the AKI landmark task.
 
 Run it from the repo root with the modelling interpreter:
 
     .venv-modelling/bin/python scripts/train/train_motor_aki.py \
-        --dest motor_output/runs/aki-seed0 --seed 0 --max-hours 9
-
-As elsewhere, this resolves paths, prints them, calls the one library function and
-lets exceptions propagate -- the traceback is the error report for a hand-run job.
+        --dest motor_output/runs/aki-seed0 \
+        --seed 0 \
+        --max-hours 9
 """
 
 import argparse
@@ -65,7 +64,8 @@ def _parse_args() -> argparse.Namespace:
         help="batches per in-loop evaluation. A PROGRESS SIGNAL, not a selection: "
         "400 costs ~55s per evaluation (under 10%% of the run) and gives a steadier "
         "line than 150 did, but no subsample ranks checkpoints -- "
-        "scripts/evaluate/score_checkpoints.py does that against the whole fold",
+        "scripts/evaluate/scoring/score_checkpoints.py does that against "
+        "the whole fold",
     )
     parser.add_argument(
         "--patience",

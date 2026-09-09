@@ -3,11 +3,6 @@
 Run from repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/build_subject_split.py
-
-Reads the subject_ids from the meds_reader database, the admission counts
-from the normalized shards, and the positives from the labels.
-
-Writes one row per subject. Existing destination paths are refused.
 """
 
 import argparse

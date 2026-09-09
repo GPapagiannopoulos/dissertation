@@ -5,16 +5,15 @@ Run from the repo root with the modelling environment's interpreter:
     .venv-modelling/bin/python scripts/train/run_linear_probe.py \
         --dest motor_output/probe
 
-Two phases, and the first is cached. Phase one runs the **frozen released
-encoder** over the training and validation folds and writes each labelled
-position's 768-wide output to a memory-mapped file. Phase two fits a linear head
-on that table, sweeping weight decay and selecting on **validation loss**.
+Two phases, and the first is cached. Phase one runs the frozen released encoder over
+the training and validation folds and writes each labelled position's 768-wide output
+to a memory-mapped file. Phase two fits a linear head on that table, sweeping weight
+decay and selecting on validation loss.
 
-Re-running with the cache already present skips phase one, so the head can be
-re-fit in minutes. Pass `--refresh` to force the forward passes again.
+Re-running with the cache already present skips phase one, so the head can be re-fit
+in minutes. Pass `--refresh` to force the forward passes again.
 
-The encoder is the released one, not a fine-tuned checkpoint -- the question is
-what MOTOR's *pretrained* representation carries, before any adaptation.
+The encoder is the released one, not a fine-tuned checkpoint.
 """
 
 import argparse

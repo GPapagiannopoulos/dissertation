@@ -8,19 +8,19 @@ released checkpoint:
 Reproduces `femr.models.transformer.Transformer.__call__` step by step so every
 intermediate can be captured, then writes the inputs, the per-layer hidden states and
 the flat parameter tree to a single .npz. The PyTorch port is asserted layer by layer
-against that file, which is what makes the port falsifiable.
+against that file.
 
-The batch is synthetic. The oracle exists to assert the arithmetic of the
-port. Tokenisation is a separate concern with its own failure modes,
-and building a v1 extract just to get an oracle would cost a whole ETL detour.
+The batch is synthetic: the oracle exists to assert the arithmetic of the port, and
+tokenisation is a separate concern with its own failure modes.
 
 Two dtypes:
-- fp16 reproduces inference exactly (`convert_params` casts every float parameter
-  but the embedding table, and the activations are cast right after `in_norm`). It is
-  the end-of-port fidelity check.
-- fp32 skips both casts. No two implementations are bit-identical in fp16 -- 1 ULP
-  is 0.0039 at these magnitudes, compounding to a ~1e-2 noise floor over 12 layers,
-  which is deep enough to hide a real bug. fp32 gives a 1e-6 target to develop against.
+
+- fp16 reproduces inference exactly (`convert_params` casts every float parameter but
+  the embedding table, and the activations are cast right after `in_norm`). It is the
+  end-of-port fidelity check.
+- fp32 skips both casts. In fp16 one ULP is 0.0039 at these magnitudes, compounding to
+  a ~1e-2 noise floor over 12 layers, which is deep enough to hide a real bug. fp32
+  gives a 1e-6 target to develop against.
 """
 
 import argparse

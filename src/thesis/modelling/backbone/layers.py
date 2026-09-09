@@ -10,9 +10,9 @@ def rotary_tables(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Builds the rotary tables from the patients' ages.
 
-    MOTOR does not see time. Instead, it rotates adjacent channels
-    within one event's vector in the attention head, proportional to
-    the subject's age.
+    Each attention head rotates adjacent feature channels proportional
+    to the subject's age at that event. This function generates the
+    rotation vector for a subject's ages.
 
     Args:
         ages (torch.Tensor): Tensor shaped (seq_len,) or (batch, seq_len)
@@ -47,19 +47,18 @@ def rotary_tables(
 
 
 def projected_dtype(x: torch.Tensor) -> torch.dtype:
-    """The dtype a linear layer returns when handed this input.
+    """The dtype an autocasting linear layer returns when handed this input.
 
     Under `torch.autocast` a Linear casts its input and emits the autocast dtype, so
-    the queries a block rotates are not the dtype of the stream that entered it. The
-    rotary tables must be built to match the queries, not the stream, or
-    `apply_rotary`'s dtype guard refuses the pair. Outside autocast the two agree and
-    this returns the input's own dtype.
+    the queries/ keys a block rotates are not the dtype of the stream that entered it.
+    The rotary tables must be built to match the queries or `apply_rotary`'s dtype guard
+    raises. Outside autocast the two agree.
 
     Args:
-        x (torch.Tensor): A tensor on the device whose autocast state is in question.
+        x (torch.Tensor): The tensor to be projected.
 
     Returns:
-        torch.dtype: The dtype the projections below will produce.
+        torch.dtype: The dtype the projections will produce.
     """
     device_type = x.device.type
     if torch.is_autocast_enabled(device_type):
@@ -68,17 +67,17 @@ def projected_dtype(x: torch.Tensor) -> torch.dtype:
 
 
 def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
-    """Rotates each adjacent channel pair of x by the angle for its event.
+    """Applies the rotation on adjacent channel pairs.
 
-    The tables are broadcast against x rather than required to match it, because
-    the heads share one table while a batch does not: queries arrive as
-    (batch, n_heads, seq_len, dim) and the tables as (batch, 1, seq_len, dim).
+    The tables are broadcast against x because the heads share one table. Queries arrive
+    as (batch, n_heads, seq_len, dim) and the tables as (batch, 1, seq_len, dim).
 
     Args:
         x (torch.Tensor): Queries/ keys shaped (..., seq_len, dim)
-        sin: Sine table output from 'rotary_tables', shaped (seq_len, dim) or
-            broadcastable against x with the head axis already inserted.
-        cos: Cosine table output from 'rotary_tables', the same shape.
+        sin (torch.Tensor): Sine table output from 'rotary_tables',
+            shaped (seq_len, dim) or broadcastable against x with
+            the head axis already inserted.
+        cos (torch.Tensor): Cosine table output from 'rotary_tables', the same shape.
 
     Returns:
         torch.Tensor: x rotated shaped (..., seq_len, dim)
@@ -94,9 +93,9 @@ def apply_rotary(x: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch
     if x.shape[-2:] != sin.shape[-2:]:
         raise ValueError("The shapes of the tables or the input do not match.")
     # A batched table missing its head axis aligns from the right, so (batch, seq,
-    # dim) against (batch, heads, seq, dim) silently rotates by another sequence's
+    # dim) against (batch, heads, seq, dim) rotates by another sequence's
     # angles whenever batch happens to equal heads. Ranks are therefore required to
-    # match exactly, rather than left to broadcasting to catch.
+    # match exactly.
     if sin.ndim not in (2, x.ndim):
         raise ValueError(
             f"Tables shaped {tuple(sin.shape)} must either be two dimensional or "
@@ -136,7 +135,7 @@ def split_fused_projection(
             weight is contiguous and shaped (out_features, in_features).
 
     Raises:
-        ValueError: If the weight is not two dimensional, if the bias does not match
+        ValueError: If the weight is not two-dimensional, if the bias does not match
             its output width, or if there is no room for a feed-forward slice.
     """
     if weight.ndim != 2:
@@ -242,9 +241,9 @@ def load_haiku_linear(
 def local_attention_mask(
     segment_ids: torch.Tensor, width: int, device: torch.device | None = None
 ) -> torch.Tensor:
-    """Builds the boolean mask MOTOR's attention runs under.
+    """Builds the boolean mask for MOTOR's attention.
 
-    Three conditions, all of which must hold for query i to see key j:
+    For query i to see key j, three conditions must hold:
 
     - causal, j <= i;
     - local, i - j <= width, inclusive, so a query sees width + 1 keys;
@@ -253,16 +252,16 @@ def local_attention_mask(
 
 
     Args:
-        segment_ids (torch.Tensor): Which packed sequence each position belongs to,
+        segment_ids (torch.Tensor): Which sequence each position belongs to,
             shaped (seq_len,) or (batch, seq_len). A single sequence is all zeros.
         width (int): How many positions back a query may reach.
         device (torch.device | None): Where to build the mask. Defaults to the
             segment ids' device.
 
     Returns:
-        torch.Tensor: A boolean mask, True where attention is allowed, in the sense
-            torch's attn_mask takes. Shaped (seq_len, seq_len) for one row of ids
-            and (batch, 1, seq_len, seq_len) for a batch of them.
+        torch.Tensor: A boolean mask, True where attention is allowed. Shaped
+            (seq_len, seq_len) for one row of ids and (batch, 1, seq_len, seq_len)
+            for a batch of them.
 
     Raises:
         ValueError: If the segment ids are not one or two dimensional, or the width
@@ -296,8 +295,8 @@ def local_attention(
 ) -> torch.Tensor:
     """Runs masked attention over one head's queries, keys and values.
 
-    No row can be entirely masked, because j = i satisfies all three conditions, so
-    there is no all-infinite softmax to guard against.
+    j = i satisfies all three conditions, so we cannot have entirely
+    masked rows. So there is no all-infinite softmax to guard against.
 
     Args:
         queries (torch.Tensor): Shaped (..., n_heads, seq_len, head_dim).
@@ -329,21 +328,20 @@ class HaikuRMSNorm(torch.nn.RMSNorm):
     haiku casts the scale to the input's dtype and normalises there. torch instead
     computes in the weight's dtype. Released inference stores every parameter in
     float16 but leaves the embedding table in float32, so `in_norm` reads a float32
-    input under a float16 scale. Letting torch choose introduces a delta of 8.4e-04
-    which the whole stack then inherits.
+    input under a float16 scale. Letting torch choose introduces a difference of
+    8.4e-04.
 
-    Everywhere else the input and the scale already agree and this is torch's own
-    layer, unchanged.
+    Everywhere else the input and the scale already agree.
     """
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Normalises x in its own dtype, whatever the scale is stored as.
 
         Args:
-            x (torch.Tensor): The stream, normalised over its last dimension.
+            x (torch.Tensor): The hidden state normalised over its last dimension.
 
         Returns:
-            torch.Tensor: The normalised stream, in x's dtype.
+            torch.Tensor: The normalised hidden state, in x's dtype.
         """
         return torch.nn.functional.rms_norm(
             x, self.normalized_shape, self.weight.to(x.dtype), self.eps
@@ -353,14 +351,17 @@ class HaikuRMSNorm(torch.nn.RMSNorm):
 class HierarchicalEmbedding(torch.nn.Module):
     """MOTOR's input embedding: one event is the sum of its ancestors' rows.
 
-    A code owns a set of rows, one per ontology ancestor, and its vector is their sum,
-    so an unseen code still lands near its parents. The tokeniser therefore emits a
-    variable number of rows per position, flattened into (read, write) pairs rather
-    than a padded matrix.
+    The embedding vector for a code is the sum of its concept vector with those
+    of its ancestors. This way we get clusters in the representation space that
+    describe specific families of concepts. Unseen codes add nothing extra, so
+    they land near their ancestors.
 
-    This ports femr's `gather_scatter_add`. That operator tolerates out-of-range
-    indices (it fills reads with zero and drops writes), which is an XLA static-shape
-    workaround rather than intended semantics. Here they raise instead.
+    The tokeniser therefore emits a variable number of rows per code, flattened into
+    (read, write) pairs rather than a padded matrix. 'read' indexes the embedding table,
+    and 'write' indexes the sequence where the sum accumulates.
+
+    femr's `gather_scatter_add` operator tolerates out-of-range indices, which is an
+    XLA static-shape workaround rather than intended semantics. Here they raise instead.
 
     Attributes:
         embeddings (torch.nn.Embedding): The table, shaped (vocab_size, hidden_size).
@@ -380,7 +381,7 @@ class HierarchicalEmbedding(torch.nn.Module):
         """Copies the checkpoint's table in.
 
         haiku and torch agree on the layout here, (vocab_size, hidden_size), so
-        unlike every linear layer in this module nothing is transposed.
+        nothing is transposed.
 
         Args:
             embeddings (torch.Tensor): The checkpoint table.
@@ -401,13 +402,10 @@ class HierarchicalEmbedding(torch.nn.Module):
         """Sums each position's ancestor rows.
 
         Args:
-            indices (torch.Tensor): The sparse pairs shaped (n_pairs, 2). Column 0
-                reads from the table, column 1 writes to a sequence position. femr
-                emits them sorted by the write index, but the sum is an accumulation,
-                so this does not depend on that.
-            seq_len (int): How many positions the output holds. Passed rather than
-                inferred, because a trailing position with no tokens is legitimate
-                and would otherwise silently shorten the sequence.
+            indices (torch.Tensor): The (read, write) pairs shaped (n_pairs, 2).
+                Column 0 reads from the table, column 1 writes to a sequence position.
+            seq_len (int): How many positions the embedding holds. Passed directly
+                because it cannot be inferred safely.
 
         Returns:
             torch.Tensor: The embedded sequence, shaped (seq_len, hidden_size).
@@ -446,11 +444,10 @@ class HierarchicalEmbedding(torch.nn.Module):
 
 
 class InputProjection(torch.nn.Module):
-    """The four projections at the front of a MOTOR block.
+    """The four projections that input splits into.
 
-    q, k and v feed attention. ff is the feed-forward branch's expansion, which runs
-    in parallel with attention. All four read the same input, so the checkpoint fuses
-    them into one matmul; see split_fused_projection for why the port does not.
+    q, k and v feed attention. ff is the feed-forward branch's projection, which runs
+    in parallel with attention. All four read the same input.
 
     Attributes:
         q_proj (torch.nn.Linear): Query projection, named for peft's target strings.
@@ -465,8 +462,9 @@ class InputProjection(torch.nn.Module):
         """Builds the four projections.
 
         Args:
-            in_features (int): The block's width plus the concatenated age columns.
-            hidden_size (int): The model width, which q, k and v each return.
+            in_features (int): The block's feature count plus the concatenated
+                age columns.
+            hidden_size (int): The model feature count.
             intermediate_size (int): The feed-forward expansion's width.
         """
         super().__init__()
@@ -476,10 +474,10 @@ class InputProjection(torch.nn.Module):
         self.ff_proj = torch.nn.Linear(in_features, intermediate_size)
 
     def load_fused(self, weight: torch.Tensor, bias: torch.Tensor) -> None:
-        """Copies one fused checkpoint projection into the four submodules.
+        """Splits one fused checkpoint projection into the four submodules.
 
-        Copies rather than assigns, so the parameters keep their own storage and never
-        alias the checkpoint buffer.
+        We use a copy because assignment aliases on the same buffer. This can cause
+        updates to overwrite the checkpoint.
 
         Args:
             weight (torch.Tensor): The fused weight, in haiku's (in, out) layout.
@@ -504,7 +502,7 @@ class InputProjection(torch.nn.Module):
     def forward(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Projects the normed input, ages already concatenated, four ways.
+        """Projects the normed input.
 
         Args:
             x (torch.Tensor): The block input shaped (..., seq_len, in_features).
@@ -521,9 +519,7 @@ class MotorBlock(torch.nn.Module):
     """One MOTOR transformer block.
 
     The attention and feed-forward branches run in parallel, both reading the one
-    normed input rather than the feed-forward reading attention's output. That is why
-    a block holds a single norm, and why its output projection is fed the two branches
-    concatenated.
+    normed input. The output projection reads the two branches concatenated.
 
     The rotary tables and the attention mask are passed as arguments because
     they are the same for all twelve blocks.
@@ -541,12 +537,12 @@ class MotorBlock(torch.nn.Module):
         n_heads: int,
         eps: float = MOTOR_RMS_EPS,
     ) -> None:
-        """Builds a block at the released model's widths.
+        """Builds a block.
 
         Args:
-            hidden_size (int): The model width.
-            intermediate_size (int): The feed-forward expansion's width.
-            n_heads (int): How many attention heads share the channels.
+            hidden_size (int): The model number of features.
+            intermediate_size (int): The feed-forward expansion's number of features.
+            n_heads (int): How many attention heads share the feature channels.
             eps (float): The norm's epsilon, inside the square root.
         """
         super().__init__()
@@ -565,7 +561,7 @@ class MotorBlock(torch.nn.Module):
         output_weight: torch.Tensor,
         output_bias: torch.Tensor,
     ) -> None:
-        """Copies one checkpoint block's five parameters in.
+        """Copies the parameters of a stored checkpoint block.
 
         Args:
             norm_scale (torch.Tensor): The RMSNorm scale, shaped (hidden_size,).

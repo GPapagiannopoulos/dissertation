@@ -1,0 +1,23 @@
+{
+  "label": "TEST: 12 runs, all last (no selection)",
+  "n_members": 12.0,
+  "n_labels": 616193.0,
+  "alert_budget": 0.01,
+  "mean_flag_overlap": 0.37367952370328356,
+  "min_flag_overlap": 0.32090032154340836,
+  "mean_rank_correlation": 0.871228579140595,
+  "min_rank_correlation": 0.8341083412688256,
+  "mean_alert_rank_correlation": 0.4397218378033607,
+  "min_alert_rank_correlation": 0.32722774953449524,
+  "ensemble_auprc": 0.18492433390839227,
+  "mean_member_auprc": 0.16295675418326125,
+  "best_member_auprc": 0.17087233061443818,
+  "auprc_gain": 0.021967579725131026,
+  "gain_over_best": 0.01405200329395409,
+  "ensemble_brier": 0.030029114335775375,
+  "ensemble_ece": 0.002669559089909618,
+  "mean_member_brier": 0.030770942258338135,
+  "mean_member_ece": 0.007448640895183969,
+  "gain_over_best_lo": 0.010560823792824987,
+  "gain_over_best_hi": 0.01675354882585412
+}

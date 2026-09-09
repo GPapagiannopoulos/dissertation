@@ -74,7 +74,7 @@ for config in "${CONFIGS[@]}"; do
         # scored against the SAME horizon it trained on, or the comparison is
         # between a matched model and a transferred metric
         echo "=== ${name}: scoring on the validation fold at this horizon"
-        "${PYTHON}" "${ROOT}/scripts/evaluate/score_checkpoints.py" \
+        "${PYTHON}" "${ROOT}/scripts/evaluate/scoring/score_checkpoints.py" \
             --run "${dest}" --stride "${STRIDE}" \
             --sequences "${ROOT}/${SEQUENCES}"
     fi

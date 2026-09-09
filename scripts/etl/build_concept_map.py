@@ -3,10 +3,6 @@ r"""One-off driver for stage 2.5 of the MOTOR ETL: MEDS codes -> MOTOR tokens.
 Run from the repo root with the modelling environment's interpreter:
 
     .venv-modelling/bin/python scripts/etl/build_concept_map.py
-
-Reads the stage 1 shards, the Athena vocabulary exports and MOTOR's dictionary, and
-writes concept_map.parquet. The job takes seconds and holds no state, so an existing
-dest is overwritten rather than refused.
 """
 
 import argparse

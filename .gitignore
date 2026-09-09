@@ -8,25 +8,26 @@ meds_output/
 CLAUDE.md
 athena/
 motor_model/
+REPORT_*
 scripts/tools/build_flashcards.py
 motor_pipeline_flashcards.apkg
-REPORT_*
 
 # Model artifacts. Most of motor_output/ is enormous and regenerable, so only the
-# irreplaceable parts are versioned: the LoRA adapters, the banked prediction
-# bundles every downstream analysis re-reads, the run logs and manifests, the
-# comparison tables and the figures. Ignored below are the full fine-tune
-# checkpoints (517 MB each), the probe's cached features, and the oracle dumps
-# (~3 min to rebuild with scripts/tools/dump_motor_oracle.py).
+# irreplaceable, small parts are versioned: the banked prediction bundles every
+# downstream analysis re-reads, the run logs and manifests, the comparison tables
+# and the figures.
+#
+# NO CHECKPOINT OF ANY KIND IS VERSIONED (changed 2026-09-08). Every *.pt under
+# runs/ was stripped from git history with git-filter-repo -- full fine-tune
+# checkpoints at 517 MB apiece and LoRA adapters at 3-13 MB alike -- because the
+# 425 of them in history had grown .git to 3.3 GB. They remain on local disk and
+# are the ONLY copy: back them up outside the repo. Every selection/*.npz stays
+# versioned, so any pairing or diversity analysis is still reproducible from a
+# clone with no GPU pass.
+motor_output/runs/*/*.pt
 motor_output/oracle_*.npz
 motor_output/probe/
 motor_output/probe-ng/
-motor_output/runs/aki-seed*/*.pt
-motor_output/runs/smoke-metrics/*.pt
-# The new-grid rebuild (2026-08-21 onward) prefixes every run `ng-`, which the
-# rules above do not match. Full fine-tune checkpoints are 517 MB apiece; LoRA
-# adapters are 3-6 MB and stay versioned, as does every selection/*.npz.
-motor_output/runs/ng-aki-*/*.pt
 # XGBoost's QuantileDMatrix page cache -- 28 GB while a fit is in flight.
 # run_train_baseline removes it on exit, but it exists during the run.
 motor_output/runs/*/cache/

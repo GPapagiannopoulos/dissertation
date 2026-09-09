@@ -1,24 +1,4 @@
-"""Stage 6: fine-tuning the MOTOR backbone on the AKI landmark task.
-
-The shape follows the rest of the pipeline: pure helpers that take what they need and
-return a value, and one `run_*` that does the guards, the I/O and the loop.
-
-Three choices worth stating, because none is the obvious default:
-
-- **`torch.autocast`, not `half_stack`.** bf16 keeps ~8 mantissa bits, so an AdamW
-  update at lr 1e-5 on a weight of ~0.02 is smaller than the weight's own resolution
-  and rounds straight back onto it. Autocast gets the bf16 matmuls while the master
-  weights and the optimizer state stay float32. Measured at 49.5 ms per 1024-position
-  sequence against 42.8 for pure bf16 -- 16% for updates that actually land.
-- **No `pos_weight`.** Re-weighting the positives would lift AUPRC's ranking a little
-  and wreck calibration, and the evaluation framework scores Brier and ECE alongside
-  discrimination. The base rate goes into the head's BIAS instead, so the untrained
-  model starts at 3.56% rather than at a saturated random guess.
-- **The loss is summed and divided by the label count**, not averaged per batch. A
-  token-budget batch holds anywhere from 1 to 64 sequences and so from a handful to
-  several hundred labels; averaging per batch would weight a one-label step as
-  heavily as a three-hundred-label one.
-"""
+"""This module is responsible for fine-tuning the PyTorch MOTOR port."""
 
 import json
 import time
@@ -41,16 +21,14 @@ def learning_rate_at(
 ) -> float:
     """The learning rate for one step: linear warmup, then cosine decay.
 
-    Warmup matters more than usual here. The head starts at zero weight, so its first
-    gradients are large relative to the backbone's, and a cold high rate would move
-    the pretrained weights a long way to chase a head that has not yet learned
-    anything.
+    The head starts at zero weight, so its first gradients are large relative to the
+    backbone's. Warm-up is used to prevent early fluctuations.
 
     Args:
-        step (int): The step about to be taken, counted from zero.
-        total (int): How many steps the run will take in all.
-        warmup (int): How many steps to spend ramping up.
-        peak (float): The rate at the end of warmup.
+        step (int): The step number to be taken, counted from zero.
+        total (int): Total number of steps for the training run.
+        warmup (int): Total number of warmup steps.
+        peak (float): The learning rate at the end of warmup.
         floor (float): The rate the cosine decays to.
 
     Returns:
@@ -65,7 +43,7 @@ def learning_rate_at(
         raise ValueError(f"A {warmup} step warmup does not fit in {total} steps.")
 
     if step < warmup:
-        # +1 so the first step is not exactly zero, which would waste it
+        # +1 so the first step is not exactly zero
         return peak * (step + 1) / warmup
     if total == warmup:
         return peak
@@ -74,13 +52,13 @@ def learning_rate_at(
 
 
 class Predictions(NamedTuple):
-    """One pass' predictions, with enough provenance to bootstrap or pair them.
+    """One pass' predictions.
 
     Attributes:
-        scores (np.ndarray): Predicted probabilities, one per label.
-        targets (np.ndarray): The binary labels.
-        subjects (np.ndarray): The subject each label belongs to, which is the unit a
-            confidence interval on this task has to resample.
+        scores (np.ndarray): Predicted probabilities for each landmark.
+        targets (np.ndarray): The binary labels of each landmark.
+        subjects (np.ndarray): The subject each label belongs to used in
+            resampling.
         times (np.ndarray): Each label's prediction time, in microseconds since the
             epoch. With `subjects` it identifies a landmark, so another model's
             predictions can be aligned against these row for row.
@@ -103,20 +81,19 @@ def predict_stream(
     amp_dtype: torch.dtype,
     max_batches: int | None = None,
 ) -> Predictions:
-    """Runs the model over a stream of batches, keeping every prediction.
+    """Runs the model over a stream of batches, storing prediction.
 
     Args:
-        model (torch.nn.Module): The classifier, which this puts in eval mode and
-            leaves there -- the caller re-arms training.
+        model (torch.nn.Module): The classifier in eval mode.
         batches (Iterable): Batches as `collate` returns them.
-        device (torch.device): Where to run.
+        device (torch.device): Device on which to run.
         amp_dtype (torch.dtype): The autocast dtype, matching training.
         max_batches (int | None): Stop after this many, or None to exhaust the
-            stream. A bounded subsample is what makes per-N-step evaluation
-            affordable; None is what makes a reported number comparable.
+            stream.
 
     Returns:
-        Predictions: The scores, their labels, the provenance of each, and the loss.
+        Predictions: Custom container for the predicted scores, their labels,
+            subjects, prediction times, and loss.
 
     Raises:
         ValueError: If the stream yields no batch.
@@ -171,14 +148,12 @@ def evaluate(
     """Scores the model over a stream of batches.
 
     Args:
-        model (torch.nn.Module): The classifier, which this puts in eval mode and
-            leaves there -- the caller re-arms training.
+        model (torch.nn.Module): The classifier in eval mode.
         batches (Iterable): Batches as `collate` returns them.
-        device (torch.device): Where to run.
+        device (torch.device): Device on which to run.
         amp_dtype (torch.dtype): The autocast dtype, matching training.
-        max_batches (int | None): Stop after this many. A full validation pass is
-            45,612 sequences; a bounded subsample is what makes per-N-step
-            evaluation affordable.
+        max_batches (int | None): Stop after this many, or None to
+            exhaust the stream.
 
     Returns:
         dict[str, float]: `binary_metrics` plus the mean loss.
@@ -216,11 +191,6 @@ def format_duration(seconds: float) -> str:
 
 def format_train_line(record: dict, *, total_steps: int) -> str:
     """One progress line for the terminal, from a `train` log record.
-
-    The ETA extrapolates the run's average rate rather than the last window's. The
-    windows vary by several tenths of a second because a token-budget batch holds
-    anywhere from 1 to 64 sequences, and an ETA that jumps by half an hour every fifty
-    steps is one nobody reads.
 
     Args:
         record (dict): A `train` record as `run_training` writes it.
@@ -296,74 +266,46 @@ def run_training(
     checkpoint_extra: dict | None = None,
     verbose: bool = True,
 ) -> dict[str, float]:
-    """Fine-tunes the model, checkpointing on a fixed cadence.
+    """Fine-tunes the classifier storing checkpoints at set step counts.
 
-    **This function does not choose a model.** It writes `step_NNNNNN.pt` every
-    `checkpoint_every` evaluations and `last.pt` at the end, and selection is a
-    separate job run afterwards against the whole validation fold -- see
-    `scripts/evaluate/score_checkpoints.py`. The evaluations here are a progress
-    signal and
-    an input to the optional stopping rule, nothing more.
+    The loop is bounded either by step count, wall clock, or patience. The
+    schedule is laid by step count. Other mechanisms of stopping do not account
+    for this, possibly ending the run at a high learning rate.
 
-    The loop is bounded by three parameters: a step count, optionally a wall clock,
-    and optionally patience. Whichever comes first stops it, and the learning-rate
-    schedule is laid out over `total_steps`, so any early stop lands mid-schedule
-    rather than at the annealed end.
-
-    Patience counts evaluations. There is no validation number between
-    evaluations, so a patience expressed in steps would either compare a metric to
-    itself or wait for the next evaluation anyway.
-
-    **Both selection and patience run on validation loss.** At `eval_batches` 150 the
-    subsample holds ~11k labels and ~400 positives, and AUPRC over that many
-    positives wobbles by roughly +/-0.02 -- so taking the best of forty evaluations
-    is optimistic by about twice that. It was: the previous run's `best.pt` read
-    0.2017 on the subsample and 0.1610 on the whole fold. Loss uses every label in
-    the subsample rather than the ranking of its positives, and on that run it went
-    on falling for another 6,000 steps past the checkpoint AUPRC selected.
+    Patience counts evaluations.
 
     `min_delta` is the floor a loss drop must clear to reset the patience counter.
 
     Args:
-        model (torch.nn.Module): The classifier, already on `device`.
+        model (torch.nn.Module): The classifier.
         train_batches (Iterator): The training stream. Exhausting it ends the run,
             so pass a stream that spans as many epochs as the budget allows.
         validation (Iterable): A re-iterable source of validation batches, called
             once per evaluation.
         dest (Path): The folder to write checkpoints and the log into.
-        device (torch.device): Where to run.
-        total_steps (int): The schedule's length, and the cap on optimizer steps.
+        device (torch.device): Device on which to run.
+        total_steps (int): The total number of training steps.
         encoder_lr (float): Peak rate for the pretrained backbone.
-        head_lr (float): Peak rate for the fresh head, which starts from zero weight
-            and so has much further to travel.
-        warmup (int): Steps spent ramping the rate up.
+        head_lr (float): Peak rate for the fresh head.
+        warmup (int): Total number of warmup steps.
         accumulate (int): Batches per optimizer step.
         clip (float): Global gradient-norm clip.
         eval_every (int): Optimizer steps between evaluations.
         eval_batches (int): Batches per evaluation.
-        checkpoint_every (int): Save `step_NNNNNN.pt` every this many evaluations.
-            These are the run's candidates; zero disables them, leaving only
-            `last.pt` and no way to select afterwards.
+        checkpoint_every (int): Number of steps between storing a checkpoint.
         patience (int | None): Stop after this many consecutive evaluations without
             a validation-loss improvement, or None to run the full budget.
-        min_delta (float): How far validation loss must DROP to count as an
-            improvement.
+        min_delta (float): How far validation loss must drop to reset patience.
         max_hours (float | None): Wall-clock budget, or None for no limit.
         amp_dtype (torch.dtype): The autocast dtype.
         save_state (Callable | None): What a checkpoint's `model` entry holds,
-            defaulting to the whole state dict. The LoRA arm passes
-            `lora.adapter_state`, which writes 1.13 MB rather than 517.
+            defaulting to the whole state dict.
         checkpoint_extra (dict | None): Merged into every checkpoint, so a file
-            describes what has to be rebuilt to load it. The LoRA arm passes its
-            `config_record`, without which a scorer would have to guess `alpha`.
-        verbose (bool): Whether to mirror the log to stdout. On by default, because
-            a silent eight-hour run gives no way to tell a slow one from a hung one.
+            describes what has to be rebuilt to load it.
+        verbose (bool): Whether to mirror the log to stdout. True by default.
 
     Returns:
-        dict[str, float]: The lowest-loss evaluation's metrics and the step it came
-            from. This is a **progress summary, not a selection** -- the subsample
-            it was measured on cannot rank checkpoints, and the step named here is
-            routinely not the best one on the full fold.
+        dict[str, float]: The metrics and step for the lowest by-loss evaluation.
 
     Raises:
         FileExistsError: If dest already exists, as elsewhere in the pipeline.
@@ -390,8 +332,6 @@ def run_training(
         )
     dest.mkdir(parents=True)
     log_path = dest / "log.jsonl"
-    # normalised so a compiled run's files load into an uncompiled model; without it
-    # every parameter name carries `_orig_mod.` and the checkpoints load nowhere else
     save = save_state or (lambda module: strip_compile_prefix(module.state_dict()))
     extra = checkpoint_extra or {}
 
@@ -448,15 +388,12 @@ def run_training(
             break
 
         moved = batch_to(batch, device)
-        # the provenance columns go out with the labels: training needs neither, and
-        # `forward` names its arguments, so leaving one in raises at the splat
         labels = {key: moved.pop(key) for key in LABEL_METADATA}["labels"]
 
         with torch.autocast(device.type, dtype=amp_dtype):
             logits = model(**moved)
 
-        # summed, then divided by the window's labels at the step: a batch of one
-        # label must not weigh as much as a batch of three hundred
+        # summed, then divided by the window's labels at the step
         loss = loss_fn(logits.float(), labels.float())
         (loss / max(1, labels.numel() * accumulate)).backward()
 
@@ -513,16 +450,8 @@ def run_training(
             )
             model.train()
 
-            # This loop NO LONGER SELECTS A MODEL. The subsample cannot rank
-            # checkpoints: measured on the 15,000-step run, it scored step 3,000
-            # at 0.12939 and step 10,000 at 0.12970 -- calling step 3,000 the
-            # winner -- while the full fold puts them at 0.13341 and 0.13052, the
-            # other way round by ten times the margin the subsample was resolving.
-            # It is also the SAME ~1,600 patients at every evaluation, since
-            # `iter_epoch` is seeded identically, so its bias never averages out.
-            # Selection happens afterwards, over the periodic checkpoints, against
-            # the whole fold. What survives here is a progress signal and an
-            # optional stopping rule.
+            # The loop no longer selects checkpoints as subsample
+            # scoring is unreliable
             improved = metrics["loss"] < best["loss"] - min_delta
             stalled = 0 if improved else stalled + 1
 
@@ -544,13 +473,6 @@ def run_training(
             if improved:
                 best = {**metrics, "step": step}
 
-            # The ONLY checkpoints written, and deliberately so. A `best.pt` chosen
-            # here would carry a name asserting something the subsample cannot
-            # establish -- on the previous run the file so named was the worst of
-            # five candidates on the full fold. Saving on a fixed cadence instead
-            # leaves the choice to `scripts/evaluate/score_checkpoints.py`,
-            # which has the whole fold to make it with. 517 MB each against
-            # a 913 GB disk.
             if checkpoint_every and (step // eval_every) % checkpoint_every == 0:
                 torch.save(
                     {**extra, "model": save(model), "step": step, "metrics": metrics},
@@ -609,9 +531,6 @@ def validation_stream(factory) -> Iterable[dict[str, torch.Tensor | int]]:
 
 def positive_rate(labels: Path, split: Path, fold: str = "training") -> float:
     """The prevalence in one fold, for the head's bias initialisation.
-
-    Reads only the labels, which are 26 MB across all 200 shards -- small enough to
-    hold whole, unlike the sequences.
 
     Args:
         labels (Path): Stage 5.2's `labels/` folder.

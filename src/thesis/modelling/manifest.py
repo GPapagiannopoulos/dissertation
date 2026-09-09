@@ -1,25 +1,22 @@
 """A per-run record of what was trained, on what, for how long, at what cost.
 
-`log.jsonl` carries the trajectory but not the circumstances. Nothing in a run
-folder says which learning rate produced it, which commit, which torch, which
-GPU, or how long it actually took. For a dissertation those are the numbers a
-reproducibility section is made of, and "I remember what I ran" does not survive
-to the write-up.
+`log.jsonl` carries the trajectory but not the circumstances: nothing in a run folder
+says which learning rate produced it, which commit, which torch, which GPU, or how
+long it actually took.
 
-Two entry points, and the difference between them is honest:
+Two entry points:
 
 - `build_manifest(..., provenance="runtime")` is written by the training driver,
   which knows its own arguments exactly.
 - `build_manifest(..., provenance="reconstructed")` is what
   `scripts/tools/write_manifest.py` produces for runs that predate this module. It
-  recovers everything derivable from the log and the environment, and records
-  `null` for what it cannot -- rather than guessing.
+  recovers everything derivable from the log and the environment and records `null`
+  for what it cannot, rather than guessing.
 
-What is derivable is more than it first appears. The `lr` column reconstructs the
-peak rate, the warmup length and the schedule's horizon, because the ramp is
-linear and the decay is a cosine over `total_steps`. What is NOT derivable from
-any artifact is `accumulate`, `token_budget`, `epochs` and whether the encoder was
-compiled -- none leaves a trace in a logged value.
+The `lr` column reconstructs the peak rate, the warmup length and the schedule's
+horizon, because the ramp is linear and the decay is a cosine over `total_steps`.
+`accumulate`, `token_budget`, `epochs` and whether the encoder was compiled are not
+derivable from any artifact.
 """
 
 import json
